@@ -6,6 +6,7 @@
 // <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
+#[allow(warnings)]
 
 pub struct GlFns {
     ffi_gl_: GlFfi,
@@ -26,6 +27,10 @@ extern "C" {
     fn GenTextures(n: i32, result: *mut u32);
     fn GenFramebuffers(n: i32, result: *mut u32);
     fn GenRenderbuffers(n: i32, result: *mut u32);
+    fn BufferData(target: GLenum,
+        size: GLsizeiptr,
+        data: *const GLvoid,
+        usage: GLenum);
     fn TexStorage2D(
         target: GLenum,
         levels: GLint,
@@ -52,8 +57,38 @@ extern "C" {
         ty: GLenum,
         data: *const c_void,
     );
+    fn TexSubImage3D(
+        target: GLenum,
+        level: GLint,
+        xoffset: GLint,
+        yoffset: GLint,
+        zoffset: GLint,
+        width: GLsizei,
+        height: GLsizei,
+        depth: GLsizei,
+        format: GLenum,
+        ty: GLenum,
+        data: *const c_void,
+    );
+
 
     fn GenVertexArrays(n: i32, result: *mut u32);
+    fn VertexAttribPointer(
+        index: GLuint,
+        size: GLint,
+        type_: GLenum,
+        normalized: GLboolean,
+        stride: GLsizei,
+        offset: *const GLvoid,
+    );
+    fn VertexAttribIPointer(
+        index: GLuint,
+        size: GLint,
+        type_: GLenum,
+        stride: GLsizei,
+        offset: *const GLvoid,
+    );
+
 }
 
 impl GlFns {
@@ -81,7 +116,11 @@ impl Gl for GlFns {
         println!("buffer_data_untyped {} {} {:?} {}", target, size, data, usage);
         //panic!();
         unsafe {
-            self.ffi_gl_.BufferData(target, size, data, usage);
+            if SW {
+                BufferData(target, size, data, usage);
+            } else {
+                self.ffi_gl_.BufferData(target, size, data, usage);
+            }
         }
     }
 
@@ -939,6 +978,22 @@ impl Gl for GlFns {
         println!("tex_sub_image_3d");
         //panic!();
         unsafe {
+            if SW {
+            TexSubImage3D(
+                target,
+                level,
+                xoffset,
+                yoffset,
+                zoffset,
+                width,
+                height,
+                depth,
+                format,
+                ty,
+                data.as_ptr() as *const c_void,
+            );
+            } else {
+
             self.ffi_gl_.TexSubImage3D(
                 target,
                 level,
@@ -952,6 +1007,7 @@ impl Gl for GlFns {
                 ty,
                 data.as_ptr() as *const c_void,
             );
+            }
         }
     }
 
@@ -1307,6 +1363,15 @@ impl Gl for GlFns {
         println!("vertex_attrib_pointer {} {} {} {} {} {}", index, size, type_, normalized, stride, offset);
         //panic!();
         unsafe {
+            if SW {
+                VertexAttribPointer(
+                index,
+                size,
+                type_,
+                normalized as GLboolean,
+                stride,
+                offset as *const GLvoid)
+            } else {
             self.ffi_gl_.VertexAttribPointer(
                 index,
                 size,
@@ -1315,6 +1380,7 @@ impl Gl for GlFns {
                 stride,
                 offset as *const GLvoid,
             )
+            }
         }
     }
 
@@ -1329,8 +1395,13 @@ impl Gl for GlFns {
         println!("vertex_attrib_i_pointer {} {} {} {} {}", index, size, type_, stride, offset);
         //panic!();
         unsafe {
+            if SW {
+                VertexAttribIPointer(index, size, type_, stride, offset as *const GLvoid)
+            }
+            else {
             self.ffi_gl_
                 .VertexAttribIPointer(index, size, type_, stride, offset as *const GLvoid)
+            }
         }
     }
 

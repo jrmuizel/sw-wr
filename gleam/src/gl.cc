@@ -32,7 +32,10 @@ typedef uint32_t GLuint;
 typedef int32_t GLint;
 typedef int32_t GLsizei;
 typedef uint32_t GLenum;
+typedef size_t GLsizeiptr;
 struct Buffer {
+        char *buf;
+        size_t size;
 };
 
 struct Framebuffer {
@@ -53,6 +56,8 @@ struct Texture {
 };
 
 struct VertexArray {
+    char *buf;
+    size_t size;
 };
 
 map<GLuint, Buffer> buffers;
@@ -164,6 +169,24 @@ void TexSubImage2D(
         assert(yoffset == 0);
 }
 
+void TexSubImage3D(
+        GLenum target,
+        GLint level,
+        GLint xoffset,
+        GLint yoffset,
+        GLint zoffset,
+        GLsizei width,
+        GLsizei height,
+        GLsizei depth,
+        GLenum format,
+        GLenum ty,
+        void *data) {
+        assert(xoffset == 0);
+        assert(yoffset == 0);
+        assert(zoffset == 0);
+}
+
+
 void GenTextures(int n, int *result) {
         for (int i = 0; i < n; i++) {
                 Texture t;
@@ -188,7 +211,58 @@ void GenFramebuffers(int n, int *result) {
                 result[i] = framebuffer_count++;
         }
 }
+struct VertexAttrib {
+        GLint size;
+        GLenum type;
+        bool normalized;
+        GLsizei stride;
+        GLuint offset;
+};
+
+VertexAttrib attribs[16];
+
+void VertexAttribPointer(GLuint index,
+        GLint size,
+        GLenum type,
+        bool normalized,
+        GLsizei stride,
+        GLuint offset)
+{
+        VertexAttrib &va = attribs[index];
+        va.size = size;
+        va.type = type;
+        va.normalized = normalized;
+        va.stride = stride;
+        va.offset = offset;
+}
+
+void VertexAttribIPointer(GLuint index,
+        GLint size,
+        GLenum type,
+        GLsizei stride,
+        GLuint offset)
+{
+        VertexAttrib &va = attribs[index];
+        va.size = size;
+        va.type = type;
+        va.stride = stride;
+        va.offset = offset;
+}
 
 
+#define GL_ARRAY_BUFFER                   0x8892
+#define GL_ELEMENT_ARRAY_BUFFER           0x8893
+
+void BufferData(GLenum target,
+        GLsizeiptr size,
+        void *data,
+        GLenum usage)
+{
+    Buffer &b = buffers[current_buffer[target]];
+    //XXX: leak the stuff
+    b.buf = (char*)malloc(size);
+    memcpy(b.buf, data, size);
+    b.size = size;
+}
 
 }
