@@ -38,6 +38,12 @@ extern "C" {
         width: GLsizei,
         height: GLsizei,
     );
+    fn FramebufferTexture2D(
+        target: GLenum,
+        attachment: GLenum,
+        textarget: GLenum,
+        texture: GLuint,
+        level: GLint);
     fn TexStorage3D(
         target: GLenum,
         levels: GLint,
@@ -1282,8 +1288,12 @@ impl Gl for GlFns {
                  level);
         //panic!();
         unsafe {
+            if SW {
+                FramebufferTexture2D(target, attachment, textarget, texture, level);
+            } else {
             self.ffi_gl_
                 .FramebufferTexture2D(target, attachment, textarget, texture, level);
+            }
         }
     }
 

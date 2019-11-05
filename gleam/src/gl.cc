@@ -39,6 +39,7 @@ struct Buffer {
 };
 
 struct Framebuffer {
+        GLint color_attachment;
 };
 
 struct Renderbuffer {
@@ -116,8 +117,21 @@ void BindRenderbuffer(GLenum target, GLuint rb) {
     current_renderbuffer[target] = rb;
 }
 
+#define GL_RGBA32F                        0x8814
+#define GL_RGBA8                          0x8058
+#define GL_R8                             0x8229
 int bytes_for_internal_format(GLenum internal_format) {
-
+        switch (internal_format) {
+                case GL_RGBA32F:
+                        return 4*4;
+                case GL_RGBA8:
+                        return 4;
+                case GL_R8:
+                        return 1;
+                default:
+                        printf("internal format: %x\n", internal_format);
+                        assert(0);
+        }
 }
 
 void TexStorage3D(
@@ -211,6 +225,7 @@ void GenFramebuffers(int n, int *result) {
                 result[i] = framebuffer_count++;
         }
 }
+
 struct VertexAttrib {
         GLint size;
         GLenum type;
@@ -265,4 +280,22 @@ void BufferData(GLenum target,
     b.size = size;
 }
 
+#define GL_COLOR_ATTACHMENT0              0x8CE0
+#define GL_DEPTH_ATTACHMENT               0x8D00
+#define GL_STENCIL_ATTACHMENT             0x8D20
+void FramebufferTexture2D(
+        GLenum target,
+        GLenum attachment,
+        GLenum textarget,
+        GLuint texture,
+        GLint level)
+{
+        if (attachment == GL_COLOR_ATTACHMENT0) {
+               Framebuffer &fb = framebuffers[current_framebuffer[target]];
+               fb.color_attachment = texture;
+        } else {
+                assert(0);
+        }
+}
+ 
 }
