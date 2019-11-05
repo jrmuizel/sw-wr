@@ -6049,7 +6049,7 @@ impl Default for RendererOptions {
             scatter_gpu_cache_updates: false,
             // This is best as `Immediate` on Angle, or `Pixelbuffer(Dynamic)` on GL,
             // but we are unable to make this decision here, so picking the reasonable medium.
-            upload_method: UploadMethod::PixelBuffer(VertexUsageHint::Stream),
+            upload_method: UploadMethod::Immediate,
             workers: None,
             blob_image_handler: None,
             recorder: None,
