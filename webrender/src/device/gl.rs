@@ -1556,7 +1556,7 @@ impl Device {
         shader_type: gl::GLenum,
         source: &String,
     ) -> Result<gl::GLuint, ShaderError> {
-        debug!("compile {}", name);
+        println!("compile {}", name);
         let id = gl.create_shader(shader_type);
         gl.shader_source(id, &[source.as_bytes()]);
         gl.compile_shader(id);

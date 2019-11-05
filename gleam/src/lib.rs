@@ -13,13 +13,13 @@
 pub mod gl;
 
 mod ffi {
-    include!(concat!(env!("OUT_DIR"), "/gl_and_gles_bindings.rs"));
+    include!("gl_and_gles_bindings.rs");
 }
 
 mod ffi_gl {
-    include!(concat!(env!("OUT_DIR"), "/gl_bindings.rs"));
+    include!("gl_bindings.rs");
 }
 
 mod ffi_gles {
-    include!(concat!(env!("OUT_DIR"), "/gles_bindings.rs"));
+    include!("gles_bindings.rs");
 }
