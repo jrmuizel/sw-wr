@@ -953,6 +953,20 @@ impl Gl for GlFns {
                  format, ty, offset);
         //panic!();
         unsafe {
+            if SW {
+            TexSubImage2D(
+                target,
+                level,
+                xoffset,
+                yoffset,
+                width,
+                height,
+                format,
+                ty,
+                offset as *const c_void,
+            );
+
+            } else {
             self.ffi_gl_.TexSubImage2D(
                 target,
                 level,
@@ -964,6 +978,7 @@ impl Gl for GlFns {
                 ty,
                 offset as *const c_void,
             );
+            }
         }
     }
 
