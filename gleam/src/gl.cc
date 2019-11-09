@@ -45,6 +45,8 @@ struct Framebuffer {
 struct Renderbuffer {
 };
 
+struct Program {
+};
 
 struct Texture {
     GLenum target;
@@ -61,11 +63,17 @@ struct VertexArray {
     size_t size;
 };
 
+struct Shader {
+};
+
 map<GLuint, Buffer> buffers;
 map<GLuint, Texture> textures;
 map<GLuint, VertexArray> vertex_arrays;
 map<GLuint, Framebuffer> framebuffers;
 map<GLuint, Renderbuffer> renderbuffers;
+map<GLuint, Shader> shaders;
+map<GLuint, Program> programs;
+
 GLuint buffer_count;
 map<GLenum, GLuint> current_buffer;
 
@@ -76,9 +84,11 @@ map<GLenum, GLuint> current_renderbuffer;
 
 GLuint vertex_array_count;
 GLuint current_vertex_array;
+GLuint shader_count;
 
 GLuint renderbuffer_count;
 GLuint framebuffer_count;
+GLuint program_count;
 
 void GenBuffers(int n, int *result) {
         for (int i = 0; i < n; i++) {
@@ -94,6 +104,27 @@ void GenVertexArrays(int n, int *result) {
                 vertex_arrays.insert(pair<GLuint, VertexArray>(vertex_array_count, v));
                 result[i] = vertex_array_count++;
         }
+}
+
+GLuint CreateShader(GLenum type) {
+        Shader s;
+        shaders.insert(pair<GLuint, Shader>(shader_count, s));
+        return shader_count++;
+}
+
+GLuint CreateProgram() {
+        Program p;
+        programs.insert(pair<GLuint, Program>(program_count, p));
+        return program_count++;
+}
+
+void BindAttribLocation(GLuint program, GLuint index, char *name) {
+        assert(0);
+}
+
+GLint GetUniformLocation(GLuint program, char* name) {
+        Program &p = programs[program];
+        assert(0);
 }
 
 void BindVertexArray(GLuint vertex_array) {
@@ -120,9 +151,12 @@ void BindRenderbuffer(GLenum target, GLuint rb) {
 #define GL_RGBA32F                        0x8814
 #define GL_RGBA8                          0x8058
 #define GL_R8                             0x8229
+#define GL_RGBA32I                        0x8D82
 int bytes_for_internal_format(GLenum internal_format) {
         switch (internal_format) {
                 case GL_RGBA32F:
+                        return 4*4;
+                case GL_RGBA32I:
                         return 4*4;
                 case GL_RGBA8:
                         return 4;
@@ -179,8 +213,14 @@ void TexSubImage2D(
         GLenum format,
         GLenum ty,
         void *data) {
-        assert(xoffset == 0);
-        assert(yoffset == 0);
+        Texture &t = textures[current_texture[target]];
+        assert(xoffset + width <= t.width);
+        assert(yoffset + height <= t.height);
+        for (int y = 0; y < height; y++) {
+                for (int x = 0; x < width; x++) {
+
+                }
+        }
 }
 
 void TexSubImage3D(

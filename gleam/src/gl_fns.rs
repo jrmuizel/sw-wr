@@ -76,7 +76,7 @@ extern "C" {
         ty: GLenum,
         data: *const c_void,
     );
-
+    fn GetUniformLocation(program: GLuint, name: *const GLchar) -> GLint;
 
     fn GenVertexArrays(n: i32, result: *mut u32);
     fn VertexAttribPointer(
@@ -94,6 +94,8 @@ extern "C" {
         stride: GLsizei,
         offset: *const GLvoid,
     );
+    fn CreateShader(shader_type: GLenum) -> GLuint;
+    fn CreateProgram() -> GLuint;
 
 }
 
@@ -181,13 +183,17 @@ impl Gl for GlFns {
         //panic!();
         let pointers: Vec<*const u8> = strings.iter().map(|string| (*string).as_ptr()).collect();
         let lengths: Vec<GLint> = strings.iter().map(|string| string.len() as GLint).collect();
+        assert!(lengths.len() == 1);
         unsafe {
+            if SW { }
+            else {
             self.ffi_gl_.ShaderSource(
                 shader,
                 pointers.len() as GLsizei,
                 pointers.as_ptr() as *const *const GLchar,
                 lengths.as_ptr(),
             );
+            }
         }
         drop(lengths);
         drop(pointers);
@@ -541,7 +547,11 @@ impl Gl for GlFns {
         println!("attach shader {} {}", program, shader);
         //panic!();
         unsafe {
+            if SW {
+                //AttachShader(program, shader);
+            } else {
             self.ffi_gl_.AttachShader(program, shader);
+            }
         }
     }
 
@@ -550,8 +560,12 @@ impl Gl for GlFns {
         //panic!();
         let c_string = CString::new(name).unwrap();
         unsafe {
+            if SW {
+                BindAttribLocation(program, index, c_string.as_ptr())
+            } else {
             self.ffi_gl_
                 .BindAttribLocation(program, index, c_string.as_ptr())
+            }
         }
     }
 
@@ -2017,14 +2031,20 @@ impl Gl for GlFns {
         println!("get_uniform_location {} {}", program, name);
         //panic!();
         let name = CString::new(name).unwrap();
-        unsafe { self.ffi_gl_.GetUniformLocation(program, name.as_ptr()) }
+        unsafe { if SW {
+            GetUniformLocation(program, name.as_ptr())
+        } else {
+            self.ffi_gl_.GetUniformLocation(program, name.as_ptr())
+        }}
     }
 
     fn get_program_info_log(&self, program: GLuint) -> String {
         panic!();
         let mut max_len = [0];
         unsafe {
+            if SW { } else {
             self.get_program_iv(program, ffi::INFO_LOG_LENGTH, &mut max_len);
+            }
         }
         if max_len[0] == 0 {
             return String::new();
@@ -2049,11 +2069,18 @@ impl Gl for GlFns {
 
     #[inline]
     unsafe fn get_program_iv(&self, program: GLuint, pname: GLenum, result: &mut [GLint]) {
-        println!("get_program_iv");
+        println!("get_program_iv {}", pname);
         //panic!();
         assert!(!result.is_empty());
+        if SW {
+            //#define GL_LINK_STATUS                    0x8B82
+            if pname == 0x8b82 {
+                result[0] = 1;
+            }
+        } else {
         self.ffi_gl_
             .GetProgramiv(program, pname, result.as_mut_ptr());
+        }
     }
 
     fn get_program_binary(&self, program: GLuint) -> (Vec<u8>, GLenum) {
@@ -2154,7 +2181,9 @@ impl Gl for GlFns {
         //panic!();
         let mut max_len = [0];
         unsafe {
+            if SW {} else {
             self.get_shader_iv(shader, ffi::INFO_LOG_LENGTH, &mut max_len);
+            }
         }
         if max_len[0] == 0 {
             return String::new();
@@ -2207,7 +2236,13 @@ impl Gl for GlFns {
         println!("get_shader_iv");
         //panic!();
         assert!(!result.is_empty());
-        self.ffi_gl_.GetShaderiv(shader, pname, result.as_mut_ptr());
+        if SW {
+            if pname == 0x8B81 /*gl::COMPILE_STATUS*/ {
+                result[0] = 1;
+            }
+        } else {
+            self.ffi_gl_.GetShaderiv(shader, pname, result.as_mut_ptr());
+        }
     }
 
     fn get_shader_precision_format(
@@ -2239,7 +2274,9 @@ impl Gl for GlFns {
         println!("compile_shader {}", shader);
         //panic!();
         unsafe {
+            if SW {} else {
             self.ffi_gl_.CompileShader(shader);
+            }
         }
     }
 
@@ -2247,7 +2284,11 @@ impl Gl for GlFns {
         println!("create_program");
         //panic!();
         unsafe {
-            return self.ffi_gl_.CreateProgram();
+            if SW {
+                return CreateProgram();
+            } else {
+                return self.ffi_gl_.CreateProgram();
+            }
         }
     }
 
@@ -2262,7 +2303,11 @@ impl Gl for GlFns {
         println!("create_shader {}", shader_type);
         //panic!();
         unsafe {
-            return self.ffi_gl_.CreateShader(shader_type);
+            if SW {
+                return CreateShader(shader_type);
+            } else {
+                return self.ffi_gl_.CreateShader(shader_type);
+            }
         }
     }
 
@@ -2278,7 +2323,10 @@ impl Gl for GlFns {
         println!("detach_shader {} {}", program, shader);
         //panic!();
         unsafe {
+            if SW {}
+            else {
             self.ffi_gl_.DetachShader(program, shader);
+            }
         }
     }
 
