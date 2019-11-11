@@ -75,12 +75,12 @@ struct VertexAttrib {
         GLuint divisor;
 };
 
-
+#define MAX_ATTRS 16
 struct VertexArray {
     char *buf;
     size_t size;
 
-    VertexAttrib attribs[16];
+    VertexAttrib attribs[MAX_ATTRS];
 };
 
 struct Shader {
@@ -139,7 +139,7 @@ GLuint CreateProgram() {
 }
 
 void BindAttribLocation(GLuint program, GLuint index, char *name) {
-//        assert(0);
+        brush_solid::bind_attrib_location(name, index);
 }
 
 GLint GetUniformLocation(GLuint program, char* name) {
@@ -408,7 +408,10 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
                 Buffer &vertex_buf = buffers[current_buffer[GL_ARRAY_BUFFER]];
                 printf("indices size: %d\n", indices_buf.size);
                 printf("vertex size: %d\n", vertex_buf.size);
-
+                VertexArray &v = vertex_arrays[current_vertex_array];
+                for (int i = 0; i < MAX_ATTRS; i++) {
+                        printf("%d %d\n", i, v.attribs[i].enabled);
+                }
                 if (type == GL_UNSIGNED_SHORT) {
                         assert(indices_buf.size == count * 2);
                         unsigned short *indices = (unsigned short*)indices_buf.buf;

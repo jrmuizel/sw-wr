@@ -18,6 +18,12 @@ if (strcmp("sPrimitiveHeadersF", name) == 0) { return 11; }
 if (strcmp("sPrimitiveHeadersI", name) == 0) { return 12; }
 return -1;
 }
+static inline int aPosition_location_index;
+static inline int aData_location_index;
+static void bind_attrib_location(char *name, int index) {
+if (strcmp("aPosition", name) == 0) { aPosition_location_index = index; }
+if (strcmp("aData", name) == 0) { aData_location_index = index; }
+}
 Bool isPixelDiscarded = false;
 I32 uMode;
 mat4 uTransform;

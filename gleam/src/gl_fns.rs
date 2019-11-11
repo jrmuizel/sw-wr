@@ -1488,7 +1488,10 @@ impl Gl for GlFns {
     fn use_program(&self, program: GLuint) {
         //panic!();
         unsafe {
-            self.ffi_gl_.UseProgram(program);
+            if SW {}
+            else {
+                self.ffi_gl_.UseProgram(program);
+            }
         }
     }
 
