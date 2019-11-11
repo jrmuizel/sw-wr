@@ -77,7 +77,7 @@ extern "C" {
         data: *const c_void,
     );
     fn GetUniformLocation(program: GLuint, name: *const GLchar) -> GLint;
-
+    fn BindAttribLocation(program: GLuint, index: GLuint, name: *const GLchar);
     fn GenVertexArrays(n: i32, result: *mut u32);
     fn VertexAttribPointer(
         index: GLuint,
@@ -96,7 +96,10 @@ extern "C" {
     );
     fn CreateShader(shader_type: GLenum) -> GLuint;
     fn CreateProgram() -> GLuint;
-
+    fn Uniform1i(location: GLint, v0: GLint);
+    fn Uniform4fv(location: GLint, count: GLsizei, value: *const GLfloat);
+    fn UniformMatrix4fv(location: GLint, count: GLsizei, transpose: GLboolean, value: *const GLfloat);
+    fn DrawElementsInstanced(mode: GLenum, count: GLsizei, type_: GLenum, indices: *const c_void, instancecount: GLsizei);
 }
 
 impl GlFns {
@@ -1541,6 +1544,15 @@ impl Gl for GlFns {
                  mode, count, element_type, indices_offset, primcount);
         //panic!();
         unsafe {
+            if SW {
+                return DrawElementsInstanced(
+                mode,
+                count,
+                element_type,
+                indices_offset as *const c_void,
+                primcount,
+            );
+            } else {
             return self.ffi_gl_.DrawElementsInstanced(
                 mode,
                 count,
@@ -1548,6 +1560,7 @@ impl Gl for GlFns {
                 indices_offset as *const c_void,
                 primcount,
             );
+            }
         }
     }
 
@@ -1711,7 +1724,11 @@ impl Gl for GlFns {
         println!("uniform_1i {} {}", location, v0);
         //panic!();
         unsafe {
+            if SW {
+                Uniform1i(location, v0);
+            } else {
             self.ffi_gl_.Uniform1i(location, v0);
+            }
         }
     }
 
@@ -1836,8 +1853,12 @@ impl Gl for GlFns {
     fn uniform_4fv(&self, location: GLint, values: &[f32]) {
         panic!();
         unsafe {
+            if SW {
+                Uniform4fv(location, (values.len() / 4) as GLsizei, values.as_ptr());
+            } else {
             self.ffi_gl_
                 .Uniform4fv(location, (values.len() / 4) as GLsizei, values.as_ptr());
+            }
         }
     }
 
@@ -1869,12 +1890,22 @@ impl Gl for GlFns {
         println!("uniform_matrix_4fv {} {} {:?}", location, transpose, value);
         //panic!();
         unsafe {
+            if SW {
+             UniformMatrix4fv(
+                location,
+                (value.len() / 16) as GLsizei,
+                transpose as GLboolean,
+                value.as_ptr(),
+            );
+
+            } else {
             self.ffi_gl_.UniformMatrix4fv(
                 location,
                 (value.len() / 16) as GLsizei,
                 transpose as GLboolean,
                 value.as_ptr(),
             );
+            }
         }
     }
 
@@ -2315,7 +2346,9 @@ impl Gl for GlFns {
         println!("delete_shader {}", shader);
         //panic!();
         unsafe {
+            if SW { } else {
             self.ffi_gl_.DeleteShader(shader);
+            }
         }
     }
 
@@ -2334,7 +2367,9 @@ impl Gl for GlFns {
         println!("link_program {}", program);
         //panic!();
         unsafe {
+            if SW { } else {
             return self.ffi_gl_.LinkProgram(program);
+            }
         }
     }
 

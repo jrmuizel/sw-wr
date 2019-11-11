@@ -15,6 +15,7 @@ fn main() {
         .file("src/tgaimage.cc")
         .file("src/geometry.cc")
         .define("FOO", Some("bar"))
+        .flag("-std=c++14")
         .include("src")
         .compile("gl_cc");
 }

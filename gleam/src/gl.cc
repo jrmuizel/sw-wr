@@ -1,4 +1,8 @@
 #include <assert.h>
+#include "glsl.h"
+using namespace glsl;
+vec4 gl_Position;
+#include "brush_solid.vert.pp.h"
 //brush_solid
 /*
 clear_color()
@@ -29,6 +33,9 @@ gen_framebuffers()*/
 using namespace std;
 extern "C" {
 typedef uint32_t GLuint;
+typedef int32_t GLboolean;
+typedef float GLfloat;
+
 typedef int32_t GLint;
 typedef int32_t GLsizei;
 typedef uint32_t GLenum;
@@ -119,12 +126,14 @@ GLuint CreateProgram() {
 }
 
 void BindAttribLocation(GLuint program, GLuint index, char *name) {
-        assert(0);
+//        assert(0);
 }
 
 GLint GetUniformLocation(GLuint program, char* name) {
         Program &p = programs[program];
-        assert(0);
+        GLint loc = brush_solid::get_uniform_location(name);
+        printf("location: %d\n", loc);
+        return loc;
 }
 
 void BindVertexArray(GLuint vertex_array) {
@@ -320,6 +329,20 @@ void BufferData(GLenum target,
     b.size = size;
 }
 
+void Uniform1i(GLint location, GLint V0) {
+        
+}
+void Uniform4fv(GLint location, GLsizei count, float *v) {
+        
+}
+void UniformMatrix4fv(GLint location,
+ 	GLsizei count,
+ 	GLboolean transpose,
+ 	const GLfloat *value) {
+        
+}
+
+
 #define GL_COLOR_ATTACHMENT0              0x8CE0
 #define GL_DEPTH_ATTACHMENT               0x8D00
 #define GL_STENCIL_ATTACHMENT             0x8D20
@@ -337,5 +360,27 @@ void FramebufferTexture2D(
                 assert(0);
         }
 }
- 
+#define GL_UNSIGNED_SHORT                 0x1403
+
+#define GL_POINTS                         0x0000
+#define GL_LINES                          0x0001
+#define GL_LINE_LOOP                      0x0002
+#define GL_LINE_STRIP                     0x0003
+#define GL_TRIANGLES                      0x0004
+#define GL_TRIANGLE_STRIP                 0x0005
+#define GL_TRIANGLE_FAN                   0x0006
+
+void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indices, GLsizei instancecount) {
+        assert(mode == GL_TRIANGLES);
+        assert(type == GL_UNSIGNED_SHORT);
+        assert(count == 6);
+        assert(instancecount == 1);
+        assert(indices == 0);
+        if (indices == 0) {
+                Buffer &b = buffers[current_buffer[GL_ELEMENT_ARRAY_BUFFER]];
+                printf("size: %d\n", b.size);
+        }
+        printf("dodraw");
+}
+
 }
