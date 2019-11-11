@@ -65,9 +65,22 @@ struct Texture {
     char *buf;
 };
 
+struct VertexAttrib {
+        GLint size;
+        GLenum type;
+        bool normalized;
+        GLsizei stride;
+        GLuint offset;
+        bool enabled = false;
+        GLuint divisor;
+};
+
+
 struct VertexArray {
     char *buf;
     size_t size;
+
+    VertexAttrib attribs[16];
 };
 
 struct Shader {
@@ -275,16 +288,6 @@ void GenFramebuffers(int n, int *result) {
         }
 }
 
-struct VertexAttrib {
-        GLint size;
-        GLenum type;
-        bool normalized;
-        GLsizei stride;
-        GLuint offset;
-};
-
-VertexAttrib attribs[16];
-
 void VertexAttribPointer(GLuint index,
         GLint size,
         GLenum type,
@@ -292,7 +295,8 @@ void VertexAttribPointer(GLuint index,
         GLsizei stride,
         GLuint offset)
 {
-        VertexAttrib &va = attribs[index];
+        VertexArray &v = vertex_arrays[current_vertex_array];
+        VertexAttrib &va = v.attribs[index];
         va.size = size;
         va.type = type;
         va.normalized = normalized;
@@ -306,12 +310,34 @@ void VertexAttribIPointer(GLuint index,
         GLsizei stride,
         GLuint offset)
 {
-        VertexAttrib &va = attribs[index];
+        VertexArray &v = vertex_arrays[current_vertex_array];
+        VertexAttrib &va = v.attribs[index];
         va.size = size;
         va.type = type;
         va.stride = stride;
         va.offset = offset;
 }
+
+void EnableVertexAttribArray(GLuint index) {
+        VertexArray &v = vertex_arrays[current_vertex_array];
+        VertexAttrib &va = v.attribs[index];
+        va.enabled = true;
+}
+
+void DisableVertexAttribArray(GLuint index) {
+        VertexArray &v = vertex_arrays[current_vertex_array];
+        VertexAttrib &va = v.attribs[index];
+        va.enabled = false;
+}
+
+
+
+void VertexAttribDivisor(GLuint index, GLuint divisor) {
+        VertexArray &v = vertex_arrays[current_vertex_array];
+        VertexAttrib &va = v.attribs[index];
+        va.divisor = divisor;
+}
+
 
 
 #define GL_ARRAY_BUFFER                   0x8892
@@ -341,6 +367,7 @@ void UniformMatrix4fv(GLint location,
  	const GLfloat *value) {
         
 }
+
 
 
 #define GL_COLOR_ATTACHMENT0              0x8CE0
@@ -377,8 +404,18 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
         assert(instancecount == 1);
         assert(indices == 0);
         if (indices == 0) {
-                Buffer &b = buffers[current_buffer[GL_ELEMENT_ARRAY_BUFFER]];
-                printf("size: %d\n", b.size);
+                Buffer &indices_buf = buffers[current_buffer[GL_ELEMENT_ARRAY_BUFFER]];
+                Buffer &vertex_buf = buffers[current_buffer[GL_ARRAY_BUFFER]];
+                printf("indices size: %d\n", indices_buf.size);
+                printf("vertex size: %d\n", vertex_buf.size);
+
+                if (type == GL_UNSIGNED_SHORT) {
+                        assert(indices_buf.size == count * 2);
+                        unsigned short *indices = (unsigned short*)indices_buf.buf;
+                        for (int i = 0; i < count; i++) {
+                                printf(" %d\n", indices[i]);
+                        }
+                }
         }
         printf("dodraw");
 }

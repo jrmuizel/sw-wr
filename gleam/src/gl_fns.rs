@@ -99,7 +99,10 @@ extern "C" {
     fn Uniform1i(location: GLint, v0: GLint);
     fn Uniform4fv(location: GLint, count: GLsizei, value: *const GLfloat);
     fn UniformMatrix4fv(location: GLint, count: GLsizei, transpose: GLboolean, value: *const GLfloat);
+    
     fn DrawElementsInstanced(mode: GLenum, count: GLsizei, type_: GLenum, indices: *const c_void, instancecount: GLsizei);
+    fn EnableVertexAttribArray(index: GLuint);
+    fn VertexAttribDivisor(index: GLuint, divisor: GLuint);
 }
 
 impl GlFns {
@@ -1451,8 +1454,12 @@ impl Gl for GlFns {
         println!("vertex_attrib_divisor {} {}", index, divisor);
         //assert!(index == 0 && divisor == 0);
         //panic!();
-        if SW { } else {
-        unsafe { self.ffi_gl_.VertexAttribDivisor(index, divisor) }
+        unsafe {
+            if SW {
+                VertexAttribDivisor(index, divisor);
+            } else {
+                self.ffi_gl_.VertexAttribDivisor(index, divisor)
+            }
         }
     }
 
@@ -1691,6 +1698,7 @@ impl Gl for GlFns {
         println!("enable_vertex_attrib_array {}", index);
         unsafe {
             if SW {
+                EnableVertexAttribArray(index);
                 //assert_eq!(index, 0);
             } else {
                 self.ffi_gl_.EnableVertexAttribArray(index);
