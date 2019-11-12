@@ -406,11 +406,24 @@ struct ivec3 {
 
 };
 
+struct ivec4_scalar {
+        int x;
+        int y;
+        int z;
+        int w;
+};
+
 struct ivec4 {
         ivec4() { ivec4(0); }
         ivec4(I32 a): x(a), y(a), z(a), w(a) {}
         ivec4(I32 x, I32 y, I32 z, I32 w): x(x), y(y), z(z), w(w) {}
         ivec4(ivec2 a, I32 b, I32 c): x(a.x), y(a.y), z(b), w(c) {}
+        constexpr ivec4(ivec4_scalar s) : x(s.x), y(s.y), z(s.z), w(s.w) {}
+        constexpr ivec4(ivec4_scalar s0, ivec4_scalar s1, ivec4_scalar s2, ivec4_scalar s3) : x(I32{s0.x, s1.x, s2.x, s3.x}),
+                                 y(I32{s0.y, s1.y, s2.y, s3.y}),
+                                 z(I32{s0.z, s1.z, s2.z, s3.z}),
+                                 w(I32{s0.w, s1.w, s2.w, s3.w}) {}
+
         I32& select(XYZW c) {
                 switch (c) {
                     case X: return x;
@@ -535,12 +548,21 @@ struct vec2_ref {
 };
 
 
+struct vec3_scalar {
+        float x;
+        float y;
+        float z;
+};
 
 struct vec3 {
         constexpr vec3() : vec3(0) {  }
         constexpr vec3(Float a): x(a), y(a), z(a) {}
         constexpr vec3(Float x, Float y, Float z): x(x), y(y), z(z)  {}
         vec3(vec2 a, Float z): x(a.x), y(a.y), z(z)  {}
+        constexpr vec3(vec3_scalar s) : x(s.x), y(s.y), z(s.z) {}
+        constexpr vec3(vec3_scalar s0, vec3_scalar s1, vec3_scalar s2, vec3_scalar s3) : x(Float{s0.x, s1.x, s2.x, s3.x}),
+                                 y(Float{s0.y, s1.y, s2.y, s3.y}),
+                                 z(Float{s0.z, s1.z, s2.z, s3.z}) {}
         Float x;
         Float y;
         Float z;

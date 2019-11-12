@@ -1,5 +1,25 @@
 #include <assert.h>
 #include "glsl.h"
+typedef uint32_t GLuint;
+typedef int32_t GLboolean;
+typedef float GLfloat;
+
+typedef int32_t GLint;
+typedef int32_t GLsizei;
+typedef uint32_t GLenum;
+typedef size_t GLsizeiptr;
+
+struct VertexAttrib {
+        GLint size;
+        GLenum type;
+        bool normalized;
+        GLsizei stride;
+        GLuint offset;
+        bool enabled = false;
+        GLuint divisor;
+};
+
+
 using namespace glsl;
 vec4 gl_Position;
 #include "brush_solid.vert.pp.h"
@@ -32,14 +52,6 @@ gen_framebuffers()*/
 #include <map>
 using namespace std;
 extern "C" {
-typedef uint32_t GLuint;
-typedef int32_t GLboolean;
-typedef float GLfloat;
-
-typedef int32_t GLint;
-typedef int32_t GLsizei;
-typedef uint32_t GLenum;
-typedef size_t GLsizeiptr;
 struct Buffer {
         char *buf;
         size_t size;
@@ -63,16 +75,6 @@ struct Texture {
     GLenum height;
     GLenum depth;
     char *buf;
-};
-
-struct VertexAttrib {
-        GLint size;
-        GLenum type;
-        bool normalized;
-        GLsizei stride;
-        GLuint offset;
-        bool enabled = false;
-        GLuint divisor;
 };
 
 #define MAX_ATTRS 16
@@ -410,13 +412,18 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
                 printf("vertex size: %d\n", vertex_buf.size);
                 VertexArray &v = vertex_arrays[current_vertex_array];
                 for (int i = 0; i < MAX_ATTRS; i++) {
-                        printf("%d %d\n", i, v.attribs[i].enabled);
+                        if (v.attribs[i].enabled) {
+                                VertexAttrib &attr = v.attribs[i];
+                                printf("%d %x %d %d %d\n", i, attr.type, attr.size, attr.stride, attr.offset);
+                        }
                 }
                 if (type == GL_UNSIGNED_SHORT) {
                         assert(indices_buf.size == count * 2);
                         unsigned short *indices = (unsigned short*)indices_buf.buf;
+                        brush_solid shader;
                         for (int i = 0; i < count; i++) {
                                 printf(" %d\n", indices[i]);
+                                shader.load_attribs(v.attribs, vertex_buf.buf, indices[i]);
                         }
                 }
         }
