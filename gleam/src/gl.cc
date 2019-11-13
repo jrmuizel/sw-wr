@@ -368,17 +368,18 @@ void BufferData(GLenum target,
     b.size = size;
 }
 
+brush_solid shader;
 void Uniform1i(GLint location, GLint V0) {
-        
+        shader.set_uniform_int(location, V0);
 }
 void Uniform4fv(GLint location, GLsizei count, float *v) {
-        
+        shader.set_uniform_4f(location, v);
 }
 void UniformMatrix4fv(GLint location,
  	GLsizei count,
  	GLboolean transpose,
  	const GLfloat *value) {
-        
+        shader.set_uniform_matrix4fv(location, value);
 }
 
 
@@ -410,6 +411,9 @@ void FramebufferTexture2D(
 #define GL_TRIANGLE_STRIP                 0x0005
 #define GL_TRIANGLE_FAN                   0x0006
 
+void LinkProgram(GLuint program) {
+}
+
 void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indices, GLsizei instancecount) {
         assert(mode == GL_TRIANGLES);
         assert(type == GL_UNSIGNED_SHORT);
@@ -432,7 +436,6 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
                 if (type == GL_UNSIGNED_SHORT) {
                         assert(indices_buf.size == count * 2);
                         unsigned short *indices = (unsigned short*)indices_buf.buf;
-                        brush_solid shader;
                         for (int i = 0; i < count; i++) {
                                 printf(" %d\n", indices[i]);
                                 shader.load_attribs(v.attribs, indices[i]);

@@ -18,6 +18,120 @@ if (strcmp("sPrimitiveHeadersF", name) == 0) { return 11; }
 if (strcmp("sPrimitiveHeadersI", name) == 0) { return 12; }
 return -1;
 }
+void set_uniform_int(int index, int value) {
+if (index == 1) {
+uMode = I32(value);
+}
+if (index == 2) {
+assert(0); // uTransform
+}
+if (index == 3) {
+assert(0); // sColor0
+}
+if (index == 4) {
+assert(0); // sColor1
+}
+if (index == 5) {
+assert(0); // sColor2
+}
+if (index == 6) {
+assert(0); // sRenderTasks
+}
+if (index == 7) {
+assert(0); // sGpuCache
+}
+if (index == 8) {
+assert(0); // sTransformPalette
+}
+if (index == 9) {
+assert(0); // sPrevPassAlpha
+}
+if (index == 10) {
+assert(0); // sPrevPassColor
+}
+if (index == 11) {
+assert(0); // sPrimitiveHeadersF
+}
+if (index == 12) {
+assert(0); // sPrimitiveHeadersI
+}
+}
+void set_uniform_4f(int index, float *value) {
+if (index == 1) {
+assert(0); // uMode
+}
+if (index == 2) {
+assert(0); // uTransform
+}
+if (index == 3) {
+assert(0); // sColor0
+}
+if (index == 4) {
+assert(0); // sColor1
+}
+if (index == 5) {
+assert(0); // sColor2
+}
+if (index == 6) {
+assert(0); // sRenderTasks
+}
+if (index == 7) {
+assert(0); // sGpuCache
+}
+if (index == 8) {
+assert(0); // sTransformPalette
+}
+if (index == 9) {
+assert(0); // sPrevPassAlpha
+}
+if (index == 10) {
+assert(0); // sPrevPassColor
+}
+if (index == 11) {
+assert(0); // sPrimitiveHeadersF
+}
+if (index == 12) {
+assert(0); // sPrimitiveHeadersI
+}
+}
+void set_uniform_matrix4fv(int index, const float *value) {
+if (index == 1) {
+assert(0); // uMode
+}
+if (index == 2) {
+assert(0); // uTransform
+}
+if (index == 3) {
+assert(0); // sColor0
+}
+if (index == 4) {
+assert(0); // sColor1
+}
+if (index == 5) {
+assert(0); // sColor2
+}
+if (index == 6) {
+assert(0); // sRenderTasks
+}
+if (index == 7) {
+assert(0); // sGpuCache
+}
+if (index == 8) {
+assert(0); // sTransformPalette
+}
+if (index == 9) {
+assert(0); // sPrevPassAlpha
+}
+if (index == 10) {
+assert(0); // sPrevPassColor
+}
+if (index == 11) {
+assert(0); // sPrimitiveHeadersF
+}
+if (index == 12) {
+assert(0); // sPrimitiveHeadersI
+}
+}
 static inline int aPosition_location_index;
 static inline int aData_location_index;
 static void bind_attrib_location(char *name, int index) {

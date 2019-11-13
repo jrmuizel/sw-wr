@@ -103,6 +103,7 @@ extern "C" {
     fn DrawElementsInstanced(mode: GLenum, count: GLsizei, type_: GLenum, indices: *const c_void, instancecount: GLsizei);
     fn EnableVertexAttribArray(index: GLuint);
     fn VertexAttribDivisor(index: GLuint, divisor: GLuint);
+    fn LinkProgram(program: GLuint);
 }
 
 impl GlFns {
@@ -2378,7 +2379,7 @@ impl Gl for GlFns {
         println!("link_program {}", program);
         //panic!();
         unsafe {
-            if SW { } else {
+            if SW { LinkProgram(program) } else {
             return self.ffi_gl_.LinkProgram(program);
             }
         }
