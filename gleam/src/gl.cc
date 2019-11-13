@@ -1,5 +1,9 @@
 #include <assert.h>
 #include "glsl.h"
+#define GL_ARRAY_BUFFER                   0x8892
+#define GL_ELEMENT_ARRAY_BUFFER           0x8893
+
+
 typedef uint32_t GLuint;
 typedef int32_t GLboolean;
 typedef float GLfloat;
@@ -17,6 +21,8 @@ struct VertexAttrib {
         GLuint offset;
         bool enabled = false;
         GLuint divisor;
+        int vertex_array;
+        char *buf; // XXX: this can easily dangle
 };
 
 
@@ -297,6 +303,7 @@ void VertexAttribPointer(GLuint index,
         GLsizei stride,
         GLuint offset)
 {
+        printf("cva: %d\n", current_vertex_array);
         VertexArray &v = vertex_arrays[current_vertex_array];
         VertexAttrib &va = v.attribs[index];
         va.size = size;
@@ -304,6 +311,9 @@ void VertexAttribPointer(GLuint index,
         va.normalized = normalized;
         va.stride = stride;
         va.offset = offset;
+        Buffer &vertex_buf = buffers[current_buffer[GL_ARRAY_BUFFER]];
+        va.buf = vertex_buf.buf;
+        va.vertex_array = current_vertex_array;
 }
 
 void VertexAttribIPointer(GLuint index,
@@ -312,12 +322,16 @@ void VertexAttribIPointer(GLuint index,
         GLsizei stride,
         GLuint offset)
 {
+        printf("cva: %d\n", current_vertex_array);
         VertexArray &v = vertex_arrays[current_vertex_array];
         VertexAttrib &va = v.attribs[index];
         va.size = size;
         va.type = type;
         va.stride = stride;
         va.offset = offset;
+        Buffer &vertex_buf = buffers[current_buffer[GL_ARRAY_BUFFER]];
+        va.buf = vertex_buf.buf;
+        va.vertex_array = current_vertex_array;
 }
 
 void EnableVertexAttribArray(GLuint index) {
@@ -341,9 +355,6 @@ void VertexAttribDivisor(GLuint index, GLuint divisor) {
 }
 
 
-
-#define GL_ARRAY_BUFFER                   0x8892
-#define GL_ELEMENT_ARRAY_BUFFER           0x8893
 
 void BufferData(GLenum target,
         GLsizeiptr size,
@@ -407,13 +418,14 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
         assert(indices == 0);
         if (indices == 0) {
                 Buffer &indices_buf = buffers[current_buffer[GL_ELEMENT_ARRAY_BUFFER]];
-                Buffer &vertex_buf = buffers[current_buffer[GL_ARRAY_BUFFER]];
+                printf("current_vertex_array %d\n", current_vertex_array);
                 printf("indices size: %d\n", indices_buf.size);
-                printf("vertex size: %d\n", vertex_buf.size);
                 VertexArray &v = vertex_arrays[current_vertex_array];
                 for (int i = 0; i < MAX_ATTRS; i++) {
                         if (v.attribs[i].enabled) {
                                 VertexAttrib &attr = v.attribs[i];
+                                VertexArray &v = vertex_arrays[attr.vertex_array];
+                                attr.buf = v.buf;
                                 printf("%d %x %d %d %d\n", i, attr.type, attr.size, attr.stride, attr.offset);
                         }
                 }
@@ -423,7 +435,8 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
                         brush_solid shader;
                         for (int i = 0; i < count; i++) {
                                 printf(" %d\n", indices[i]);
-                                shader.load_attribs(v.attribs, vertex_buf.buf, indices[i]);
+                                shader.load_attribs(v.attribs, indices[i]);
+                                shader.main();
                         }
                 }
         }
