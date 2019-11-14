@@ -1,5 +1,8 @@
 #include <assert.h>
+
+#include <map>
 #include "glsl.h"
+using namespace std;
 #define GL_ARRAY_BUFFER                   0x8892
 #define GL_ELEMENT_ARRAY_BUFFER           0x8893
 
@@ -24,40 +27,26 @@ struct VertexAttrib {
         int vertex_array;
         char *buf; // XXX: this can easily dangle
 };
+#define GL_RGBA32F                        0x8814
+#define GL_RGBA8                          0x8058
+#define GL_R8                             0x8229
+#define GL_RGBA32I                        0x8D82
+int bytes_for_internal_format(GLenum internal_format) {
+        switch (internal_format) {
+                case GL_RGBA32F:
+                        return 4*4;
+                case GL_RGBA32I:
+                        return 4*4;
+                case GL_RGBA8:
+                        return 4;
+                case GL_R8:
+                        return 1;
+                default:
+                        printf("internal format: %x\n", internal_format);
+                        assert(0);
+        }
+}
 
-
-using namespace glsl;
-vec4 gl_Position;
-#include "brush_solid.vert.pp.h"
-//brush_solid
-/*
-clear_color()
-get_string()
-get_integer_v()
-get_string_i()
-get_error()
-active_texture()
-bind_texture()
-bind_vertex_array()
-pixel_store_i()
-bind_buffer()
-gen_textures()
-tex_parmater_i()
-tex_storage_3d()
-tex_storage_2d()
-tex_sub_image_2d()
-gen_buffers()
-gen_vertex_arrays()
-enable_vertex_attrib_array()
-vertex_attrib_divisor()
-vertex_attrib_pointer()
-vertex_attrib_i_pointer()
-buffer_data_untyped()
-tex_sub_image_3d()
-gen_framebuffers()*/
-#include <map>
-using namespace std;
-extern "C" {
 struct Buffer {
         char *buf;
         size_t size;
@@ -118,6 +107,62 @@ GLuint renderbuffer_count;
 GLuint framebuffer_count;
 GLuint program_count;
 
+
+
+using namespace glsl;
+
+sampler2D lookup_sampler(int texture) {
+        sampler2D s = new sampler2D_impl; //XXX: going to leak it
+        Texture &t = textures[texture];
+        s->width = t.width;
+        s->height = t.height;
+        s->stride = bytes_for_internal_format(t.internal_format) * t.width;
+        s->buf = (uint32_t*)t.buf; //XXX: wrong
+        return s;
+}
+
+sampler2DArray lookup_sampler_array(int texture) {
+        sampler2DArray s = new sampler2DArray_impl; //XXX: going to leak it
+        Texture &t = textures[texture];
+        s->width = t.width;
+        s->height = t.height;
+        s->stride = bytes_for_internal_format(t.internal_format) * t.width;
+        s->buf = (uint32_t*)t.buf; //XXX: wrong
+        return s;
+}
+
+
+vec4 gl_Position;
+
+#include "brush_solid.vert.pp.h"
+//brush_solid
+/*
+clear_color()
+get_string()
+get_integer_v()
+get_string_i()
+get_error()
+active_texture()
+bind_texture()
+bind_vertex_array()
+pixel_store_i()
+bind_buffer()
+gen_textures()
+tex_parmater_i()
+tex_storage_3d()
+tex_storage_2d()
+tex_sub_image_2d()
+gen_buffers()
+gen_vertex_arrays()
+enable_vertex_attrib_array()
+vertex_attrib_divisor()
+vertex_attrib_pointer()
+vertex_attrib_i_pointer()
+buffer_data_untyped()
+tex_sub_image_3d()
+gen_framebuffers()*/
+extern "C" {
+
 void GenBuffers(int n, int *result) {
         for (int i = 0; i < n; i++) {
                 Buffer b;
@@ -162,6 +207,9 @@ void BindVertexArray(GLuint vertex_array) {
 }
 
 
+
+
+
 void BindTexture(GLenum target, GLuint texture) {
     current_texture[target] = texture;
 }
@@ -176,26 +224,6 @@ void BindFramebuffer(GLenum target, GLuint fb) {
 
 void BindRenderbuffer(GLenum target, GLuint rb) {
     current_renderbuffer[target] = rb;
-}
-
-#define GL_RGBA32F                        0x8814
-#define GL_RGBA8                          0x8058
-#define GL_R8                             0x8229
-#define GL_RGBA32I                        0x8D82
-int bytes_for_internal_format(GLenum internal_format) {
-        switch (internal_format) {
-                case GL_RGBA32F:
-                        return 4*4;
-                case GL_RGBA32I:
-                        return 4*4;
-                case GL_RGBA8:
-                        return 4;
-                case GL_R8:
-                        return 1;
-                default:
-                        printf("internal format: %x\n", internal_format);
-                        assert(0);
-        }
 }
 
 void TexStorage3D(

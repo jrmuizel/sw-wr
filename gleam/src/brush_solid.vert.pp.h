@@ -26,31 +26,31 @@ if (index == 2) {
 assert(0); // uTransform
 }
 if (index == 3) {
-assert(0); // sColor0
+sColor0 = lookup_sampler_array(value);
 }
 if (index == 4) {
-assert(0); // sColor1
+sColor1 = lookup_sampler_array(value);
 }
 if (index == 5) {
-assert(0); // sColor2
+sColor2 = lookup_sampler_array(value);
 }
 if (index == 6) {
-assert(0); // sRenderTasks
+sRenderTasks = lookup_sampler(value);
 }
 if (index == 7) {
-assert(0); // sGpuCache
+sGpuCache = lookup_sampler(value);
 }
 if (index == 8) {
-assert(0); // sTransformPalette
+sTransformPalette = lookup_sampler(value);
 }
 if (index == 9) {
-assert(0); // sPrevPassAlpha
+sPrevPassAlpha = lookup_sampler_array(value);
 }
 if (index == 10) {
-assert(0); // sPrevPassColor
+sPrevPassColor = lookup_sampler_array(value);
 }
 if (index == 11) {
-assert(0); // sPrimitiveHeadersF
+sPrimitiveHeadersF = lookup_sampler(value);
 }
 if (index == 12) {
 assert(0); // sPrimitiveHeadersI
