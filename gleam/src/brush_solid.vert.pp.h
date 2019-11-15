@@ -53,7 +53,7 @@ if (index == 11) {
 sPrimitiveHeadersF = lookup_sampler(value);
 }
 if (index == 12) {
-assert(0); // sPrimitiveHeadersI
+sPrimitiveHeadersI = lookup_isampler(value);
 }
 }
 void set_uniform_4f(int index, float *value) {
@@ -99,7 +99,7 @@ if (index == 1) {
 assert(0); // uMode
 }
 if (index == 2) {
-assert(0); // uTransform
+uTransform = mat4::load_from_ptr(value);
 }
 if (index == 3) {
 assert(0); // sColor0
@@ -139,15 +139,17 @@ if (strcmp("aPosition", name) == 0) { aPosition_location_index = index; }
 if (strcmp("aData", name) == 0) { aData_location_index = index; }
 }
 void load_attribs(VertexAttrib *attribs, int count) {
-{ VertexAttrib &va = attribs[aPosition_location_index];
-vec3_scalar scalar;
-memcpy(&scalar, (char*)va.buf + va.stride * count, va.size);
-aPosition = vec3(scalar);
+{
+  VertexAttrib &va = attribs[aPosition_location_index];
+  vec3_scalar scalar;
+  memcpy(&scalar, (char*)va.buf + va.stride * count, va.size);
+  aPosition = vec3(scalar);
 }
-{ VertexAttrib &va = attribs[aData_location_index];
-ivec4_scalar scalar;
-memcpy(&scalar, (char*)va.buf + va.stride * count, va.size);
-aData = ivec4(scalar);
+{
+  VertexAttrib &va = attribs[aData_location_index];
+  ivec4_scalar scalar;
+  memcpy(&scalar, (char*)va.buf + va.stride * count, va.size);
+  aData = ivec4(scalar);
 }
 }
 Bool isPixelDiscarded = false;

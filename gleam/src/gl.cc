@@ -143,6 +143,16 @@ sampler2D lookup_sampler(int texture) {
         return s;
 }
 
+isampler2D lookup_isampler(int texture) {
+        isampler2D s = new isampler2D_impl; //XXX: going to leak it
+        Texture &t = textures[texture_slots[texture]];
+        s->width = t.width;
+        s->height = t.height;
+        s->stride = bytes_for_internal_format(t.internal_format) * t.width;
+        s->buf = (uint32_t*)t.buf; //XXX: wrong
+        return s;
+}
+
 sampler2DArray lookup_sampler_array(int texture) {
         sampler2DArray s = new sampler2DArray_impl; //XXX: going to leak it
         Texture &t = textures[texture_slots[texture]];

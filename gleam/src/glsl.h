@@ -119,12 +119,20 @@ struct bvec2 {
         Bool y;
 };
 
-
+struct vec2_scalar {
+        float x;
+        float y;
+};
 
 struct vec2 {
         vec2() { vec2(0); }
         vec2(Float a): x(a), y(a) {}
         vec2(Float x, Float y): x(x), y(y) {}
+        constexpr vec2(vec2_scalar s) : x(s.x), y(s.y) {}
+        constexpr vec2(vec2_scalar s0, vec2_scalar s1, vec2_scalar s2, vec2_scalar s3)
+                : x(Float{s0.x, s1.x, s2.x, s3.x}),
+                  y(Float{s0.y, s1.y, s2.y, s3.y})
+                  {}
         vec2(ivec2 a);
         Float x;
         Float y;
@@ -339,6 +347,11 @@ Float exp(Float y) {
 
 struct ivec4;
 
+struct ivec2_scalar {
+        int x;
+        int y;
+};
+
 struct ivec2 {
         ivec2() { ivec2(0); }
         ivec2(I32 a): x(a), y(a) {}
@@ -346,6 +359,10 @@ struct ivec2 {
         ivec2(I32 x, I32 y): x(x), y(y) {}
         ivec2(vec2 a): x(cast(a.x)), y(cast(a.y)) {}
         ivec2(U32 x, U32 y): x(__builtin_convertvector(x, I32)), y(__builtin_convertvector(y, I32)) {}
+        constexpr ivec2(ivec2_scalar s) : x(s.x), y(s.y) {}
+        constexpr ivec2(ivec2_scalar s0, ivec2_scalar s1, ivec2_scalar s2, ivec2_scalar s3)
+                : x(I32{s0.x, s1.x, s2.x, s3.x})
+                , y(I32{s0.y, s1.y, s2.y, s3.y}) {}
         I32 x;
         I32 y;
 
@@ -690,6 +707,14 @@ struct vec3_ref {
 
 };
 
+struct vec4_scalar {
+        float x;
+        float y;
+        float z;
+        float w;
+};
+
+
 struct vec4 {
         vec4() { vec4(0); }
         vec4(Float a): x(a), y(a), z(a), w(a) {}
@@ -697,6 +722,12 @@ struct vec4 {
         vec4(vec3 xyz, Float w): x(xyz.x), y(xyz.y), z(xyz.z), w(w) {}
         vec4(vec2 xy, vec2 zw): x(xy.x), y(xy.y), z(zw.x), w(zw.y) {}
         vec4(vec2 xy, Float z, Float w): x(xy.x), y(xy.y), z(z), w(w) {}
+        constexpr vec4(vec4_scalar s) : x(s.x), y(s.y), z(s.z), w(s.w) {}
+        constexpr vec4(vec4_scalar s0, vec4_scalar s1, vec4_scalar s2, vec4_scalar s3)
+                : x(Float{s0.x, s1.x, s2.x, s3.x}),
+                  y(Float{s0.y, s1.y, s2.y, s3.y}),
+                  z(Float{s0.z, s1.z, s2.z, s3.z}),
+                  w(Float{s0.w, s1.w, s2.w, s3.w}) {}
         Float& select(XYZW c) {
                 switch (c) {
                     case X: return x;
@@ -983,7 +1014,9 @@ SI mat2 if_then_else(I32 c, mat2 t, mat2 e) {
                 if_then_else(c, t[0], e[1]));
 }
 
-
+struct mat3_scalar {
+        vec3_scalar data[3];
+};
 
 struct mat3 {
         vec3 data[3];
@@ -1000,6 +1033,17 @@ struct mat3 {
                 data[0] = a;
                 data[1] = b;
                 data[2] = c;
+        }
+
+        constexpr mat3(mat3_scalar s) {
+                data[0] = vec3(s.data[0]);
+                data[1] = vec3(s.data[1]);
+                data[2] = vec3(s.data[2]);
+        }
+        constexpr mat3(mat3_scalar s0, mat3_scalar s1, mat3_scalar s2, mat3_scalar s3) {
+                data[0] = vec3(s0.data[0], s1.data[0], s2.data[0], s3.data[0]);
+                data[1] = vec3(s0.data[1], s1.data[1], s2.data[1], s3.data[1]);
+                data[2] = vec3(s0.data[2], s1.data[2], s2.data[2], s3.data[2]);
         }
 
         constexpr mat3(Float d1, Float d2, Float d3, Float d4, Float d5, Float d6, Float d7, Float d8, Float d9) {
@@ -1021,6 +1065,14 @@ struct mat3 {
 };
 
 struct mat4 {
+        static mat4 load_from_ptr(const float *f) {
+                mat4 m;
+                // XXX: hopefully this is in the right order
+                m.data[0] = vec4(f[0], f[1], f[2], f[3]);
+                m.data[1] = vec4(f[4], f[5], f[6], f[7]);
+                m.data[2] = vec4(f[8], f[9], f[10], f[11]);
+                m.data[3] = vec4(f[12], f[13], f[14], f[15]);
+        }
         vec4 data[4];
         vec4& operator[](int index) {
                 return data[index];
