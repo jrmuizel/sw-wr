@@ -111,9 +111,31 @@ GLuint program_count;
 
 using namespace glsl;
 
+#define GL_TEXTURE0                       0x84C0
+#define GL_TEXTURE1                       0x84C1
+#define GL_TEXTURE2                       0x84C2
+#define GL_TEXTURE3                       0x84C3
+#define GL_TEXTURE4                       0x84C4
+#define GL_TEXTURE5                       0x84C5
+#define GL_TEXTURE6                       0x84C6
+#define GL_TEXTURE7                       0x84C7
+#define GL_TEXTURE8                       0x84C8
+#define GL_TEXTURE9                       0x84C9
+#define GL_TEXTURE10                      0x84CA
+#define GL_TEXTURE11                      0x84CB
+#define GL_TEXTURE12                      0x84CC
+#define GL_TEXTURE13                      0x84CD
+#define GL_TEXTURE14                      0x84CE
+#define GL_TEXTURE15                      0x84CF
+#define GL_TEXTURE16                      0x84D0
+
+GLenum active_texture;
+GLuint texture_slots[16];
+
+
 sampler2D lookup_sampler(int texture) {
         sampler2D s = new sampler2D_impl; //XXX: going to leak it
-        Texture &t = textures[texture];
+        Texture &t = textures[texture_slots[texture]];
         s->width = t.width;
         s->height = t.height;
         s->stride = bytes_for_internal_format(t.internal_format) * t.width;
@@ -123,7 +145,7 @@ sampler2D lookup_sampler(int texture) {
 
 sampler2DArray lookup_sampler_array(int texture) {
         sampler2DArray s = new sampler2DArray_impl; //XXX: going to leak it
-        Texture &t = textures[texture];
+        Texture &t = textures[texture_slots[texture]];
         s->width = t.width;
         s->height = t.height;
         s->stride = bytes_for_internal_format(t.internal_format) * t.width;
@@ -162,6 +184,12 @@ buffer_data_untyped()
 tex_sub_image_3d()
 gen_framebuffers()*/
 extern "C" {
+
+void ActiveTexture(GLenum texture) {
+        assert(texture >= GL_TEXTURE0);
+        assert(texture <= GL_TEXTURE16); // this is just arbitrary
+        active_texture = texture - GL_TEXTURE0;
+}
 
 void GenBuffers(int n, int *result) {
         for (int i = 0; i < n; i++) {
@@ -211,6 +239,7 @@ void BindVertexArray(GLuint vertex_array) {
 
 
 void BindTexture(GLenum target, GLuint texture) {
+    texture_slots[active_texture] = texture;
     current_texture[target] = texture;
 }
 
@@ -280,6 +309,8 @@ void TexSubImage2D(
                 }
         }
 }
+
+
 
 void TexSubImage3D(
         GLenum target,
@@ -398,6 +429,7 @@ void BufferData(GLenum target,
 
 brush_solid shader;
 void Uniform1i(GLint location, GLint V0) {
+        printf("tex: %d\n", texture_count);
         shader.set_uniform_int(location, V0);
 }
 void Uniform4fv(GLint location, GLsizei count, float *v) {

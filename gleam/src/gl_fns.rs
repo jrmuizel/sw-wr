@@ -18,6 +18,7 @@ extern {
 const SW: bool = true;
 
 extern "C" {
+    fn ActiveTexture(texture: GLenum);
     fn BindTexture(target: GLenum, texture: GLuint);
     fn BindBuffer(target: GLenum, buffer: GLuint);
     fn BindVertexArray(vao: GLuint);
@@ -546,7 +547,11 @@ impl Gl for GlFns {
     fn active_texture(&self, texture: GLenum) {
         //panic!();
         unsafe {
+            if SW {
+                ActiveTexture(texture);
+            } else {
             self.ffi_gl_.ActiveTexture(texture);
+            }
         }
     }
 

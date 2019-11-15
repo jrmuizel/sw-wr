@@ -912,7 +912,7 @@ bvec4 greaterThanEqual(vec4 x, vec4 y) {
 
 struct sampler2DArray_impl {
         uint32_t *buf;
-        uint32_t stride;
+        uint32_t stride; // in bytes
         uint32_t height;
         uint32_t width;
 };
@@ -922,7 +922,7 @@ typedef sampler2DArray_impl *sampler2DArray;
 
 struct sampler2D_impl {
         uint32_t *buf;
-        uint32_t stride;
+        uint32_t stride; // in bytes
         uint32_t height;
         uint32_t width;
 };
