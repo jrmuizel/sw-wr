@@ -510,6 +510,7 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
                                 printf(" %d\n", indices[i]);
                                 shader.load_attribs(v.attribs, indices[i]);
                                 shader.main();
+                                printf("%f %f %f %f\n", gl_Position.x.x, gl_Position.y.x, gl_Position.z.x, gl_Position.y.x);
                         }
                 }
         }
