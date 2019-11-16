@@ -1,0 +1,6 @@
+- fill in the bodies of TexSub*
+- debug vertex shader execution
+- implement input assembly
+- implement rasterization/vertex interpolation (can copy tinyrenderer if needed her)
+- get fragment shaders running
+- implement output merger/blend
