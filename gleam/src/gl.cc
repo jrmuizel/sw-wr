@@ -25,6 +25,7 @@ struct VertexAttrib {
         bool enabled = false;
         GLuint divisor;
         int vertex_array;
+        int vertex_buffer;
         char *buf; // XXX: this can easily dangle
 };
 #define GL_RGBA32F                        0x8814
@@ -74,9 +75,6 @@ struct Texture {
 
 #define MAX_ATTRS 16
 struct VertexArray {
-    char *buf;
-    size_t size;
-
     VertexAttrib attribs[MAX_ATTRS];
 };
 
@@ -244,16 +242,13 @@ void BindVertexArray(GLuint vertex_array) {
     current_vertex_array = vertex_array;
 }
 
-
-
-
-
 void BindTexture(GLenum target, GLuint texture) {
     texture_slots[active_texture] = texture;
     current_texture[target] = texture;
 }
 
 void BindBuffer(GLenum target, GLuint buffer) {
+    // XXX: I think we to set the element array buffer on the current vertex array for target == GL_ELEMENT_ARRAY_BUFFER
     current_buffer[target] = buffer;
 }
 
@@ -412,7 +407,7 @@ void VertexAttribPointer(GLuint index,
         va.stride = stride;
         va.offset = offset;
         Buffer &vertex_buf = buffers[current_buffer[GL_ARRAY_BUFFER]];
-        va.buf = vertex_buf.buf;
+        va.vertex_buffer = current_buffer[GL_ARRAY_BUFFER];
         va.vertex_array = current_vertex_array;
 }
 
@@ -529,7 +524,8 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
                         if (v.attribs[i].enabled) {
                                 VertexAttrib &attr = v.attribs[i];
                                 VertexArray &v = vertex_arrays[attr.vertex_array];
-                                attr.buf = v.buf;
+                                Buffer &vertex_buf = buffers[current_buffer[GL_ARRAY_BUFFER]];
+                                attr.buf = vertex_buf.buf;
                                 printf("%d %x %d %d %d\n", i, attr.type, attr.size, attr.stride, attr.offset);
                         }
                 }
