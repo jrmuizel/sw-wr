@@ -1511,6 +1511,7 @@ struct isampler2D_impl {
         uint32_t stride;
         uint32_t height;
         uint32_t width;
+        TextureFormat format;
 };
 
 typedef isampler2D_impl *isampler2D;
@@ -1796,6 +1797,13 @@ Float fetchPixelFloat(sampler2D sampler, int x, int y) {
                 ((float*)sampler->buf)[x*4  + y * sampler->stride/4 + 3]};
 }
 
+I32 fetchPixelInt(isampler2D sampler, int x, int y) {
+        return I32{
+                ((int*)sampler->buf)[x*4  + y * sampler->stride/4],
+                ((int*)sampler->buf)[x*4  + y * sampler->stride/4 + 1],
+                ((int*)sampler->buf)[x*4  + y * sampler->stride/4 + 2],
+                ((int*)sampler->buf)[x*4  + y * sampler->stride/4 + 3]};
+}
 
 float to_float(uint32_t x) {
         return x * (1.f/255.f);
@@ -1825,6 +1833,14 @@ vec4 pixel_float_to_vec4(Float a, Float b, Float c, Float d) {
                   Float{a.z, b.z, c.z, d.z},
                   Float{a.w, b.w, c.w, d.w});
 }
+
+ivec4 pixel_int_to_ivec4(I32 a, I32 b, I32 c, I32 d) {
+      return ivec4(I32{a.x, b.x, c.x, d.x},
+                  I32{a.y, b.y, c.y, d.y},
+                  I32{a.z, b.z, c.z, d.z},
+                  I32{a.w, b.w, c.w, d.w});
+}
+
 
 
 vec4_scalar pixel_to_vec4(uint32_t p) {
@@ -1867,12 +1883,15 @@ vec4 texelFetch(sampler2DArray sampler, ivec3 P, int lod) {
         return vec4();
 }
 
+
+
 ivec4 texelFetch(isampler2D sampler, ivec2 P, int lod) {
-        return ivec4(
-                      fetchPixel(sampler, P.x.x, P.y.x),
-                      fetchPixel(sampler, P.x.y, P.y.y),
-                      fetchPixel(sampler, P.x.z, P.y.z),
-                      fetchPixel(sampler, P.x.w, P.y.w)
+        assert(sampler->format == TextureFormat::RGBA32I);
+        return pixel_int_to_ivec4(
+                      fetchPixelInt(sampler, P.x.x, P.y.x),
+                      fetchPixelInt(sampler, P.x.y, P.y.y),
+                      fetchPixelInt(sampler, P.x.z, P.y.z),
+                      fetchPixelInt(sampler, P.x.w, P.y.w)
                       );
 }
 

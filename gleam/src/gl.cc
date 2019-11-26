@@ -164,6 +164,7 @@ isampler2D lookup_isampler(int texture) {
         s->height = t.height;
         s->stride = bytes_for_internal_format(t.internal_format) * t.width;
         s->buf = (uint32_t*)t.buf; //XXX: wrong
+        s->format = gl_format_to_texture_format(t.internal_format);
         return s;
 }
 
