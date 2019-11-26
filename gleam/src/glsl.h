@@ -1781,12 +1781,21 @@ SI mat4 if_then_else(int32_t c, mat4 t, mat4 e) {
 }
 
 uint32_t fetchPixel(isampler2D sampler, int x, int y) {
-        return sampler->buf[x  + y * sampler->stride];
+        return sampler->buf[x  + y * sampler->stride/4];
 }
 
 uint32_t fetchPixel(sampler2D sampler, int x, int y) {
-        return sampler->buf[x  + y * sampler->stride];
+        return sampler->buf[x  + y * sampler->stride/4];
 }
+
+Float fetchPixelFloat(sampler2D sampler, int x, int y) {
+        return Float{
+                ((float*)sampler->buf)[x*4  + y * sampler->stride/4],
+                ((float*)sampler->buf)[x*4  + y * sampler->stride/4 + 1],
+                ((float*)sampler->buf)[x*4  + y * sampler->stride/4 + 2],
+                ((float*)sampler->buf)[x*4  + y * sampler->stride/4 + 3]};
+}
+
 
 float to_float(uint32_t x) {
         return x * (1.f/255.f);
@@ -1809,19 +1818,46 @@ vec4 pixel_to_vec4(uint32_t a, uint32_t b, uint32_t c, uint32_t d) {
            extract_component(a, b, c, d, 0),
            extract_component(a, b, c, d, 24));
 }
+
+vec4 pixel_float_to_vec4(Float a, Float b, Float c, Float d) {
+      return vec4(Float{a.x, b.x, c.x, d.x},
+                  Float{a.y, b.y, c.y, d.y},
+                  Float{a.z, b.z, c.z, d.z},
+                  Float{a.w, b.w, c.w, d.w});
+}
+
+
 vec4_scalar pixel_to_vec4(uint32_t p) {
     return vec4_scalar{to_float((p >> 16) & 0xFF),
                        to_float((p >> 8) & 0xFF),
                        to_float((p >> 0) & 0xFF),
                        to_float((p >> 24) & 0xFF)};
 }
-vec4 texelFetch(sampler2D sampler, ivec2 P, int lod) {
+vec4 texelFetchByte(sampler2D sampler, ivec2 P, int lod) {
         return pixel_to_vec4(
                       fetchPixel(sampler, P.x.x, P.y.x),
                       fetchPixel(sampler, P.x.y, P.y.y),
                       fetchPixel(sampler, P.x.z, P.y.z),
                       fetchPixel(sampler, P.x.w, P.y.w)
                       );
+}
+
+vec4 texelFetchFloat(sampler2D sampler, ivec2 P, int lod) {
+        return pixel_float_to_vec4(
+                      fetchPixelFloat(sampler, P.x.x, P.y.x),
+                      fetchPixelFloat(sampler, P.x.y, P.y.y),
+                      fetchPixelFloat(sampler, P.x.z, P.y.z),
+                      fetchPixelFloat(sampler, P.x.w, P.y.w)
+                      );
+}
+
+vec4 texelFetch(sampler2D sampler, ivec2 P, int lod) {
+        if (sampler->format == TextureFormat::RGBA32F) {
+                return texelFetchFloat(sampler, P, lod);
+        } else {
+                assert(sampler->format == TextureFormat::RGBA8);
+                return texelFetchByte(sampler, P, lod);
+        }
 }
 vec4_scalar texelFetch(sampler2D sampler, ivec2_scalar P, int lod) {
         return pixel_to_vec4(fetchPixel(sampler, P.x, P.y));
