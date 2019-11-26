@@ -2670,7 +2670,7 @@ impl Gl for GlFns {
 
     // GL_KHR_debug
     fn get_debug_messages(&self) -> Vec<DebugMessage> {
-        panic!();
+        if SW { return Vec::new() }
         if !self.ffi_gl_.GetDebugMessageLog.is_loaded() {
             return Vec::new();
         }
