@@ -331,17 +331,21 @@ void TexSubImage2D(
                 }
         } else if (format == GL_RGBA) {
                 assert(ty == GL_FLOAT);
+                float *dest = (float*)t.buf;
+                float *src = (float*)data;
                 for (int y = 0; y < height; y++) {
                         for (int x = 0; x < width; x++) {
-
+                                dest[y * t.height + x] = *src++;
                         }
                 }
         } else {
                 assert(format == GL_RGBA_INTEGER);
                 assert(ty == GL_INT);
+                int *dest = (int*)t.buf;
+                int *src = (int*)data;
                 for (int y = 0; y < height; y++) {
                         for (int x = 0; x < width; x++) {
-
+                                dest[y * t.height + x] = *src++;
                         }
                 }
         }
