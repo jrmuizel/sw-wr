@@ -1478,12 +1478,19 @@ bvec4 greaterThanEqual(vec4 x, vec4 y) {
                     greaterThanEqual(x.w, y.w));
 }
 
+enum TextureFormat {
+        RGBA32F,
+        RGBA32I,
+        RGBA8,
+        R8
+};
 
 struct sampler2DArray_impl {
         uint32_t *buf;
         uint32_t stride; // in bytes
         uint32_t height;
         uint32_t width;
+        TextureFormat format;
 };
 
 
@@ -1494,6 +1501,7 @@ struct sampler2D_impl {
         uint32_t stride; // in bytes
         uint32_t height;
         uint32_t width;
+        TextureFormat format;
 };
 
 typedef sampler2D_impl *sampler2D;

@@ -32,6 +32,12 @@ struct VertexAttrib {
 #define GL_RGBA8                          0x8058
 #define GL_R8                             0x8229
 #define GL_RGBA32I                        0x8D82
+
+#define GL_UNSIGNED_BYTE                  0x1401
+#define GL_UNSIGNED_SHORT                 0x1403
+#define GL_INT                            0x1404
+#define GL_FLOAT                          0x1406
+
 int bytes_for_internal_format(GLenum internal_format) {
         switch (internal_format) {
                 case GL_RGBA32F:
@@ -45,6 +51,16 @@ int bytes_for_internal_format(GLenum internal_format) {
                 default:
                         printf("internal format: %x\n", internal_format);
                         assert(0);
+        }
+}
+
+glsl::TextureFormat gl_format_to_texture_format(int type) {
+        switch (type) {
+                case GL_RGBA32F: return glsl::TextureFormat::RGBA32F;
+                case GL_RGBA32I: return glsl::TextureFormat::RGBA32I;
+                case GL_RGBA8: return glsl::TextureFormat::RGBA8;
+                case GL_R8: return glsl::TextureFormat::R8;
+                defaut: assert(0);
         }
 }
 
@@ -130,7 +146,6 @@ using namespace glsl;
 GLenum active_texture;
 GLuint texture_slots[16];
 
-
 sampler2D lookup_sampler(int texture) {
         sampler2D s = new sampler2D_impl; //XXX: going to leak it
         Texture &t = textures[texture_slots[texture]];
@@ -138,6 +153,7 @@ sampler2D lookup_sampler(int texture) {
         s->height = t.height;
         s->stride = bytes_for_internal_format(t.internal_format) * t.width;
         s->buf = (uint32_t*)t.buf; //XXX: wrong
+        s->format = gl_format_to_texture_format(t.internal_format);
         return s;
 }
 
@@ -295,10 +311,6 @@ void TexStorage2D(
     t.buf = (char*)malloc(size);
 }
 
-#define GL_UNSIGNED_BYTE                  0x1401
-#define GL_UNSIGNED_SHORT                 0x1403
-#define GL_INT                            0x1404
-#define GL_FLOAT                          0x1406
 #define GL_RED                            0x1903
 #define GL_RGBA                           0x1908
 #define GL_RGBA_INTEGER                   0x8D99
