@@ -2521,20 +2521,22 @@ impl Gl for GlFns {
     }
 
     fn push_debug_group_khr(&self, source: GLenum, id: GLuint, message: &str) {
-        panic!();
         if self.ffi_gl_.PushDebugGroupKHR.is_loaded() {
             unsafe {
+                if SW {} else {
                 self.ffi_gl_
                     .PushDebugGroupKHR(source, id, message.len() as GLsizei, message.as_ptr() as *const _);
+                }
             }
         }
     }
 
     fn pop_debug_group_khr(&self) {
-        panic!();
         if self.ffi_gl_.PopDebugGroupKHR.is_loaded() {
             unsafe {
+                if SW {} else {
                 self.ffi_gl_.PopDebugGroupKHR();
+                }
             }
         }
     }
