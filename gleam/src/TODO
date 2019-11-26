@@ -1,3 +1,4 @@
+Make `wrench --no-picture-caching show rect.yaml` work
 - fill in the bodies of TexSub*
 - debug vertex shader execution
 - implement input assembly

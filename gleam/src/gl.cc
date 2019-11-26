@@ -300,6 +300,13 @@ void TexStorage2D(
     t.buf = (char*)malloc(size);
 }
 
+#define GL_UNSIGNED_BYTE                  0x1401
+#define GL_UNSIGNED_SHORT                 0x1403
+#define GL_INT                            0x1404
+#define GL_FLOAT                          0x1406
+#define GL_RED                            0x1903
+#define GL_RGBA                           0x1908
+#define GL_RGBA_INTEGER                   0x8D99
 void TexSubImage2D(
         GLenum target,
         GLint level,
@@ -313,9 +320,29 @@ void TexSubImage2D(
         Texture &t = textures[current_texture[target]];
         assert(xoffset + width <= t.width);
         assert(yoffset + height <= t.height);
-        for (int y = 0; y < height; y++) {
-                for (int x = 0; x < width; x++) {
+        if (format == GL_RED) {
+                assert(ty == GL_UNSIGNED_BYTE);
+                char *dest = t.buf;
+                char *src = (char*)data;
+                for (int y = yoffset; y < height; y++) {
+                        for (int x = xoffset; x < width; x++) {
+                                dest[y * t.height + x] = *src++;
+                        }
+                }
+        } else if (format == GL_RGBA) {
+                assert(ty == GL_FLOAT);
+                for (int y = 0; y < height; y++) {
+                        for (int x = 0; x < width; x++) {
 
+                        }
+                }
+        } else {
+                assert(format == GL_RGBA_INTEGER);
+                assert(ty == GL_INT);
+                for (int y = 0; y < height; y++) {
+                        for (int x = 0; x < width; x++) {
+
+                        }
                 }
         }
 }
@@ -471,7 +498,6 @@ void FramebufferTexture2D(
                 assert(0);
         }
 }
-#define GL_UNSIGNED_SHORT                 0x1403
 
 #define GL_POINTS                         0x0000
 #define GL_LINES                          0x0001
