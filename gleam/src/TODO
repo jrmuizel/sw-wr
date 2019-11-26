@@ -1,4 +1,5 @@
 Make `wrench --no-picture-caching show rect.yaml` work
+- handle different texture formats in texelFetch
 - debug vertex shader execution
 - implement input assembly
 - implement rasterization/vertex interpolation (can copy tinyrenderer if needed her)
