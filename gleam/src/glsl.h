@@ -587,7 +587,7 @@ struct ivec2_scalar {
         }
 
         friend ivec2_scalar operator+(ivec2_scalar a, ivec2_scalar b) {
-                return ivec2_scalar{a.x*b.x, a.y*b.y};
+                return ivec2_scalar{a.x+b.x, a.y+b.y};
         }
 };
 
@@ -642,7 +642,7 @@ struct ivec2 {
         }
 
         friend ivec2 operator+(ivec2 a, ivec2 b) {
-                return ivec2(a.x*b.x, a.y*b.y);
+                return ivec2(a.x+b.x, a.y+b.y);
         }
 
 };
