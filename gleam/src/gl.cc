@@ -122,7 +122,14 @@ GLuint renderbuffer_count;
 GLuint framebuffer_count;
 GLuint program_count;
 
+struct Viewport {
+	int x;
+	int y;
+	int width;
+	int height;
+};
 
+Viewport viewport;
 
 using namespace glsl;
 
@@ -210,6 +217,15 @@ buffer_data_untyped()
 tex_sub_image_3d()
 gen_framebuffers()*/
 extern "C" {
+
+void SetViewport(int x, int y, int width, int height) {
+	viewport.x = x;
+	viewport.y = y;
+	viewport.width = width;
+	viewport.height = height;
+
+}
+
 
 void ActiveTexture(GLenum texture) {
         assert(texture >= GL_TEXTURE0);
@@ -567,6 +583,9 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
                                 shader.load_attribs(v.attribs, indices[i]);
                                 shader.main();
                                 printf("%f %f %f %f\n", gl_Position.x.x, gl_Position.y.x, gl_Position.z.x, gl_Position.y.x);
+                                float xw = (gl_Position.x.x + 1)*(viewport.width/2) + viewport.x;
+                                float yw = (gl_Position.y.x + 1)*(viewport.height/2) + viewport.y;
+                                printf("%f %f\n", xw, yw);
                         }
                 }
         }

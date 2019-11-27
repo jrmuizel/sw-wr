@@ -105,6 +105,7 @@ extern "C" {
     fn EnableVertexAttribArray(index: GLuint);
     fn VertexAttribDivisor(index: GLuint, divisor: GLuint);
     fn LinkProgram(program: GLuint);
+    fn SetViewport(x: GLint, y: GLint, width: GLsizei, height: GLsizei);
 }
 
 impl GlFns {
@@ -1473,7 +1474,11 @@ impl Gl for GlFns {
         println!("viewport {} {} {} {}", x, y, width, height);
         //panic!();
         unsafe {
-            self.ffi_gl_.Viewport(x, y, width, height);
+            if SW {
+                SetViewport(x, y, width, height);
+            } else {
+                self.ffi_gl_.Viewport(x, y, width, height);
+            }
         }
     }
 
