@@ -17,7 +17,7 @@ typedef uint32_t GLenum;
 typedef size_t GLsizeiptr;
 
 struct VertexAttrib {
-        GLint size;
+        size_t size; // in bytes
         GLenum type;
         bool normalized;
         GLsizei stride;
@@ -404,6 +404,15 @@ void GenFramebuffers(int n, int *result) {
         }
 }
 
+int bytes_per_type(GLenum type) {
+        switch (type) {
+                case GL_INT: return 4;
+                case GL_FLOAT: return 4;
+                case GL_UNSIGNED_SHORT: return 4;
+                default: assert(0);
+        }
+}
+
 void VertexAttribPointer(GLuint index,
         GLint size,
         GLenum type,
@@ -414,7 +423,7 @@ void VertexAttribPointer(GLuint index,
         printf("cva: %d\n", current_vertex_array);
         VertexArray &v = vertex_arrays[current_vertex_array];
         VertexAttrib &va = v.attribs[index];
-        va.size = size;
+        va.size = size * bytes_per_type(type);
         va.type = type;
         va.normalized = normalized;
         va.stride = stride;
@@ -433,12 +442,12 @@ void VertexAttribIPointer(GLuint index,
         printf("cva: %d\n", current_vertex_array);
         VertexArray &v = vertex_arrays[current_vertex_array];
         VertexAttrib &va = v.attribs[index];
-        va.size = size;
+        va.size = size * bytes_per_type(type);
         va.type = type;
         va.stride = stride;
         va.offset = offset;
         Buffer &vertex_buf = buffers[current_buffer[GL_ARRAY_BUFFER]];
-        va.buf = vertex_buf.buf;
+        va.vertex_buffer = current_buffer[GL_ARRAY_BUFFER];
         va.vertex_array = current_vertex_array;
 }
 
@@ -537,7 +546,7 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
                         if (v.attribs[i].enabled) {
                                 VertexAttrib &attr = v.attribs[i];
                                 VertexArray &v = vertex_arrays[attr.vertex_array];
-                                Buffer &vertex_buf = buffers[current_buffer[GL_ARRAY_BUFFER]];
+                                Buffer &vertex_buf = buffers[attr.vertex_buffer];
                                 attr.buf = vertex_buf.buf;
                                 printf("%d %x %d %d %d\n", i, attr.type, attr.size, attr.stride, attr.offset);
                         }
