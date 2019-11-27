@@ -514,6 +514,7 @@ void BufferData(GLenum target,
 }
 
 vs::brush_solid shader;
+fs::brush_solid frag_shader;
 void Uniform1i(GLint location, GLint V0) {
         printf("tex: %d\n", texture_count);
         shader.set_uniform_int(location, V0);
@@ -565,6 +566,7 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
         assert(count == 6);
         assert(instancecount == 1);
         assert(indices == 0);
+        char* output_buf = (char*)malloc(vs::brush_solid::output_size() * 4);
         if (indices == 0) {
                 Buffer &indices_buf = buffers[current_buffer[GL_ELEMENT_ARRAY_BUFFER]];
                 printf("current_vertex_array %d\n", current_vertex_array);
@@ -587,13 +589,20 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
                                 printf(" %d\n", indices[i]);
                                 shader.load_attribs(v.attribs, indices[i]);
                                 shader.main();
+                                shader.store_outputs(output_buf);
                                 printf("%f %f %f %f\n", gl_Position.x.x, gl_Position.y.x, gl_Position.z.x, gl_Position.y.x);
                                 float xw = (gl_Position.x.x + 1)*(viewport.width/2) + viewport.x;
                                 float yw = (gl_Position.y.x + 1)*(viewport.height/2) + viewport.y;
                                 printf("%f %f\n", xw, yw);
                         }
+
+                        frag_shader.read_inputs(output_buf);
+                        frag_shader.main();
+                } else {
+                        assert(0);
                 }
         }
+        free(output_buf);
         printf("dodraw");
 }
 
