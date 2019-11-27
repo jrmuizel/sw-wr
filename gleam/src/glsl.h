@@ -2088,6 +2088,45 @@ mat2 inverse(mat2 v) {
         return mat2();
 }
 
+int32_t get_nth(I32 a, int n) {
+        return a[n];
+}
+
+float get_nth(Float a, int n) {
+        return a[n];
+}
+
+float get_nth(float a, int n) {
+        return a;
+}
+
+vec2_scalar get_nth(vec2 a, int n) {
+        return vec2_scalar{a.x[n], a.y[n]};
+}
+
+vec3_scalar get_nth(vec3 a, int n) {
+        return vec3_scalar{a.x[n], a.y[n], a.z[n]};
+}
+
+vec4_scalar get_nth(vec4 a, int n) {
+        return vec4_scalar{a.x[n], a.y[n], a.z[n], a.w[n]};
+}
+
+ivec4_scalar get_nth(ivec4 a, int n) {
+        return ivec4_scalar{a.x[n], a.y[n], a.z[n], a.w[n]};
+}
+
+template <size_t SIZE>
+std::array<int32_t, SIZE> get_nth(std::array<int32_t, SIZE> a, int n) {
+    return a;
+}
+
+mat3_scalar get_nth(mat3 a, int n) {
+        return make_mat3(get_nth(a[0], n),
+                         get_nth(a[1], n),
+                         get_nth(a[2], n));
+}
+
 template<typename D, typename S, size_t N>
 SI void convert_array(std::array<D, N>& d, std::array<S, N>& s) {
     for (size_t i = 0; i < N; ++i) d[i] = D(s[i]);

@@ -177,6 +177,35 @@ void load_attribs(VertexAttrib *attribs, int index) {
   aData = ivec4(scalar);
 }
 }
+static size_t output_size() {
+  size_t size = 0;
+  size += sizeof(get_nth(vTransformBounds, 0));
+  size += sizeof(get_nth(vClipMaskUvBounds, 0));
+  size += sizeof(get_nth(vClipMaskUv, 0));
+  size += sizeof(get_nth(vColor, 0));
+  size += sizeof(get_nth(vLocalPos, 0));
+  return size;
+}
+void store_outputs(void *dest) {
+  size_t offset = 0;
+  for (int n = 0; n < 4; n++) {
+    {const auto& temp = get_nth(vTransformBounds, n);
+    memcpy((char*)dest + offset, &temp, sizeof(get_nth(vTransformBounds, n)));}
+    offset += sizeof(get_nth(vTransformBounds, n));
+    {const auto& temp = get_nth(vClipMaskUvBounds, n);
+    memcpy((char*)dest + offset, &temp, sizeof(get_nth(vClipMaskUvBounds, n)));}
+    offset += sizeof(get_nth(vClipMaskUvBounds, n));
+    {const auto& temp = get_nth(vClipMaskUv, n);
+    memcpy((char*)dest + offset, &temp, sizeof(get_nth(vClipMaskUv, n)));}
+    offset += sizeof(get_nth(vClipMaskUv, n));
+    {const auto& temp = get_nth(vColor, n);
+    memcpy((char*)dest + offset, &temp, sizeof(get_nth(vColor, n)));}
+    offset += sizeof(get_nth(vColor, n));
+    {const auto& temp = get_nth(vLocalPos, n);
+    memcpy((char*)dest + offset, &temp, sizeof(get_nth(vLocalPos, n)));}
+    offset += sizeof(get_nth(vLocalPos, n));
+  }
+}
 Bool isPixelDiscarded = false;
 int32_t uMode;
 mat4_scalar uTransform;

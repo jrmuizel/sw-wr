@@ -5,4 +5,7 @@ Make `wrench --no-picture-caching show rect.yaml` work
 - get fragment shaders running
 - implement output merger/blend
 - specialize texture samplers some how. i.e. we want to know at compile time what the format of a texture is
+
+Future
 - mask texture loads
+- add quad primitive
