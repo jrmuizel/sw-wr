@@ -27,6 +27,7 @@ struct VertexAttrib {
         int vertex_array;
         int vertex_buffer;
         char *buf; // XXX: this can easily dangle
+        size_t buf_size; // this will let us bounds check
 };
 #define GL_RGBA32F                        0x8814
 #define GL_RGBA8                          0x8058
@@ -548,6 +549,7 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
                                 VertexArray &v = vertex_arrays[attr.vertex_array];
                                 Buffer &vertex_buf = buffers[attr.vertex_buffer];
                                 attr.buf = vertex_buf.buf;
+                                attr.buf_size = vertex_buf.size;
                                 printf("%d %x %d %d %d\n", i, attr.type, attr.size, attr.stride, attr.offset);
                         }
                 }
