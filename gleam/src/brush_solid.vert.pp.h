@@ -138,17 +138,35 @@ static void bind_attrib_location(char *name, int index) {
 if (strcmp("aPosition", name) == 0) { aPosition_location_index = index; }
 if (strcmp("aData", name) == 0) { aData_location_index = index; }
 }
-void load_attribs(VertexAttrib *attribs, int count) {
+void load_attribs(VertexAttrib *attribs, int index) {
 {
   VertexAttrib &va = attribs[aPosition_location_index];
   vec3_scalar scalar;
-  memcpy(&scalar, (char*)va.buf + va.stride * count, va.size);
+  char* src;
+  if (va.divisor == 0) {
+    src = (char*)va.buf + va.stride * index;
+  } else {
+    assert(va.divisor == 1);
+    // XXX handle multiple instances
+    src = (char*)va.buf;
+  }
+  assert(src + va.size <= va.buf + va.buf_size);
+  memcpy(&scalar, src, va.size);
   aPosition = vec3(scalar);
 }
 {
   VertexAttrib &va = attribs[aData_location_index];
   ivec4_scalar scalar;
-  memcpy(&scalar, (char*)va.buf + va.stride * count, va.size);
+  char* src;
+  if (va.divisor == 0) {
+    src = (char*)va.buf + va.stride * index;
+  } else {
+    assert(va.divisor == 1);
+    // XXX handle multiple instances
+    src = (char*)va.buf;
+  }
+  assert(src + va.size <= va.buf + va.buf_size);
+  memcpy(&scalar, src, va.size);
   aData = ivec4(scalar);
 }
 }
