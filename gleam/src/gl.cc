@@ -335,16 +335,19 @@ void TexSubImage2D(
                 char *src = (char*)data;
                 for (int y = yoffset; y < height; y++) {
                         for (int x = xoffset; x < width; x++) {
-                                dest[y * t.height + x] = *src++;
+                                dest[y * t.width + x] = *src++;
                         }
                 }
         } else if (format == GL_RGBA) {
                 assert(ty == GL_FLOAT);
                 float *dest = (float*)t.buf;
                 float *src = (float*)data;
-                for (int y = 0; y < height; y++) {
+                for (int y = yoffset; y < height; y++) {
                         for (int x = 0; x < width; x++) {
-                                dest[y * t.height + x] = *src++;
+                                dest[y * t.width * 4 + x * 4] = *src++;
+                                dest[y * t.width * 4 + x * 4 + 1] = *src++;
+                                dest[y * t.width * 4 + x * 4 + 2] = *src++;
+                                dest[y * t.width * 4 + x * 4 + 3] = *src++;
                         }
                 }
         } else {
@@ -352,9 +355,12 @@ void TexSubImage2D(
                 assert(ty == GL_INT);
                 int *dest = (int*)t.buf;
                 int *src = (int*)data;
-                for (int y = 0; y < height; y++) {
+                for (int y = yoffset; y < height; y++) {
                         for (int x = 0; x < width; x++) {
-                                dest[y * t.height + x] = *src++;
+                                dest[y * t.width * 4 + x * 4] = *src++;
+                                dest[y * t.width * 4 + x * 4 + 1] = *src++;
+                                dest[y * t.width * 4 + x * 4 + 2] = *src++;
+                                dest[y * t.width * 4 + x * 4 + 3] = *src++;
                         }
                 }
         }
