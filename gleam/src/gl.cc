@@ -188,8 +188,13 @@ sampler2DArray lookup_sampler_array(int texture) {
 
 
 vec4 gl_Position;
-
+vec4 gl_FragCoord;
+namespace vs {
 #include "brush_solid.vert.pp.h"
+}
+namespace fs {
+#include "brush_solid.frag.pp.h"
+}
 //brush_solid
 /*
 clear_color()
@@ -262,12 +267,12 @@ GLuint CreateProgram() {
 }
 
 void BindAttribLocation(GLuint program, GLuint index, char *name) {
-        brush_solid::bind_attrib_location(name, index);
+        vs::brush_solid::bind_attrib_location(name, index);
 }
 
 GLint GetUniformLocation(GLuint program, char* name) {
         Program &p = programs[program];
-        GLint loc = brush_solid::get_uniform_location(name);
+        GLint loc = vs::brush_solid::get_uniform_location(name);
         printf("location: %d\n", loc);
         return loc;
 }
@@ -508,7 +513,7 @@ void BufferData(GLenum target,
     b.size = size;
 }
 
-brush_solid shader;
+vs::brush_solid shader;
 void Uniform1i(GLint location, GLint V0) {
         printf("tex: %d\n", texture_count);
         shader.set_uniform_int(location, V0);

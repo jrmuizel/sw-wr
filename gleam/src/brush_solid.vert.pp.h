@@ -2,6 +2,13 @@
 vec3 aPosition
 ivec4 aData
 */
+/* outputs
+vec4 vTransformBounds
+vec4 vClipMaskUvBounds
+vec4 vClipMaskUv
+vec4 vColor
+vec2 vLocalPos
+*/
 struct brush_solid {
 static int get_uniform_location(char *name) {
 if (strcmp("uMode", name) == 0) { return 1; }
