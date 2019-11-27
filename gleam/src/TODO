@@ -1,5 +1,5 @@
 Make `wrench --no-picture-caching show rect.yaml` work
-- debug vertex shader execution
+- implement a way to get outputs out of vertex shaders
 - implement input assembly
 - implement rasterization/vertex interpolation (can copy tinyrenderer if needed her)
 - get fragment shaders running
