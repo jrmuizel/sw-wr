@@ -78,6 +78,38 @@ if (index == 6) {
 assert(0); // sPrevPassColor
 }
 }
+void read_inputs(char *src) {
+  {
+    vec4_scalar scalar;
+    memcpy(&scalar, src, sizeof(get_nth(vTransformBounds, 0)));
+    vTransformBounds = vec4_scalar(scalar);
+    src += sizeof(get_nth(vTransformBounds, 0));
+  }
+  {
+    vec4_scalar scalar;
+    memcpy(&scalar, src, sizeof(get_nth(vClipMaskUvBounds, 0)));
+    vClipMaskUvBounds = vec4_scalar(scalar);
+    src += sizeof(get_nth(vClipMaskUvBounds, 0));
+  }
+  {
+    vec4_scalar scalar;
+    memcpy(&scalar, src, sizeof(get_nth(vClipMaskUv, 0)));
+    vClipMaskUv = vec4(scalar);
+    src += sizeof(get_nth(vClipMaskUv, 0));
+  }
+  {
+    vec4_scalar scalar;
+    memcpy(&scalar, src, sizeof(get_nth(vColor, 0)));
+    vColor = vec4_scalar(scalar);
+    src += sizeof(get_nth(vColor, 0));
+  }
+  {
+    vec2_scalar scalar;
+    memcpy(&scalar, src, sizeof(get_nth(vLocalPos, 0)));
+    vLocalPos = vec2(scalar);
+    src += sizeof(get_nth(vLocalPos, 0));
+  }
+}
 Bool isPixelDiscarded = false;
 vec4 oFragColor;
 sampler2DArray sColor0;
