@@ -1782,14 +1782,23 @@ SI mat4 if_then_else(int32_t c, mat4 t, mat4 e) {
 }
 
 uint32_t fetchPixel(isampler2D sampler, int x, int y) {
+        if (x > width || y > height) {
+                return 0;
+        }
         return sampler->buf[x  + y * sampler->stride/4];
 }
 
 uint32_t fetchPixel(sampler2D sampler, int x, int y) {
+        if (x > width || y > height) {
+                return 0;
+        }
         return sampler->buf[x  + y * sampler->stride/4];
 }
 
 Float fetchPixelFloat(sampler2D sampler, int x, int y) {
+        if (x > width || y > height) {
+                return Float(0);
+        }
         return Float{
                 ((float*)sampler->buf)[x*4  + y * sampler->stride/4],
                 ((float*)sampler->buf)[x*4  + y * sampler->stride/4 + 1],
@@ -1798,6 +1807,9 @@ Float fetchPixelFloat(sampler2D sampler, int x, int y) {
 }
 
 I32 fetchPixelInt(isampler2D sampler, int x, int y) {
+        if (x > width || y > height) {
+                return I32(0);
+        }
         return I32{
                 ((int*)sampler->buf)[x*4  + y * sampler->stride/4],
                 ((int*)sampler->buf)[x*4  + y * sampler->stride/4 + 1],

@@ -1,8 +1,8 @@
 Make `wrench --no-picture-caching show rect.yaml` work
-- handle vertex divisors/instancing properly in load_attr
 - debug vertex shader execution
 - implement input assembly
 - implement rasterization/vertex interpolation (can copy tinyrenderer if needed her)
 - get fragment shaders running
 - implement output merger/blend
 - specialize texture samplers some how. i.e. we want to know at compile time what the format of a texture is
+- mask texture loads
