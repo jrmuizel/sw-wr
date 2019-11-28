@@ -189,12 +189,7 @@ sampler2DArray lookup_sampler_array(int texture) {
 
 vec4 gl_Position;
 vec4 gl_FragCoord;
-namespace vs {
-#include "brush_solid.vert.pp.h"
-}
-namespace fs {
-#include "brush_solid.frag.pp.h"
-}
+#include "brush_solid.h"
 //brush_solid
 /*
 clear_color()
@@ -267,12 +262,12 @@ GLuint CreateProgram() {
 }
 
 void BindAttribLocation(GLuint program, GLuint index, char *name) {
-        vs::brush_solid::bind_attrib_location(name, index);
+        brush_solid_vert::bind_attrib_location(name, index);
 }
 
 GLint GetUniformLocation(GLuint program, char* name) {
         Program &p = programs[program];
-        GLint loc = vs::brush_solid::get_uniform_location(name);
+        GLint loc = brush_solid_vert::get_uniform_location(name);
         printf("location: %d\n", loc);
         return loc;
 }
@@ -513,8 +508,8 @@ void BufferData(GLenum target,
     b.size = size;
 }
 
-vs::brush_solid shader;
-fs::brush_solid frag_shader;
+brush_solid_vert shader;
+brush_solid_frag frag_shader;
 void Uniform1i(GLint location, GLint V0) {
         printf("tex: %d\n", texture_count);
         shader.set_uniform_int(location, V0);
@@ -566,7 +561,7 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
         assert(count == 6);
         assert(instancecount == 1);
         assert(indices == 0);
-        char* output_buf = (char*)malloc(vs::brush_solid::output_size() * 4);
+        char* output_buf = (char*)malloc(brush_solid_vert::output_size() * 4);
         if (indices == 0) {
                 Buffer &indices_buf = buffers[current_buffer[GL_ELEMENT_ARRAY_BUFFER]];
                 printf("current_vertex_array %d\n", current_vertex_array);
