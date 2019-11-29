@@ -1,26 +1,26 @@
 static int brush_solid_get_uniform_location(char *name) {
 
-if (strcmp("sColor1", name) == 0) { return 4; }
-
-if (strcmp("uMode", name) == 0) { return 1; }
-
-if (strcmp("sRenderTasks", name) == 0) { return 6; }
-
-if (strcmp("uTransform", name) == 0) { return 2; }
-
 if (strcmp("sPrevPassAlpha", name) == 0) { return 9; }
-
-if (strcmp("sColor2", name) == 0) { return 5; }
-
-if (strcmp("sGpuCache", name) == 0) { return 7; }
-
-if (strcmp("sPrimitiveHeadersI", name) == 0) { return 12; }
 
 if (strcmp("sPrimitiveHeadersF", name) == 0) { return 11; }
 
+if (strcmp("uMode", name) == 0) { return 1; }
+
 if (strcmp("sPrevPassColor", name) == 0) { return 10; }
 
+if (strcmp("sRenderTasks", name) == 0) { return 6; }
+
+if (strcmp("sPrimitiveHeadersI", name) == 0) { return 12; }
+
 if (strcmp("sTransformPalette", name) == 0) { return 8; }
+
+if (strcmp("sColor2", name) == 0) { return 5; }
+
+if (strcmp("uTransform", name) == 0) { return 2; }
+
+if (strcmp("sGpuCache", name) == 0) { return 7; }
+
+if (strcmp("sColor1", name) == 0) { return 4; }
 
 if (strcmp("sColor0", name) == 0) { return 3; }
 
@@ -832,11 +832,11 @@ Float distance_aa(Float aa_range, Float signed_distance) {
  Float ret;
  Float dist = (0.5)*((signed_distance)/(aa_range));
  auto _c3_ = (dist)<=((-(0.5))+(0.0001));
- ret = if_then_else(ret_mask & (_c3_), 1., ret);
- ret_mask &= ~(_c3_);
+ ret = if_then_else(ret_mask & I32(_c3_), 1., ret);
+ ret_mask &= ~I32(_c3_);
  auto _c4_ = (dist)>=((0.5)-(0.0001));
- ret = if_then_else(ret_mask & (_c4_), 0., ret);
- ret_mask &= ~(_c4_);
+ ret = if_then_else(ret_mask & I32(_c4_), 0., ret);
+ ret_mask &= ~I32(_c4_);
  ret = if_then_else(ret_mask, (0.5)+((dist)*(((0.8431027)*((dist)*(dist)))-(1.14453603))), ret);
  return ret;
 }
@@ -855,16 +855,16 @@ Float do_clip() {
  Float ret;
  auto _c6_ = ((vClipMaskUvBounds).sel(X, Y))==((vClipMaskUvBounds).sel(Z, W));
  {
-  ret = if_then_else(ret_mask & (_c6_), 1., ret);
-  ret_mask &= ~(_c6_);
+  ret = if_then_else(ret_mask & I32(_c6_), 1., ret);
+  ret_mask &= ~I32(_c6_);
  }
  vec2 mask_uv = ((vClipMaskUv).sel(X, Y))*((gl_FragCoord).sel(W));
  bvec2 left = lessThanEqual((vClipMaskUvBounds).sel(X, Y), mask_uv);
  bvec2 right = greaterThan((vClipMaskUvBounds).sel(Z, W), mask_uv);
  auto _c7_ = !(all(make_bvec4(left, right)));
  {
-  ret = if_then_else(ret_mask & (_c7_), 0., ret);
-  ret_mask &= ~(_c7_);
+  ret = if_then_else(ret_mask & I32(_c7_), 0., ret);
+  ret_mask &= ~I32(_c7_);
  }
  ivec3 tc = make_ivec3(mask_uv, ((vClipMaskUv).sel(Z))+(0.5));
  ret = if_then_else(ret_mask, (texelFetch(sPrevPassAlpha, tc, 0)).sel(R), ret);
