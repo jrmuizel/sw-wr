@@ -185,6 +185,7 @@ sampler2DArray lookup_sampler_array(int texture) {
         s->stride = bytes_for_internal_format(t.internal_format) * t.width;
         s->height_stride = bytes_for_internal_format(t.internal_format) * t.width * t.height;
         s->buf = (uint32_t*)t.buf; //XXX: wrong
+        s->format = gl_format_to_texture_format(t.internal_format);
         return s;
 }
 
@@ -598,6 +599,11 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
 
                         frag_shader.read_inputs(output_buf);
                         frag_shader.main();
+                        printf("color %f %f %f %f\n",
+                               frag_shader.oFragColor.x.x,
+                               frag_shader.oFragColor.y.x,
+                               frag_shader.oFragColor.z.x,
+                               frag_shader.oFragColor.w.x);
                 } else {
                         assert(0);
                 }
