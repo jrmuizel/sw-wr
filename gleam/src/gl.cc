@@ -513,15 +513,18 @@ brush_solid_frag frag_shader;
 void Uniform1i(GLint location, GLint V0) {
         printf("tex: %d\n", texture_count);
         shader.set_uniform_int(location, V0);
+        frag_shader.set_uniform_int(location, V0);
 }
 void Uniform4fv(GLint location, GLsizei count, float *v) {
         shader.set_uniform_4f(location, v);
+        frag_shader.set_uniform_4f(location, v);
 }
 void UniformMatrix4fv(GLint location,
  	GLsizei count,
  	GLboolean transpose,
  	const GLfloat *value) {
         shader.set_uniform_matrix4fv(location, value);
+        frag_shader.set_uniform_matrix4fv(location, value);
 }
 
 
