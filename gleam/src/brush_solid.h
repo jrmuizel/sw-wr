@@ -1,3 +1,33 @@
+static int brush_solid_get_uniform_location(char *name) {
+
+if (strcmp("sColor1", name) == 0) { return 4; }
+
+if (strcmp("uMode", name) == 0) { return 1; }
+
+if (strcmp("sRenderTasks", name) == 0) { return 6; }
+
+if (strcmp("uTransform", name) == 0) { return 2; }
+
+if (strcmp("sPrevPassAlpha", name) == 0) { return 9; }
+
+if (strcmp("sColor2", name) == 0) { return 5; }
+
+if (strcmp("sGpuCache", name) == 0) { return 7; }
+
+if (strcmp("sPrimitiveHeadersI", name) == 0) { return 12; }
+
+if (strcmp("sPrimitiveHeadersF", name) == 0) { return 11; }
+
+if (strcmp("sPrevPassColor", name) == 0) { return 10; }
+
+if (strcmp("sTransformPalette", name) == 0) { return 8; }
+
+if (strcmp("sColor0", name) == 0) { return 3; }
+
+return -1;
+
+}
+
 /* inputs
 vec3 aPosition
 ivec4 aData
@@ -10,21 +40,6 @@ vec4 vColor
 vec2 vLocalPos
 */
 struct brush_solid_vert {
-static int get_uniform_location(char *name) {
-if (strcmp("uMode", name) == 0) { return 1; }
-if (strcmp("uTransform", name) == 0) { return 2; }
-if (strcmp("sColor0", name) == 0) { return 3; }
-if (strcmp("sColor1", name) == 0) { return 4; }
-if (strcmp("sColor2", name) == 0) { return 5; }
-if (strcmp("sRenderTasks", name) == 0) { return 6; }
-if (strcmp("sGpuCache", name) == 0) { return 7; }
-if (strcmp("sTransformPalette", name) == 0) { return 8; }
-if (strcmp("sPrevPassAlpha", name) == 0) { return 9; }
-if (strcmp("sPrevPassColor", name) == 0) { return 10; }
-if (strcmp("sPrimitiveHeadersF", name) == 0) { return 11; }
-if (strcmp("sPrimitiveHeadersI", name) == 0) { return 12; }
-return -1;
-}
 void set_uniform_int(int index, int value) {
 if (index == 1) {
 uMode = int32_t(value);
@@ -648,72 +663,63 @@ vec2 vLocalPos
 vec4 oFragColor
 */
 struct brush_solid_frag {
-static int get_uniform_location(char *name) {
-if (strcmp("sColor0", name) == 0) { return 1; }
-if (strcmp("sColor1", name) == 0) { return 2; }
-if (strcmp("sColor2", name) == 0) { return 3; }
-if (strcmp("sGpuCache", name) == 0) { return 4; }
-if (strcmp("sPrevPassAlpha", name) == 0) { return 5; }
-if (strcmp("sPrevPassColor", name) == 0) { return 6; }
-return -1;
-}
 void set_uniform_int(int index, int value) {
-if (index == 1) {
+if (index == 3) {
 sColor0 = lookup_sampler_array(value);
 }
-if (index == 2) {
+if (index == 4) {
 sColor1 = lookup_sampler_array(value);
 }
-if (index == 3) {
+if (index == 5) {
 sColor2 = lookup_sampler_array(value);
 }
-if (index == 4) {
+if (index == 7) {
 sGpuCache = lookup_sampler(value);
 }
-if (index == 5) {
+if (index == 9) {
 sPrevPassAlpha = lookup_sampler_array(value);
 }
-if (index == 6) {
+if (index == 10) {
 sPrevPassColor = lookup_sampler_array(value);
 }
 }
 void set_uniform_4f(int index, float *value) {
-if (index == 1) {
+if (index == 3) {
 assert(0); // sColor0
 }
-if (index == 2) {
+if (index == 4) {
 assert(0); // sColor1
 }
-if (index == 3) {
+if (index == 5) {
 assert(0); // sColor2
 }
-if (index == 4) {
+if (index == 7) {
 assert(0); // sGpuCache
 }
-if (index == 5) {
+if (index == 9) {
 assert(0); // sPrevPassAlpha
 }
-if (index == 6) {
+if (index == 10) {
 assert(0); // sPrevPassColor
 }
 }
 void set_uniform_matrix4fv(int index, const float *value) {
-if (index == 1) {
+if (index == 3) {
 assert(0); // sColor0
 }
-if (index == 2) {
+if (index == 4) {
 assert(0); // sColor1
 }
-if (index == 3) {
+if (index == 5) {
 assert(0); // sColor2
 }
-if (index == 4) {
+if (index == 7) {
 assert(0); // sGpuCache
 }
-if (index == 5) {
+if (index == 9) {
 assert(0); // sPrevPassAlpha
 }
-if (index == 6) {
+if (index == 10) {
 assert(0); // sPrevPassColor
 }
 }

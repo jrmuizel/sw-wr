@@ -267,7 +267,7 @@ void BindAttribLocation(GLuint program, GLuint index, char *name) {
 
 GLint GetUniformLocation(GLuint program, char* name) {
         Program &p = programs[program];
-        GLint loc = brush_solid_vert::get_uniform_location(name);
+        GLint loc = brush_solid_get_uniform_location(name);
         printf("location: %d\n", loc);
         return loc;
 }
