@@ -1,28 +1,28 @@
 static int brush_solid_get_uniform_location(char *name) {
 
-if (strcmp("sPrevPassAlpha", name) == 0) { return 9; }
-
-if (strcmp("sPrimitiveHeadersF", name) == 0) { return 11; }
-
-if (strcmp("uMode", name) == 0) { return 1; }
-
-if (strcmp("sPrevPassColor", name) == 0) { return 10; }
-
-if (strcmp("sRenderTasks", name) == 0) { return 6; }
-
-if (strcmp("sPrimitiveHeadersI", name) == 0) { return 12; }
-
-if (strcmp("sTransformPalette", name) == 0) { return 8; }
-
-if (strcmp("sColor2", name) == 0) { return 5; }
-
-if (strcmp("uTransform", name) == 0) { return 2; }
-
-if (strcmp("sGpuCache", name) == 0) { return 7; }
+if (strcmp("sColor0", name) == 0) { return 3; }
 
 if (strcmp("sColor1", name) == 0) { return 4; }
 
-if (strcmp("sColor0", name) == 0) { return 3; }
+if (strcmp("sColor2", name) == 0) { return 5; }
+
+if (strcmp("sGpuCache", name) == 0) { return 7; }
+
+if (strcmp("sPrevPassAlpha", name) == 0) { return 9; }
+
+if (strcmp("sPrevPassColor", name) == 0) { return 10; }
+
+if (strcmp("sPrimitiveHeadersF", name) == 0) { return 11; }
+
+if (strcmp("sPrimitiveHeadersI", name) == 0) { return 12; }
+
+if (strcmp("sRenderTasks", name) == 0) { return 6; }
+
+if (strcmp("sTransformPalette", name) == 0) { return 8; }
+
+if (strcmp("uMode", name) == 0) { return 1; }
+
+if (strcmp("uTransform", name) == 0) { return 2; }
 
 return -1;
 
