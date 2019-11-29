@@ -1488,8 +1488,10 @@ enum TextureFormat {
 struct sampler2DArray_impl {
         uint32_t *buf;
         uint32_t stride; // in bytes
+        uint32_t height_stride; // in bytes
         uint32_t height;
         uint32_t width;
+        uint32_t depth;
         TextureFormat format;
 };
 
@@ -1806,6 +1808,18 @@ Float fetchPixelFloat(sampler2D sampler, int x, int y) {
                 ((float*)sampler->buf)[x*4  + y * sampler->stride/4 + 3]};
 }
 
+Float fetchPixelFloat(sampler2DArray sampler, int x, int y, int z) {
+        if (x > sampler->width || y > sampler->height || z > sampler->depth) {
+                return Float(0);
+        }
+        return Float{
+                ((float*)sampler->buf)[x*4  + y * sampler->stride/4 + z * sampler->height_stride/4],
+                ((float*)sampler->buf)[x*4  + y * sampler->stride/4 + z * sampler->height_stride/4 + 1],
+                ((float*)sampler->buf)[x*4  + y * sampler->stride/4 + z * sampler->height_stride/4 + 2],
+                ((float*)sampler->buf)[x*4  + y * sampler->stride/4 + z * sampler->height_stride/4 + 3]};
+}
+
+
 I32 fetchPixelInt(isampler2D sampler, int x, int y) {
         if (x > sampler->width || y > sampler->height) {
                 return I32(0);
@@ -1879,6 +1893,17 @@ vec4 texelFetchFloat(sampler2D sampler, ivec2 P, int lod) {
                       );
 }
 
+vec4 texelFetchFloat(sampler2DArray sampler, ivec3 P, int lod) {
+        return pixel_float_to_vec4(
+                      fetchPixelFloat(sampler, P.x.x, P.y.x, P.z.x),
+                      fetchPixelFloat(sampler, P.x.y, P.y.y, P.z.y),
+                      fetchPixelFloat(sampler, P.x.z, P.y.z, P.z.z),
+                      fetchPixelFloat(sampler, P.x.w, P.y.w, P.z.w)
+                      );
+}
+
+
+
 vec4 texelFetch(sampler2D sampler, ivec2 P, int lod) {
         if (sampler->format == TextureFormat::RGBA32F) {
                 return texelFetchFloat(sampler, P, lod);
@@ -1891,6 +1916,9 @@ vec4_scalar texelFetch(sampler2D sampler, ivec2_scalar P, int lod) {
         return pixel_to_vec4(fetchPixel(sampler, P.x, P.y));
 }
 vec4 texelFetch(sampler2DArray sampler, ivec3 P, int lod) {
+        if (sampler->format == TextureFormat::RGBA32F) {
+                return texelFetchFloat(sampler, P, lod);
+        }
         assert(0); // handle P.
         return vec4();
 }
@@ -1982,10 +2010,6 @@ Bool all(bvec2 x) {
 Bool all(bvec4 x) {
         return x.x & x.y & x.z & x.w;
 }
-
-
-
-
 
 SI vec4 if_then_else(bvec4 c, vec4 t, vec4 e) {
     return vec4(if_then_else(c.x, t.x, e.x),

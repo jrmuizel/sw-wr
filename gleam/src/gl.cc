@@ -181,7 +181,9 @@ sampler2DArray lookup_sampler_array(int texture) {
         Texture &t = textures[texture_slots[texture]];
         s->width = t.width;
         s->height = t.height;
+        s->depth = t.depth;
         s->stride = bytes_for_internal_format(t.internal_format) * t.width;
+        s->height_stride = bytes_for_internal_format(t.internal_format) * t.width * t.height;
         s->buf = (uint32_t*)t.buf; //XXX: wrong
         return s;
 }
