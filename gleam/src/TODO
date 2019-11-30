@@ -1,5 +1,4 @@
 Make `wrench --no-picture-caching show rect.yaml` work
-- debug frag shader
 - implement input assembly
 - implement rasterization/vertex interpolation (can copy tinyrenderer if needed her)
 - get fragment shaders running
