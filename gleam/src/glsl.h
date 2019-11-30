@@ -35,8 +35,9 @@ float make_float(int32_t n) {
     return float(n);
 }
 
-template<typename T> Float make_float(T v) {
-    return Float(v);
+Float make_float(I32 v) {
+        // Float(v) seems to just convert the bits
+        return _mm_cvtepi32_ps(v);
 }
 
 int32_t make_int(int32_t n) {
