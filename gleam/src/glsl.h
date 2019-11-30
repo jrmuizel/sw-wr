@@ -2162,6 +2162,45 @@ ivec4_scalar get_nth(ivec4 a, int n) {
         return ivec4_scalar{a.x[n], a.y[n], a.z[n], a.w[n]};
 }
 
+void put_nth(Float &dst, int n, float src) {
+        dst[n] = src;
+}
+
+void put_nth(I32 &dst, int n, int32_t src) {
+        dst[n] = src;
+}
+
+void put_nth(ivec2 &dst, int n, ivec2_scalar src) {
+        dst.x[n] = src.x;
+        dst.y[n] = src.y;
+}
+
+void put_nth(vec2 &dst, int n, vec2_scalar src) {
+        dst.x[n] = src.x;
+        dst.y[n] = src.y;
+}
+
+void put_nth(vec3 &dst, int n, vec3_scalar src) {
+        dst.x[n] = src.x;
+        dst.y[n] = src.y;
+        dst.z[n] = src.z;
+}
+
+void put_nth(ivec4 &dst, int n, ivec4_scalar src) {
+        dst.x[n] = src.x;
+        dst.y[n] = src.y;
+        dst.z[n] = src.z;
+        dst.w[n] = src.w;
+}
+
+void put_nth(vec4 &dst, int n, vec4_scalar src) {
+        dst.x[n] = src.x;
+        dst.y[n] = src.y;
+        dst.z[n] = src.z;
+        dst.w[n] = src.w;
+}
+
+
 template <size_t SIZE>
 std::array<int32_t, SIZE> get_nth(std::array<int32_t, SIZE> a, int n) {
     return a;

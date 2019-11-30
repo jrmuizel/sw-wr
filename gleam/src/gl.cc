@@ -586,15 +586,29 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
                 if (type == GL_UNSIGNED_SHORT) {
                         assert(indices_buf.size == count * 2);
                         unsigned short *indices = (unsigned short*)indices_buf.buf;
-                        for (int i = 0; i < count; i++) {
+                        for (int i = 0; i < count; i+=3) {
                                 printf(" %d\n", indices[i]);
-                                shader.load_attribs(v.attribs, indices[i]);
+                                shader.load_attribs_for_tri(v.attribs, indices, i);
                                 shader.main();
                                 shader.store_outputs(output_buf);
-                                printf("%f %f %f %f\n", gl_Position.x.x, gl_Position.y.x, gl_Position.z.x, gl_Position.y.x);
-                                float xw = (gl_Position.x.x + 1)*(viewport.width/2) + viewport.x;
-                                float yw = (gl_Position.y.x + 1)*(viewport.height/2) + viewport.y;
-                                printf("%f %f\n", xw, yw);
+                                {
+                                        printf("%f %f %f %f\n", gl_Position.x.x, gl_Position.y.x, gl_Position.z.x, gl_Position.y.x);
+                                        float xw = (gl_Position.x.x + 1)*(viewport.width/2) + viewport.x;
+                                        float yw = (gl_Position.y.x + 1)*(viewport.height/2) + viewport.y;
+                                        printf("%f %f\n", xw, yw);
+                                }
+                                {
+                                        printf("%f %f %f %f\n", gl_Position.x.y, gl_Position.y.y, gl_Position.z.y, gl_Position.y.y);
+                                        float xw = (gl_Position.x.y + 1)*(viewport.width/2) + viewport.x;
+                                        float yw = (gl_Position.y.y + 1)*(viewport.height/2) + viewport.y;
+                                        printf("%f %f\n", xw, yw);
+                                }
+                                {
+                                        printf("%f %f %f %f\n", gl_Position.x.z, gl_Position.y.z, gl_Position.z.z, gl_Position.y.z);
+                                        float xw = (gl_Position.x.z + 1)*(viewport.width/2) + viewport.x;
+                                        float yw = (gl_Position.y.z + 1)*(viewport.height/2) + viewport.y;
+                                        printf("%f %f\n", xw, yw);
+                                }
                         }
 
                         frag_shader.read_inputs(output_buf);
