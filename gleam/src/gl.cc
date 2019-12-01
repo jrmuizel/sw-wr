@@ -2,6 +2,7 @@
 
 #include <map>
 #include "glsl.h"
+#include <cmath>
 using namespace std;
 #define GL_ARRAY_BUFFER                   0x8892
 #define GL_ELEMENT_ARRAY_BUFFER           0x8893
@@ -566,9 +567,69 @@ struct Point {
         float y;
 };
 
+struct Vec3f {
+        float x;
+        float y;
+        float z;
+};
+
+
+Vec3f cross(Vec3f v1, Vec3f v2) {
+    return Vec3f{v1.y*v2.z - v1.z*v2.y, v1.z*v2.x - v1.x*v2.z, v1.x*v2.y - v1.y*v2.x};
+}
+
+Vec3f barycentric(Point a, Point b, Point c, Point p) {
+        Vec3f s[2];
+        s[0].x = c.x - a.x;
+        s[0].y = b.x - a.x;
+        s[0].z = a.x - p.x;
+
+        s[1].x = c.y - a.y;
+        s[1].y = b.y - a.y;
+        s[1].z = a.y - p.y;
+
+        Vec3f u = cross(s[0], s[1]);
+
+        if (std::abs(u.z)>1e-2) // dont forget that u[2] is integer. If it is zero then triangle ABC is degenerate
+                return Vec3f{1.f-(u.x+u.y)/u.z, u.y/u.z, u.x/u.z};
+        return Vec3f{-1,1,1}; // in this case generate negative coordinates, it will be thrown away by the rasterizator
+}
+
 void triangle(brush_solid_frag &shader, char *output_buf, Point a, Point b, Point c) {
-        frag_shader.read_inputs(output_buf);
-        frag_shader.main();
+
+        auto top_left = Point{std::numeric_limits<float>::max(), std::numeric_limits<float>::max()};
+        auto bot_right = Point{std::numeric_limits<float>::lowest(), std::numeric_limits<float>::lowest()};
+
+        top_left.x = std::min(top_left.x, a.x);
+        top_left.x = std::min(top_left.x, b.x);
+        top_left.x = std::min(top_left.x, c.x);
+
+        top_left.y = std::min(top_left.y, a.y);
+        top_left.y = std::min(top_left.y, b.y);
+        top_left.y = std::min(top_left.y, c.y);
+
+        bot_right.x = std::max(bot_right.x, a.x);
+        bot_right.x = std::max(bot_right.x, b.x);
+        bot_right.x = std::max(bot_right.x, c.x);
+
+        bot_right.y = std::max(bot_right.y, a.y);
+        bot_right.y = std::max(bot_right.y, b.y);
+        bot_right.y = std::max(bot_right.y, c.y);
+
+        printf("bbox: %f %f %f %f\n", top_left.x, top_left.y, bot_right.x, bot_right.y);
+
+        Point p;
+        for (p.x = top_left.x; p.x < bot_right.x; p.x++) {
+                for (p.y = top_left.y; p.y < bot_right.x; p.y++) {
+                        Vec3f bc_screen = barycentric(a, b, c, p);
+                        if (bc_screen.x < 0 | bc_screen.y < 0 || bc_screen.z < 0) {
+                                continue;
+                        }
+                        frag_shader.read_inputs(output_buf);
+                        frag_shader.main();
+                }
+        }
+
         printf("color %f %f %f %f\n",
                frag_shader.oFragColor.x.x,
                frag_shader.oFragColor.y.x,
