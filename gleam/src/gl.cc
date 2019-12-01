@@ -561,6 +561,21 @@ void FramebufferTexture2D(
 void LinkProgram(GLuint program) {
 }
 
+struct Point {
+        float x;
+        float y;
+};
+
+void triangle(brush_solid_frag &shader, char *output_buf, Point a, Point b, Point c) {
+        frag_shader.read_inputs(output_buf);
+        frag_shader.main();
+        printf("color %f %f %f %f\n",
+               frag_shader.oFragColor.x.x,
+               frag_shader.oFragColor.y.x,
+               frag_shader.oFragColor.z.x,
+               frag_shader.oFragColor.w.x);
+}
+
 void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indices, GLsizei instancecount) {
         assert(mode == GL_TRIANGLES);
         assert(type == GL_UNSIGNED_SHORT);
@@ -591,33 +606,33 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
                                 shader.load_attribs_for_tri(v.attribs, indices, i);
                                 shader.main();
                                 shader.store_outputs(output_buf);
+                                Point a;
+                                Point b;
+                                Point c;
                                 {
                                         printf("%f %f %f %f\n", gl_Position.x.x, gl_Position.y.x, gl_Position.z.x, gl_Position.y.x);
                                         float xw = (gl_Position.x.x + 1)*(viewport.width/2) + viewport.x;
                                         float yw = (gl_Position.y.x + 1)*(viewport.height/2) + viewport.y;
+                                        a = Point { xw, yw };
                                         printf("%f %f\n", xw, yw);
                                 }
                                 {
                                         printf("%f %f %f %f\n", gl_Position.x.y, gl_Position.y.y, gl_Position.z.y, gl_Position.y.y);
                                         float xw = (gl_Position.x.y + 1)*(viewport.width/2) + viewport.x;
                                         float yw = (gl_Position.y.y + 1)*(viewport.height/2) + viewport.y;
+                                        b = Point { xw, yw };
                                         printf("%f %f\n", xw, yw);
                                 }
                                 {
                                         printf("%f %f %f %f\n", gl_Position.x.z, gl_Position.y.z, gl_Position.z.z, gl_Position.y.z);
                                         float xw = (gl_Position.x.z + 1)*(viewport.width/2) + viewport.x;
                                         float yw = (gl_Position.y.z + 1)*(viewport.height/2) + viewport.y;
+                                        c = Point { xw, yw };
                                         printf("%f %f\n", xw, yw);
                                 }
+                                triangle(frag_shader, output_buf, a, b, c);
                         }
 
-                        frag_shader.read_inputs(output_buf);
-                        frag_shader.main();
-                        printf("color %f %f %f %f\n",
-                               frag_shader.oFragColor.x.x,
-                               frag_shader.oFragColor.y.x,
-                               frag_shader.oFragColor.z.x,
-                               frag_shader.oFragColor.w.x);
                 } else {
                         assert(0);
                 }
