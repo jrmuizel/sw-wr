@@ -37,7 +37,6 @@ vec4 vTransformBounds
 vec4 vClipMaskUvBounds
 vec4 vClipMaskUv
 vec4 vColor
-vec2 vLocalPos
 */
 struct brush_solid_vert {
 void set_uniform_int(int index, int value) {
@@ -198,7 +197,6 @@ static size_t output_size() {
   size += sizeof(get_nth(vClipMaskUvBounds, 0));
   size += sizeof(get_nth(vClipMaskUv, 0));
   size += sizeof(get_nth(vColor, 0));
-  size += sizeof(get_nth(vLocalPos, 0));
   return size;
 }
 void store_outputs(void *dest) {
@@ -216,9 +214,6 @@ void store_outputs(void *dest) {
     {const auto& temp = get_nth(vColor, n);
     memcpy((char*)dest + offset, &temp, sizeof(get_nth(vColor, n)));}
     offset += sizeof(get_nth(vColor, n));
-    {const auto& temp = get_nth(vLocalPos, n);
-    memcpy((char*)dest + offset, &temp, sizeof(get_nth(vLocalPos, n)));}
-    offset += sizeof(get_nth(vLocalPos, n));
   }
 }
 Bool isPixelDiscarded = false;
@@ -460,7 +455,6 @@ friend VertexInfo if_then_else(I32 c, VertexInfo t, VertexInfo e) { return Verte
 if_then_else(c, t.local_pos, e.local_pos), if_then_else(c, t.snap_offset, e.snap_offset), if_then_else(c, t.world_pos, e.world_pos));
 }};
 vec4_scalar vColor;
-vec2 vLocalPos;
 struct SolidBrush_scalar {
 vec4_scalar color;
 SolidBrush_scalar() = default;
@@ -560,9 +554,6 @@ VertexInfo write_vertex(RectWithSize instance_rect, RectWithSize local_clip_rect
  VertexInfo vi = VertexInfo(clamped_local_pos, make_vec2(0., 0.), world_pos);
  return vi;
 }
-void init_transform_vs(vec4_scalar local_bounds, I32 _cond_mask_) {
- if (_cond_mask_[0]) { vTransformBounds = local_bounds; };
-}
 RectWithEndpoint to_rect_with_endpoint(RectWithSize rect) {
  RectWithEndpoint result;
  (result).p0 = (rect).p0;
@@ -593,11 +584,6 @@ VertexInfo write_transform_vertex(RectWithSize local_segment_rect, RectWithSize 
  VertexInfo vi = VertexInfo(local_pos, make_vec2(0.), world_pos);
  return vi;
 }
-void write_clip(vec4 world_pos, vec2 snap_offset, ClipArea area) {
- vec2 uv = (((world_pos).sel(X, Y))*((area).device_pixel_scale))+(((world_pos).sel(W))*((snap_offset)+(((((area).common_data).task_rect).p0)-((area).screen_origin))));
- vClipMaskUvBounds = force_scalar(make_vec4((((area).common_data).task_rect).p0, ((((area).common_data).task_rect).p0)+((((area).common_data).task_rect).size)));
- vClipMaskUv = make_vec4(uv, ((area).common_data).texture_layer_index, (world_pos).sel(W));
-}
 vec4 fetch_from_gpu_cache_1(I32 address) {
  ivec2 uv = get_gpu_cache_uv(address);
  return texelFetch(sGpuCache, uv, 0);
@@ -610,7 +596,6 @@ void brush_vs(VertexInfo vi, I32 prim_address, RectWithSize local_rect, RectWith
  SolidBrush prim = fetch_solid_primitive(prim_address);
  Float opacity = (make_float((prim_user_data).sel(X)))/(65535.);
  vColor = force_scalar(((prim).color)*(opacity));
- vLocalPos = (vi).local_pos;
 }
 void main(void) {
  I32 prim_header_address = (aData).sel(X);
@@ -642,13 +627,11 @@ void main(void) {
  auto _c4_ = (transform).is_axis_aligned;
  {
   vi = if_then_else(_c4_,write_vertex(segment_rect, (ph).local_clip_rect, (ph).z, transform, pic_task, _c4_),vi);
-  init_transform_vs(make_vec4(make_vec2(-(10000000000000000.)), make_vec2(10000000000000000.)), _c4_);
  }
  {
   bvec4 edge_mask = notEqual((edge_flags)&(make_ivec4(1, 2, 4, 8)), make_ivec4(0));
   vi = if_then_else(!(_c4_),write_transform_vertex(segment_rect, (ph).local_rect, (ph).local_clip_rect, mix(make_vec4(0.), make_vec4(1.), edge_mask), (ph).z, transform, pic_task, !(_c4_)),vi);
  }
- write_clip((vi).world_pos, (vi).snap_offset, clip_area);
  brush_vs(vi, (ph).specific_prim_address, (ph).local_rect, segment_rect, (ph).user_data, segment_user_data, (transform).m, pic_task, brush_flags, segment_data);
 }
 };
@@ -657,7 +640,6 @@ vec4 vTransformBounds
 vec4 vClipMaskUvBounds
 vec4 vClipMaskUv
 vec4 vColor
-vec2 vLocalPos
 */
 /* outputs
 vec4 oFragColor
@@ -748,12 +730,6 @@ void read_inputs(char *src) {
     vColor = vec4_scalar(scalar);
     src += sizeof(get_nth(vColor, 0));
   }
-  {
-    vec2_scalar scalar;
-    memcpy(&scalar, src, sizeof(get_nth(vLocalPos, 0)));
-    vLocalPos = vec2(scalar);
-    src += sizeof(get_nth(vLocalPos, 0));
-  }
 }
 Bool isPixelDiscarded = false;
 vec4 oFragColor;
@@ -819,64 +795,15 @@ friend Fragment if_then_else(I32 c, Fragment t, Fragment e) { return Fragment(
 if_then_else(c, t.color, e.color));
 }};
 vec4_scalar vColor;
-vec2 vLocalPos;
-Float signed_distance_rect(vec2 pos, vec2_scalar p0, vec2_scalar p1) {
- vec2 d = max((p0)-(pos), (pos)-(p1));
- return (length(max(make_vec2(0.), d)))+(min(0., max((d).sel(X), (d).sel(Y))));
-}
-Float compute_aa_range(vec2 position) {
- return (0.35355)*(length(fwidth(position)));
-}
-Float distance_aa(Float aa_range, Float signed_distance) {
- I32 ret_mask = ~0;
- Float ret;
- Float dist = (0.5)*((signed_distance)/(aa_range));
- auto _c3_ = (dist)<=((-(0.5))+(0.0001));
- ret = if_then_else(ret_mask & I32(_c3_), 1., ret);
- ret_mask &= ~I32(_c3_);
- auto _c4_ = (dist)>=((0.5)-(0.0001));
- ret = if_then_else(ret_mask & I32(_c4_), 0., ret);
- ret_mask &= ~I32(_c4_);
- ret = if_then_else(ret_mask, (0.5)+((dist)*(((0.8431027)*((dist)*(dist)))-(1.14453603))), ret);
- return ret;
-}
-Float init_transform_fs(vec2 local_pos) {
- Float d = signed_distance_rect(local_pos, (vTransformBounds).sel(X, Y), (vTransformBounds).sel(Z, W));
- Float aa_range = compute_aa_range(local_pos);
- return distance_aa(aa_range, d);
-}
-Fragment brush_fs() {
- vec4 color = vColor;
- color *= init_transform_fs(vLocalPos);
- return Fragment(color);
-}
-Float do_clip() {
- I32 ret_mask = ~0;
- Float ret;
- auto _c6_ = ((vClipMaskUvBounds).sel(X, Y))==((vClipMaskUvBounds).sel(Z, W));
- {
-  ret = if_then_else(ret_mask & I32(_c6_), 1., ret);
-  ret_mask &= ~I32(_c6_);
- }
- vec2 mask_uv = ((vClipMaskUv).sel(X, Y))*((gl_FragCoord).sel(W));
- bvec2 left = lessThanEqual((vClipMaskUvBounds).sel(X, Y), mask_uv);
- bvec2 right = greaterThan((vClipMaskUvBounds).sel(Z, W), mask_uv);
- auto _c7_ = !(all(make_bvec4(left, right)));
- {
-  ret = if_then_else(ret_mask & I32(_c7_), 0., ret);
-  ret_mask &= ~I32(_c7_);
- }
- ivec3 tc = make_ivec3(mask_uv, ((vClipMaskUv).sel(Z))+(0.5));
- ret = if_then_else(ret_mask, (texelFetch(sPrevPassAlpha, tc, 0)).sel(R), ret);
- return ret;
+Fragment_scalar brush_fs() {
+ vec4_scalar color = vColor;
+ return Fragment_scalar(color);
 }
 void write_output(vec4 color) {
  oFragColor = color;
 }
 void main(void) {
  Fragment frag = brush_fs();
- Float clip_alpha = do_clip();
- (frag).color *= clip_alpha;
  write_output((frag).color);
 }
 };

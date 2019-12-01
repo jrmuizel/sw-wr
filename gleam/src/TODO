@@ -4,6 +4,8 @@ Make `wrench --no-picture-caching show rect.yaml` work
  - llvmpipe runs the shader 4 times to get a 4x4 block of pixels
  that it can convert to integers and then shuffle into the right
  order
+- handle different shaders
+- handle different features
 - specialize texture samplers some how. i.e. we want to know at compile time what the format of a texture is
 
 Future
