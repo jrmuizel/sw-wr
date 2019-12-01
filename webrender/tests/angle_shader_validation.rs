@@ -137,9 +137,13 @@ fn validate_shaders() {
                 features.push_str(&format!("#define WR_FEATURE_{}\n", feature));
             }
 
+            use std::io::Write;
             let (vs, fs) =
                 webrender::build_shader_strings(VERSION_STRING, &features, shader.name, None);
-
+            let mut f_vs = std::fs::File::create(shader.name.to_owned() + &config.replace(",", ".") + ".vert").unwrap();
+            f_vs.write_all(vs.as_bytes());
+            let mut f_frag = std::fs::File::create(shader.name.to_owned() + &config.replace(",", ".") + ".frag").unwrap();
+            f_frag.write_all(fs.as_bytes());
             validate(&vs_validator, shader.name, vs);
             validate(&fs_validator, shader.name, fs);
         }
