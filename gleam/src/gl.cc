@@ -1,4 +1,8 @@
 #include <assert.h>
+#ifdef __MACH__
+#include <mach/mach.h>
+#include <mach/mach_time.h>
+#endif
 
 #include <map>
 #include "glsl.h"
@@ -596,7 +600,9 @@ Vec3f barycentric(Point a, Point b, Point c, Point p) {
 }
 
 void triangle(brush_solid_frag &shader, char *output_buf, Point a, Point b, Point c) {
-
+#ifdef  __MACH__
+        long long start = mach_absolute_time();
+#endif
         auto top_left = Point{std::numeric_limits<float>::max(), std::numeric_limits<float>::max()};
         auto bot_right = Point{std::numeric_limits<float>::lowest(), std::numeric_limits<float>::lowest()};
 
@@ -619,12 +625,14 @@ void triangle(brush_solid_frag &shader, char *output_buf, Point a, Point b, Poin
         printf("bbox: %f %f %f %f\n", top_left.x, top_left.y, bot_right.x, bot_right.y);
 
         Point p;
+        int shaded_pixels = 0;
         for (p.x = top_left.x; p.x < bot_right.x; p.x++) {
-                for (p.y = top_left.y; p.y < bot_right.x; p.y++) {
+                for (p.y = top_left.y; p.y < bot_right.y; p.y++) {
                         Vec3f bc_screen = barycentric(a, b, c, p);
                         if (bc_screen.x < 0 | bc_screen.y < 0 || bc_screen.z < 0) {
                                 continue;
                         }
+                        shaded_pixels++;
                         frag_shader.read_inputs(output_buf);
                         frag_shader.main();
                 }
@@ -635,6 +643,10 @@ void triangle(brush_solid_frag &shader, char *output_buf, Point a, Point b, Poin
                frag_shader.oFragColor.y.x,
                frag_shader.oFragColor.z.x,
                frag_shader.oFragColor.w.x);
+#ifdef  __MACH__
+        long long end = mach_absolute_time();
+        printf("%fms for %d\n", (end - start)/(1000.*1000.), shaded_pixels);
+#endif
 }
 
 void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indices, GLsizei instancecount) {
