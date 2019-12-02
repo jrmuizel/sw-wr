@@ -106,6 +106,13 @@ extern "C" {
     fn VertexAttribDivisor(index: GLuint, divisor: GLuint);
     fn LinkProgram(program: GLuint);
     fn SetViewport(x: GLint, y: GLint, width: GLsizei, height: GLsizei);
+    fn FramebufferTextureLayer(
+        target: GLenum,
+        attachment: GLenum,
+        texture: GLuint,
+        level: GLint,
+        layer: GLint,
+    );
 }
 
 impl GlFns {
@@ -1351,8 +1358,12 @@ impl Gl for GlFns {
                  target, attachment, texture, level, layer);
         //panic!();
         unsafe {
+            if SW {
+                FramebufferTextureLayer(target, attachment, texture, level, layer);
+            } else {
             self.ffi_gl_
                 .FramebufferTextureLayer(target, attachment, texture, level, layer);
+            }
         }
     }
 

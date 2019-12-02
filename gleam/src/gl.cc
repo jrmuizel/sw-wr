@@ -77,6 +77,7 @@ struct Buffer {
 
 struct Framebuffer {
         GLint color_attachment;
+        GLint layer;
 };
 
 struct Renderbuffer {
@@ -550,6 +551,27 @@ void FramebufferTexture2D(
         if (attachment == GL_COLOR_ATTACHMENT0) {
                Framebuffer &fb = framebuffers[current_framebuffer[target]];
                fb.color_attachment = texture;
+               fb.layer = 0;
+        } else {
+                assert(0);
+        }
+}
+
+#define GL_DRAW_FRAMEBUFFER               0x8CA9
+
+void FramebufferTextureLayer(
+        GLenum target,
+        GLenum attachment,
+        GLuint texture,
+        GLint level,
+        GLint layer)
+{
+        assert(level == 0);
+        assert(target == GL_DRAW_FRAMEBUFFER);
+        if (attachment == GL_COLOR_ATTACHMENT0) {
+               Framebuffer &fb = framebuffers[current_framebuffer[target]];
+               fb.color_attachment = texture;
+               fb.layer = layer;
         } else {
                 assert(0);
         }
