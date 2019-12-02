@@ -405,9 +405,20 @@ void TexSubImage3D(
         GLenum format,
         GLenum ty,
         void *data) {
-        assert(xoffset == 0);
-        assert(yoffset == 0);
-        assert(zoffset == 0);
+        Texture &t = textures[current_texture[target]];
+        assert(format == GL_RGBA);
+        assert(ty == GL_UNSIGNED_BYTE);
+        char *dest = t.buf;
+        char *src = (char*)data;
+        for (int y = yoffset; y < height; y++) {
+                for (int x = 0; x < width; x++) {
+                        dest[y * t.width * 4 + x * 4] = *src++;
+                        dest[y * t.width * 4 + x * 4 + 1] = *src++;
+                        dest[y * t.width * 4 + x * 4 + 2] = *src++;
+                        dest[y * t.width * 4 + x * 4 + 3] = *src++;
+                }
+        }
+
 }
 
 

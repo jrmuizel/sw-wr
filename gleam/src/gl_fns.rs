@@ -1080,8 +1080,22 @@ impl Gl for GlFns {
         ty: GLenum,
         offset: usize,
     ) {
-        panic!();
         unsafe {
+        if SW {
+            TexSubImage3D(
+                target,
+                level,
+                xoffset,
+                yoffset,
+                zoffset,
+                width,
+                height,
+                depth,
+                format,
+                ty,
+                offset as *const c_void,
+            );
+        } else {
             self.ffi_gl_.TexSubImage3D(
                 target,
                 level,
@@ -1095,6 +1109,7 @@ impl Gl for GlFns {
                 ty,
                 offset as *const c_void,
             );
+        }
         }
     }
 
