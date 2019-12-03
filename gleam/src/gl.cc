@@ -7,6 +7,7 @@
 #include <map>
 #include "glsl.h"
 #include <cmath>
+#include <limits>
 using namespace std;
 #define GL_ARRAY_BUFFER                   0x8892
 #define GL_ELEMENT_ARRAY_BUFFER           0x8893
@@ -671,11 +672,12 @@ void triangle(brush_solid_frag &shader, char *output_buf, Point a, Point b, Poin
                 }
         }
 
-        printf("color %f %f %f %f\n",
+        printf("color %f %f %f %f\npixels %d\n",
                frag_shader.oFragColor.x.x,
                frag_shader.oFragColor.y.x,
                frag_shader.oFragColor.z.x,
-               frag_shader.oFragColor.w.x);
+               frag_shader.oFragColor.w.x,
+               shaded_pixels);
 #ifdef  __MACH__
         long long end = mach_absolute_time();
         printf("%fms for %d\n", (end - start)/(1000.*1000.), shaded_pixels);
