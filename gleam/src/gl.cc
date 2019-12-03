@@ -2,6 +2,8 @@
 #ifdef __MACH__
 #include <mach/mach.h>
 #include <mach/mach_time.h>
+#else
+#include <time.h>
 #endif
 
 #include <map>
@@ -633,10 +635,13 @@ Vec3f barycentric(Point a, Point b, Point c, Point p) {
         return Vec3f{-1,1,1}; // in this case generate negative coordinates, it will be thrown away by the rasterizator
 }
 
-void triangle(brush_solid_frag &shader, char *output_buf, Point a, Point b, Point c) {
+void triangle(brush_solid_frag &shader, brush_solid_vert::FlatOutputs &flat_outs, brush_solid_vert::InterpOutputs interp_outs[4], Point a, Point b, Point c) {
 #ifdef  __MACH__
-        long long start = mach_absolute_time();
+        double start = mach_absolute_time();
+#else
+        double start = ({ struct timespec tp; clock_gettime(CLOCK_MONOTONIC, &tp); tp.tv_sec * 1e9 + tp.tv_nsec; });
 #endif
+
         auto top_left = Point{std::numeric_limits<float>::max(), std::numeric_limits<float>::max()};
         auto bot_right = Point{std::numeric_limits<float>::lowest(), std::numeric_limits<float>::lowest()};
 
@@ -658,30 +663,110 @@ void triangle(brush_solid_frag &shader, char *output_buf, Point a, Point b, Poin
 
         printf("bbox: %f %f %f %f\n", top_left.x, top_left.y, bot_right.x, bot_right.y);
 
-        Point p;
-        int shaded_pixels = 0;
-        for (p.x = top_left.x; p.x < bot_right.x; p.x++) {
-                for (p.y = top_left.y; p.y < bot_right.y; p.y++) {
-                        Vec3f bc_screen = barycentric(a, b, c, p);
-                        if (bc_screen.x < 0 | bc_screen.y < 0 || bc_screen.z < 0) {
-                                continue;
-                        }
-                        shaded_pixels++;
-                        frag_shader.read_inputs(output_buf);
-                        frag_shader.main();
-                }
+        Point p[3] = { a, b, c };
+        Point l0, r0, l1, r1;
+        int l0i, r0i, l1i, r1i;
+        {
+            int top = b.y < a.y ? (c.y < b.y ? 2 : 1) : (c.y < a.y ? 2 : 0);
+            int next = (top+1)%3;
+            int prev = (top+2)%3;
+            if (p[top].y == p[next].y) {
+                l0i = next;
+                r0i = top;
+                l1i = r1i = prev;
+            } else if (p[top].y == p[prev].y) {
+                l0i = top;
+                r0i = prev;
+                l1i = r1i = next;
+            } else {
+                l0i = r0i = top;
+                l1i = next;
+                r1i = prev;
+            }
+            l0 = p[l0i];
+            r0 = p[r0i];
+            l1 = p[l1i];
+            r1 = p[r1i];
         }
 
-        printf("color %f %f %f %f\npixels %d\n",
+        Point l = l0;
+        float lm = (l1.x - l0.x) / (l1.y - l0.y);
+        Point r = r0;
+        float rm = (r1.x - r0.x) / (r1.y - r0.y);
+        assert(l.y == r.y);
+        l.y = r.y = floor(l.y + 0.5f) + 0.5f;
+        l.x += (l.y - l0.y) * lm;
+        r.x += (r.y - r0.y) * rm;
+        brush_solid_vert::InterpOutputs lo = interp_outs[l0i];
+        brush_solid_vert::InterpOutputs lom = (interp_outs[l1i] - lo) * (1.0f / (l1.y - l0.y));
+        lo = lo + lom * (l.y - l0.y);
+        brush_solid_vert::InterpOutputs ro = interp_outs[r0i];
+        brush_solid_vert::InterpOutputs rom = (interp_outs[r1i] - ro) * (1.0f / (r1.y - r0.y));
+        ro = ro + rom * (r.y - r0.y);
+        int shaded_pixels = 0;
+        frag_shader.read_flat_inputs(flat_outs);
+        while (true) {
+            if (l.y > l1.y) {
+                l0i = l1i;
+                l0 = l1;
+                l1i = (l1i+1)%3;
+                l1 = p[l1i];
+                if (l1.y <= l0.y) break;
+                lm = (l1.x - l0.x) / (l1.y - l0.y);
+                l.x = l0.x + (l.y - l0.y) * lm;
+                lo = interp_outs[l0i];
+                lom = (interp_outs[l1i] - lo) * (1.0f / (l1.y - l0.y));
+                lo = lo + lom * (l.y - l0.y);
+            }
+            if (r.y > r1.y) {
+                r0i = r1i;
+                r0 = r1;
+                r1i = (r1i+2)%3;
+                r1 = p[r1i];
+                if (r1.y <= r0.y) break;
+                rm = (r1.x - r0.x) / (r1.y - r0.y);
+                r.x = r0.x + (r.y - r0.y) * rm;
+                ro = interp_outs[r0i];
+                rom = (interp_outs[r1i] - ro) * (1.0f / (r1.y - r0.y));
+                ro = ro + rom * (r.y - r0.y);
+            }
+            Point p = l;
+            p.x = floor(l.x + 0.5f) + 0.5f;
+            if (p.x < r.x) {
+                brush_solid_vert::InterpOutputs stepo = (ro - lo) * (1.0f / (r.x - l.x));
+                {
+                    brush_solid_vert::InterpOutputs o0 = lo + stepo * (p.x - l.x);
+                    brush_solid_vert::InterpOutputs o1 = o0 + stepo;
+                    brush_solid_vert::InterpOutputs o2 = o1 + stepo;
+                    brush_solid_vert::InterpOutputs o3 = o2 + stepo;
+                    frag_shader.read_interp_inputs(o0, o1, o2, o3);
+                }
+                stepo = stepo * 4;
+                for (; p.x < r.x; p.x += 4) {
+                    shaded_pixels += 4;
+                    frag_shader.main();
+                    frag_shader.step_interp_inputs(stepo);
+                }
+            }
+            l.x += lm;
+            l.y++;
+            r.x += rm;
+            r.y++;
+            lo = lo + lom;
+            ro = ro + rom;
+        }
+
+        printf("color %f %f %f %f\n",
                frag_shader.oFragColor.x.x,
                frag_shader.oFragColor.y.x,
                frag_shader.oFragColor.z.x,
-               frag_shader.oFragColor.w.x,
-               shaded_pixels);
+               frag_shader.oFragColor.w.x);
 #ifdef  __MACH__
-        long long end = mach_absolute_time();
-        printf("%fms for %d\n", (end - start)/(1000.*1000.), shaded_pixels);
+        double end = mach_absolute_time();
+#else
+        double end = ({ struct timespec tp; clock_gettime(CLOCK_MONOTONIC, &tp); tp.tv_sec * 1e9 + tp.tv_nsec; });
 #endif
+        printf("%fms for %d pixels\n", (end - start)/(1000.*1000.), shaded_pixels);
 }
 
 void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indices, GLsizei instancecount) {
@@ -690,7 +775,6 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
         assert(count == 6);
         assert(instancecount == 1);
         assert(indices == 0);
-        char* output_buf = (char*)malloc(brush_solid_vert::output_size() * 4);
         if (indices == 0) {
                 Buffer &indices_buf = buffers[current_buffer[GL_ELEMENT_ARRAY_BUFFER]];
                 printf("current_vertex_array %d\n", current_vertex_array);
@@ -713,7 +797,10 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
                                 printf(" %d\n", indices[i]);
                                 shader.load_attribs_for_tri(v.attribs, indices, i);
                                 shader.main();
-                                shader.store_outputs(output_buf);
+                                brush_solid_vert::FlatOutputs flat_outs;
+                                shader.store_flat_outputs(flat_outs);
+                                brush_solid_vert::InterpOutputs interp_outs[4];
+                                shader.store_interp_outputs(interp_outs);
                                 Point a;
                                 Point b;
                                 Point c;
@@ -738,14 +825,13 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
                                         c = Point { xw, yw };
                                         printf("%f %f\n", xw, yw);
                                 }
-                                triangle(frag_shader, output_buf, a, b, c);
+                                triangle(frag_shader, flat_outs, interp_outs, a, b, c);
                         }
 
                 } else {
                         assert(0);
                 }
         }
-        free(output_buf);
         printf("dodraw");
 }
 

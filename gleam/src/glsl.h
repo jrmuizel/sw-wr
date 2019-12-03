@@ -670,6 +670,7 @@ vec2_scalar make_vec2(const ivec2_scalar& v) {
     return vec2_scalar{ float(v.x), float(v.y) };
 }
 
+
 template<typename N> ivec2 make_ivec2(const N& n) {
     return ivec2(n);
 }
@@ -682,6 +683,22 @@ struct ivec3_scalar {
         int32_t x;
         int32_t y;
         int32_t z;
+
+        int32_t& select(XYZW c) {
+                switch (c) {
+                    case X: return x;
+                    case Y: return y;
+                    case Z: return z;
+                    default: UNREACHABLE;
+                }
+        }
+        int32_t& sel(XYZW c1) {
+                return select(c1);
+        }
+        ivec2_scalar sel(XYZW c1, XYZW c2) {
+                return ivec2_scalar{select(c1), select(c2)};
+        }
+
 };
 
 struct ivec3 {
@@ -695,6 +712,10 @@ struct ivec3 {
         I32 z;
 
 };
+
+vec2_scalar make_vec2(ivec3_scalar s) {
+    return vec2_scalar{ float(s.x), float(s.y) };
+}
 
 ivec3_scalar make_ivec3(int32_t n) {
     return ivec3_scalar{ n, n, n };
@@ -968,6 +989,17 @@ struct vec3_scalar {
         vec2_scalar_ref lsel(XYZW c1, XYZW c2) {
                 return vec2_scalar_ref(select(c1), select(c2));
         }
+
+        friend vec3_scalar operator*(vec3_scalar a, float b) {
+                return vec3_scalar{a.x*b, a.y*b, a.z*b};
+        }
+
+        friend vec3_scalar operator-(vec3_scalar a, vec3_scalar b) {
+                return vec3_scalar{a.x-b.x, a.y-b.y, a.z-b.z};
+        }
+        friend vec3_scalar operator+(vec3_scalar a, vec3_scalar b) {
+                return vec3_scalar{a.x+b.x, a.y+b.y, a.z+b.z};
+        }
 };
 
 struct vec3 {
@@ -1175,6 +1207,10 @@ struct vec4_scalar {
                 return vec2_scalar_ref(select(c1), select(c2));
         }
 
+        friend vec4_scalar operator*(vec4_scalar a, float b) {
+                return vec4_scalar{a.x*b, a.y*b, a.z*b, a.w*b};
+        }
+
         friend vec4_scalar operator-(vec4_scalar a, vec4_scalar b) {
                 return vec4_scalar{a.x-b.x, a.y-b.y, a.z-b.z, a.w-b.w};
         }
@@ -1204,6 +1240,7 @@ struct vec4 {
         vec4(vec3 xyz, Float w): x(xyz.x), y(xyz.y), z(xyz.z), w(w) {}
         vec4(vec2 xy, vec2 zw): x(xy.x), y(xy.y), z(zw.x), w(zw.y) {}
         vec4(vec2 xy, Float z, Float w): x(xy.x), y(xy.y), z(z), w(w) {}
+        vec4(Float x, Float y, vec2 zw): x(x), y(y), z(zw.x), w(zw.y) {}
         constexpr vec4(vec4_scalar s) : x(s.x), y(s.y), z(s.z), w(s.w) {}
         constexpr vec4(vec4_scalar s0, vec4_scalar s1, vec4_scalar s2, vec4_scalar s3)
                 : x(Float{s0.x, s1.x, s2.x, s3.x}),
@@ -1957,7 +1994,7 @@ ivec4 texelFetch(isampler2D sampler, ivec2 P, int lod) {
                       );
 }
 
-vec4 texture(sampler2D sampler, vec3 P) {
+vec4 texture(sampler2D sampler, vec2 P) {
         // just do nearest for now
         ivec2 coord(round(P.x, sampler->width), round(P.y, sampler->height));
         return texelFetch(sampler, coord, 0);
@@ -1983,7 +2020,11 @@ vec4 texture(sampler2DArray sampler, vec3 P) {
 
 
 
-ivec2_scalar textureSize(sampler2DArray sampler, int) {
+ivec3_scalar textureSize(sampler2DArray sampler, int) {
+        return ivec3_scalar{int32_t(sampler->width), int32_t(sampler->height), int32_t(sampler->depth)};
+}
+
+ivec2_scalar textureSize(sampler2D sampler, int) {
         return ivec2_scalar{int32_t(sampler->width), int32_t(sampler->height)};
 }
 
@@ -2200,6 +2241,23 @@ void put_nth(vec4 &dst, int n, vec4_scalar src) {
         dst.w[n] = src.w;
 }
 
+Float assemble(float a, float b, float c, float d) {
+    return (Float){a, b, c, d};
+}
+
+vec2 assemble(vec2_scalar a, vec2_scalar b, vec2_scalar c, vec2_scalar d) {
+    return vec2(assemble(a.x, b.x, c.x, d.x), assemble(a.y, b.y, c.y, d.y));
+}
+
+vec3 assemble(vec3_scalar a, vec3_scalar b, vec3_scalar c, vec3_scalar d) {
+    return vec3(assemble(a.x, b.x, c.x, d.x), assemble(a.y, b.y, c.y, d.y),
+                assemble(a.z, b.z, c.z, d.z));
+}
+
+vec4 assemble(vec4_scalar a, vec4_scalar b, vec4_scalar c, vec4_scalar d) {
+    return vec4(assemble(a.x, b.x, c.x, d.x), assemble(a.y, b.y, c.y, d.y),
+                assemble(a.z, b.z, c.z, d.z), assemble(a.w, b.w, c.w, d.w));
+}
 
 template <size_t SIZE>
 std::array<int32_t, SIZE> get_nth(std::array<int32_t, SIZE> a, int n) {

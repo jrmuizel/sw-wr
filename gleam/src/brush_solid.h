@@ -191,29 +191,31 @@ for (int n = 0; n < 3; n++) {
   put_nth(aData, n, scalar);
 }
 }
-static size_t output_size() {
-  size_t size = 0;
-  size += sizeof(get_nth(vTransformBounds, 0));
-  size += sizeof(get_nth(vClipMaskUvBounds, 0));
-  size += sizeof(get_nth(vClipMaskUv, 0));
-  size += sizeof(get_nth(vColor, 0));
-  return size;
+struct FlatOutputs {
+vec4_scalar vTransformBounds;
+vec4_scalar vClipMaskUvBounds;
+vec4_scalar vColor;
+};
+struct InterpOutputs {
+vec4_scalar vClipMaskUv;
+friend InterpOutputs operator-(const InterpOutputs& a, const InterpOutputs& b) {
+  return InterpOutputs{a.vClipMaskUv-b.vClipMaskUv};
 }
-void store_outputs(void *dest) {
-  size_t offset = 0;
-  for (int n = 0; n < 4; n++) {
-    {const auto& temp = get_nth(vTransformBounds, n);
-    memcpy((char*)dest + offset, &temp, sizeof(get_nth(vTransformBounds, n)));}
-    offset += sizeof(get_nth(vTransformBounds, n));
-    {const auto& temp = get_nth(vClipMaskUvBounds, n);
-    memcpy((char*)dest + offset, &temp, sizeof(get_nth(vClipMaskUvBounds, n)));}
-    offset += sizeof(get_nth(vClipMaskUvBounds, n));
-    {const auto& temp = get_nth(vClipMaskUv, n);
-    memcpy((char*)dest + offset, &temp, sizeof(get_nth(vClipMaskUv, n)));}
-    offset += sizeof(get_nth(vClipMaskUv, n));
-    {const auto& temp = get_nth(vColor, n);
-    memcpy((char*)dest + offset, &temp, sizeof(get_nth(vColor, n)));}
-    offset += sizeof(get_nth(vColor, n));
+friend InterpOutputs operator+(const InterpOutputs& a, const InterpOutputs& b) {
+  return InterpOutputs{a.vClipMaskUv+b.vClipMaskUv};
+}
+friend InterpOutputs operator*(const InterpOutputs& a, float b) {
+  return InterpOutputs{a.vClipMaskUv*b};
+}
+};
+void store_flat_outputs(FlatOutputs& dest) {
+  dest.vTransformBounds = vTransformBounds;
+  dest.vClipMaskUvBounds = vClipMaskUvBounds;
+  dest.vColor = vColor;
+}
+void store_interp_outputs(InterpOutputs dest[4]) {
+  for(int n = 0; n < 4; n++) {
+    dest[n].vClipMaskUv = get_nth(vClipMaskUv, n);
   }
 }
 Bool isPixelDiscarded = false;
@@ -705,31 +707,16 @@ if (index == 10) {
 assert(0); // sPrevPassColor
 }
 }
-void read_inputs(char *src) {
-  {
-    vec4_scalar scalar;
-    memcpy(&scalar, src, sizeof(get_nth(vTransformBounds, 0)));
-    vTransformBounds = vec4_scalar(scalar);
-    src += sizeof(get_nth(vTransformBounds, 0));
-  }
-  {
-    vec4_scalar scalar;
-    memcpy(&scalar, src, sizeof(get_nth(vClipMaskUvBounds, 0)));
-    vClipMaskUvBounds = vec4_scalar(scalar);
-    src += sizeof(get_nth(vClipMaskUvBounds, 0));
-  }
-  {
-    vec4_scalar scalar;
-    memcpy(&scalar, src, sizeof(get_nth(vClipMaskUv, 0)));
-    vClipMaskUv = vec4(scalar);
-    src += sizeof(get_nth(vClipMaskUv, 0));
-  }
-  {
-    vec4_scalar scalar;
-    memcpy(&scalar, src, sizeof(get_nth(vColor, 0)));
-    vColor = vec4_scalar(scalar);
-    src += sizeof(get_nth(vColor, 0));
-  }
+template<typename T> void read_flat_inputs(const T& src) {
+  vTransformBounds = src.vTransformBounds;
+  vClipMaskUvBounds = src.vClipMaskUvBounds;
+  vColor = src.vColor;
+}
+template<typename T> void read_interp_inputs(const T& a, const T& b, const T& c, const T& d) {
+  vClipMaskUv = assemble(a.vClipMaskUv, b.vClipMaskUv, c.vClipMaskUv, d.vClipMaskUv);
+}
+template<typename T> void step_interp_inputs(const T& delta) {
+  vClipMaskUv += delta.vClipMaskUv;
 }
 Bool isPixelDiscarded = false;
 vec4 oFragColor;
