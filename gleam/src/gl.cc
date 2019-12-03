@@ -837,13 +837,19 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
 
 #define GL_ZERO                           0
 #define GL_ONE                            1
+#define GL_FUNC_ADD                       0x8006
 
 GLenum blend_sfactor = GL_ONE;
 GLenum blend_dfactor = GL_ZERO;
+GLenum blend_equation_mode = GL_FUNC_ADD;
 
 void BlendFunc(GLenum sfactor, GLenum dfactor) {
         blend_sfactor = sfactor;
         blend_dfactor = dfactor;
 }
 
+void BlendEquation(GLenum mode) {
+        assert(mode == GL_FUNC_ADD);
+        blend_equation_mode = mode;
+}
 }

@@ -25,6 +25,7 @@ extern "C" {
     fn BindFramebuffer(target: GLenum, fb: GLuint);
     fn BindRenderbuffer(target: GLenum, rb: GLuint);
     fn BlendFunc(sfactor: GLenum, dfactor: GLenum);
+    fn BlendEquation(mode: GLenum);
     fn GenBuffers(n: i32, result: *mut u32);
     fn GenTextures(n: i32, result: *mut u32);
     fn GenFramebuffers(n: i32, result: *mut u32);
@@ -1642,9 +1643,10 @@ impl Gl for GlFns {
     }
 
     fn blend_equation(&self, mode: GLenum) {
-        panic!();
         unsafe {
+            if SW { BlendEquation(mode); } else {
             self.ffi_gl_.BlendEquation(mode);
+            }
         }
     }
 
