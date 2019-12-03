@@ -835,4 +835,15 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
         printf("dodraw");
 }
 
+#define GL_ZERO                           0
+#define GL_ONE                            1
+
+GLenum blend_sfactor = GL_ONE;
+GLenum blend_dfactor = GL_ZERO;
+
+void BlendFunc(GLenum sfactor, GLenum dfactor) {
+        blend_sfactor = sfactor;
+        blend_dfactor = dfactor;
+}
+
 }

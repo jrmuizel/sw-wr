@@ -24,6 +24,7 @@ extern "C" {
     fn BindVertexArray(vao: GLuint);
     fn BindFramebuffer(target: GLenum, fb: GLuint);
     fn BindRenderbuffer(target: GLenum, rb: GLuint);
+    fn BlendFunc(sfactor: GLenum, dfactor: GLenum);
     fn GenBuffers(n: i32, result: *mut u32);
     fn GenTextures(n: i32, result: *mut u32);
     fn GenFramebuffers(n: i32, result: *mut u32);
@@ -1619,9 +1620,10 @@ impl Gl for GlFns {
     }
 
     fn blend_func(&self, sfactor: GLenum, dfactor: GLenum) {
-        panic!();
         unsafe {
+            if SW { BlendFunc(sfactor, dfactor); } else {
             self.ffi_gl_.BlendFunc(sfactor, dfactor);
+            }
         }
     }
 
