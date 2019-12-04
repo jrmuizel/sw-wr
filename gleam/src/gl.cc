@@ -200,6 +200,19 @@ bool depthtest = false;
 bool depthmask = true;
 GLenum depthfunc = GL_LESS;
 
+#define GL_SCISSOR_TEST             0x0C11
+
+bool scissortest = false;
+
+struct Scissor {
+    int x;
+    int y;
+    int width;
+    int height;
+};
+
+Scissor scissor;
+
 using namespace glsl;
 
 #define GL_TEXTURE0                       0x84C0
@@ -290,7 +303,7 @@ tex_sub_image_3d()
 gen_framebuffers()*/
 extern "C" {
 
-void SetViewport(int x, int y, int width, int height) {
+void SetViewport(GLint x, GLint y, GLsizei width, GLsizei height) {
 	viewport.x = x;
 	viewport.y = y;
 	viewport.width = width;
@@ -301,6 +314,7 @@ void Enable(GLenum cap) {
     switch (cap) {
     case GL_BLEND: blend = true; break;
     case GL_DEPTH_TEST: depthtest = true; break;
+    case GL_SCISSOR_TEST: scissortest = true; break;
     }
 }
 
@@ -308,6 +322,7 @@ void Disable(GLenum cap) {
     switch (cap) {
     case GL_BLEND: blend = false; break;
     case GL_DEPTH_TEST: depthtest = false; break;
+    case GL_SCISSOR_TEST: scissortest = false; break;
     }
 }
 
@@ -351,6 +366,13 @@ void DepthMask(GLboolean flag) {
 
 void DepthFunc(GLenum func) {
     depthfunc = func;
+}
+
+void SetScissor(GLint x, GLint y, GLsizei width, GLsizei height) {
+    scissor.x = x;
+    scissor.y = y;
+    scissor.width = width;
+    scissor.height = height;
 }
 
 void ActiveTexture(GLenum texture) {
@@ -961,6 +983,13 @@ void triangle(brush_solid_frag &shader, brush_solid_vert::FlatOutputs &flat_outs
             assert(false);
         } else {
             printf("default framebuffer 0\n");
+        }
+
+        if (scissortest) {
+            fx0 = std::max(fx0, float(scissor.x));
+            fy0 = std::max(fy0, float(scissor.y));
+            fx1 = std::min(fx1, float(scissor.x + scissor.width));
+            fy1 = std::min(fy1, float(scissor.y + scissor.height));
         }
 
 #ifdef  __MACH__
