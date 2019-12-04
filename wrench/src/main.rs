@@ -145,7 +145,8 @@ pub struct HeadlessEventIterater;
 impl WindowWrapper {
     fn swap_buffers(&self) {
         match *self {
-            WindowWrapper::WindowedContext(ref windowed_context, _) => {
+            WindowWrapper::WindowedContext(ref windowed_context, ref gl) => {
+                gl.finish();
                 windowed_context.swap_buffers().unwrap()
             }
             WindowWrapper::Angle(_, ref context, _) => context.swap_buffers().unwrap(),

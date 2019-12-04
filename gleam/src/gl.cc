@@ -7,6 +7,7 @@
 #endif
 
 #include <map>
+#include "minpng.h"
 #include "glsl.h"
 #include <cmath>
 #include <limits>
@@ -1206,6 +1207,10 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
         }
         }
         printf("dodraw");
+}
+
+void Finish() {
+        write_png("out.png", fdata, fw, fh);
 }
 
 }

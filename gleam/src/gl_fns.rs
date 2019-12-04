@@ -133,6 +133,7 @@ extern "C" {
     fn DepthMask(flag: GLboolean);
     fn DepthFunc(func: GLenum);
     fn SetScissor(x: GLint, y: GLint, width: GLsizei, height: GLsizei);
+    fn Finish();
 }
 
 impl GlFns {
@@ -2517,9 +2518,12 @@ impl Gl for GlFns {
     }
 
     fn finish(&self) {
-        panic!();
         unsafe {
+            if SW {
+                Finish();
+            } else {
             self.ffi_gl_.Finish();
+            }
         }
     }
 
