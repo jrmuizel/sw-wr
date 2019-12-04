@@ -712,6 +712,147 @@ static const size_t fw = 2048;
 static const size_t fh = 2048;
 static uint8_t fdata[fw * fh * 4];
 
+static inline __m128i pack_pixels(vec4 output) {
+    output *= 255.5f;
+    __m128i rxz = _mm_packs_epi32(_mm_cvtps_epi32(output.x), _mm_cvtps_epi32(output.z));
+    __m128i ryw = _mm_packs_epi32(_mm_cvtps_epi32(output.y), _mm_cvtps_epi32(output.w));
+    __m128i rxy = _mm_unpacklo_epi16(rxz, ryw);
+    __m128i rzw = _mm_unpackhi_epi16(rxz, ryw);
+    __m128i rlo = _mm_unpacklo_epi32(rxy, rzw);
+    __m128i rhi = _mm_unpackhi_epi32(rxy, rzw);
+    return _mm_packus_epi16(rlo, rhi);
+}
+
+static inline __m128i blend_pixels(__m128i r, int span, const uint8_t* buf) {
+    const __m128i zero = _mm_setzero_si128();
+    __m128i slo = _mm_unpacklo_epi8(r, zero);
+    __m128i shi = _mm_unpackhi_epi8(r, zero);
+    __m128i dlo, dhi;
+    if (span & ~3) {
+        __m128i dst = _mm_loadu_si128((__m128i*)buf);
+        dlo = _mm_unpacklo_epi8(dst, zero);
+        dhi = _mm_unpackhi_epi8(dst, zero);
+    } else {
+        dhi = zero;
+        if (span & 2) {
+            dlo = _mm_unpacklo_epi8(_mm_loadl_epi64((__m128i*)buf), zero);
+            if (span & 1) dhi = _mm_unpacklo_epi8(_mm_cvtsi32_si128(*(int32_t*)(buf + 8)), zero);
+        } else {
+            dlo = _mm_unpacklo_epi8(_mm_cvtsi32_si128(*(int32_t*)buf), zero);
+        }
+    }
+    // (x*y + x) >> 8, cheap approximation of (x*y) / 255
+    #define muldiv255(x, y) ({ __m128i b = x; _mm_srli_epi16(_mm_add_epi16(_mm_mullo_epi16(b, y), b), 8); })
+    #define alphas(c) _mm_shufflehi_epi16(_mm_shufflelo_epi16(c, 0xFF), 0xFF)
+    switch ((blendfunc_srgb << 16) | blendfunc_drgb) {
+    case (GL_SRC_ALPHA << 16) | GL_ONE_MINUS_SRC_ALPHA:
+        r = _mm_packus_epi16(
+                _mm_add_epi16(muldiv255(_mm_sub_epi16(slo, dlo), alphas(slo)), dlo),
+                _mm_add_epi16(muldiv255(_mm_sub_epi16(shi, dhi), alphas(shi)), dhi));
+        break;
+    case (GL_CONSTANT_COLOR << 16) | GL_ONE_MINUS_SRC_COLOR:
+        r = _mm_packus_epi16(
+                _mm_add_epi16(dlo, muldiv255(_mm_sub_epi16(blendcolor, dlo), slo)),
+                _mm_add_epi16(dhi, muldiv255(_mm_sub_epi16(blendcolor, dhi), shi)));
+        break;
+    case (GL_ONE << 16) | GL_ONE_MINUS_SRC_COLOR:
+        r = _mm_packus_epi16(
+                _mm_add_epi16(slo, _mm_sub_epi16(dlo, muldiv255(dlo, slo))),
+                _mm_add_epi16(shi, _mm_sub_epi16(dhi, muldiv255(dhi, shi))));
+        break;
+    case (GL_ONE << 16) | GL_ONE_MINUS_SRC_ALPHA:
+        r = _mm_packus_epi16(
+                _mm_add_epi16(slo, _mm_sub_epi16(dlo, muldiv255(dlo, alphas(slo)))),
+                _mm_add_epi16(shi, _mm_sub_epi16(dhi, muldiv255(dhi, alphas(shi)))));
+        break;
+    case (GL_ZERO << 16) | GL_ONE_MINUS_SRC_COLOR:
+        r = _mm_packus_epi16(
+                _mm_sub_epi16(dlo, muldiv255(dlo, slo)),
+                _mm_sub_epi16(dhi, muldiv255(dhi, shi)));
+        break;
+    case (GL_ZERO << 16) | GL_ONE_MINUS_SRC_ALPHA:
+        r = _mm_packus_epi16(
+                _mm_sub_epi16(dlo, muldiv255(dlo, alphas(slo))),
+                _mm_sub_epi16(dhi, muldiv255(dhi, alphas(shi))));
+        break;
+    case (GL_ZERO << 16) | GL_SRC_COLOR:
+        r = _mm_packus_epi16(
+                muldiv255(slo, dlo),
+                muldiv255(shi, dhi));
+        break;
+    case (GL_ZERO << 16) | GL_SRC_ALPHA:
+        r = _mm_packus_epi16(
+                muldiv255(alphas(slo), dlo),
+                muldiv255(alphas(shi), dhi));
+        break;
+    case (GL_ONE << 16) | GL_ONE:
+        r = _mm_packus_epi16(_mm_add_epi16(slo, dlo), _mm_add_epi16(shi, dhi));
+        break;
+    case (GL_ZERO << 16) | GL_ONE:
+        r = _mm_packus_epi16(dlo, dhi);
+        break;
+    case (GL_ONE << 16) | GL_ZERO:
+        r = _mm_packus_epi16(slo, shi);
+        break;
+    case (GL_ONE_MINUS_DST_ALPHA << 16) | GL_ONE:
+        r = _mm_packus_epi16(
+                _mm_add_epi16(dlo, _mm_sub_epi16(slo, muldiv255(slo, alphas(slo)))),
+                _mm_add_epi16(dhi, _mm_sub_epi16(shi, muldiv255(shi, alphas(shi)))));
+        break;
+    default:
+        assert(false);
+        break;
+    }
+    if (blendfunc_separate) {
+        __m128i a;
+        switch ((blendfunc_sa << 16) | blendfunc_da) {
+        case (GL_ONE << 16) | GL_ONE:
+            a = _mm_packus_epi16(_mm_add_epi16(dlo, slo), _mm_add_epi16(dhi, shi));
+            break;
+        case (GL_ZERO << 16) | GL_ONE:
+            a = _mm_packus_epi16(dlo, dhi);
+            break;
+        case (GL_ONE << 16) | GL_ZERO:
+            a = _mm_packus_epi16(slo, shi);
+            break;
+        case (GL_ONE << 16) | GL_ONE_MINUS_SRC_COLOR:
+            a = _mm_packus_epi16(
+                    _mm_add_epi16(slo, _mm_sub_epi16(dlo, muldiv255(dlo, slo))),
+                    _mm_add_epi16(shi, _mm_sub_epi16(dhi, muldiv255(dhi, shi))));
+            break;
+        case (GL_ZERO << 16) | GL_SRC_COLOR:
+            a = _mm_packus_epi16(
+                    muldiv255(dlo, slo),
+                    muldiv255(dhi, shi));
+        default:
+            assert(false);
+            break;
+        }
+        r = _mm_or_si128(_mm_and_si128(_mm_set1_epi32(0x00FFFFFF), r),
+                         _mm_andnot_si128(_mm_set1_epi32(0x00FFFFFF), a));
+    }
+    return r;
+}
+
+static inline void write_pixels(__m128i r, int span, uint8_t* buf) {
+    if (span & ~3) {
+        _mm_storeu_si128((__m128i*)buf, r);
+    } else if (span & 2) {
+        _mm_storel_epi64((__m128i*)buf, r);
+        if (span & 1) *(int32_t*)(buf + 8) = _mm_cvtsi128_si32(_mm_shuffle_epi32(r, 0xAA));
+    } else {
+        *(int32_t*)buf = _mm_cvtsi128_si32(r);
+    }
+}
+
+static inline void discard_pixels(__m128i r, int span, uint8_t* buf, int discarded) {
+    if (span < 4) discarded |= 0xF << span;
+    if (!(discarded & 1)) *(int32_t*)buf = _mm_cvtsi128_si32(r);
+    if (!(discarded & 2)) *(int32_t*)(buf + 4) = _mm_cvtsi128_si32(_mm_shuffle_epi32(r, 0x55));
+    if (!(discarded & 4)) *(int32_t*)(buf + 8) = _mm_cvtsi128_si32(_mm_shuffle_epi32(r, 0xAA));
+    if (!(discarded & 8)) *(int32_t*)(buf + 12) = _mm_cvtsi128_si32(_mm_shuffle_epi32(r, 0xFF));
+}
+
 void triangle(brush_solid_frag &shader, brush_solid_vert::FlatOutputs &flat_outs, brush_solid_vert::InterpOutputs interp_outs[4], Point a, Point b, Point c) {
         float fx0 = 0;
         float fy0 = 0;
@@ -811,7 +952,6 @@ void triangle(brush_solid_frag &shader, brush_solid_vert::FlatOutputs &flat_outs
         int shaded_pixels = 0;
         int shaded_lines = 0;
         frag_shader.read_flat_inputs(flat_outs);
-        int dbg_pixel = 0;
         fbuf += int(y) * fstride;
         while (y < fy1) {
             if (y > l1.y) {
@@ -858,142 +998,16 @@ void triangle(brush_solid_frag &shader, brush_solid_vert::FlatOutputs &flat_outs
                     frag_shader.main();
                     frag_shader.step_interp_inputs(stepo);
                     int discarded = _mm_movemask_ps(frag_shader.isPixelDiscarded);
-                    if (discarded == 0xF) { frag_shader.isPixelDiscarded = false; continue; }
-                    __m128i r;
-                    {
-                        auto output = frag_shader.get_output() * 255.5f;
-                        __m128i rxz = _mm_packs_epi32(_mm_cvtps_epi32(output.x), _mm_cvtps_epi32(output.z));
-                        __m128i ryw = _mm_packs_epi32(_mm_cvtps_epi32(output.y), _mm_cvtps_epi32(output.w));
-                        __m128i rxy = _mm_unpacklo_epi16(rxz, ryw);
-                        __m128i rzw = _mm_unpackhi_epi16(rxz, ryw);
-                        __m128i rlo = _mm_unpacklo_epi32(rxy, rzw);
-                        __m128i rhi = _mm_unpackhi_epi32(rxy, rzw);
-                        r = _mm_packus_epi16(rlo, rhi);
-                    }
-                    dbg_pixel = _mm_cvtsi128_si32(r);
-                    if (blend) {
-                        const __m128i zero = _mm_setzero_si128();
-                        __m128i slo = _mm_unpacklo_epi8(r, zero);
-                        __m128i shi = _mm_unpackhi_epi8(r, zero);
-                        __m128i dlo, dhi;
-                        if (span & ~3) {
-                            __m128i dst = _mm_loadu_si128((__m128i*)buf);
-                            dlo = _mm_unpacklo_epi8(dst, zero);
-                            dhi = _mm_unpackhi_epi8(dst, zero);
-                        } else if (span & 2) {
-                            dlo = _mm_unpacklo_epi8(_mm_loadl_epi64((__m128i*)buf), zero);
-                            dhi = span & 1 ? _mm_unpacklo_epi8(_mm_cvtsi32_si128(*(int32_t*)(buf + 8)), zero) : zero;
+                    if (discarded < 0xF) {
+                        __m128i r = pack_pixels(frag_shader.get_output());
+                        if (blend) {
+                            r = blend_pixels(r, span, buf);
+                        }
+                        if (discarded) {
+                            discard_pixels(r, span, buf, discarded);
                         } else {
-                            dlo = _mm_unpacklo_epi8(_mm_cvtsi32_si128(*(int32_t*)buf), zero);
-                            dhi = zero;
+                            write_pixels(r, span, buf);
                         }
-                        // (x*y + x) >> 8, cheap approximation of (x*y) / 255
-                        #define muldiv255(x, y) ({ __m128i b = x; _mm_srli_epi16(_mm_add_epi16(_mm_mullo_epi16(b, y), b), 8); })
-                        #define alphas(c) _mm_shufflehi_epi16(_mm_shufflelo_epi16(c, 0xFF), 0xFF)
-                        switch ((blendfunc_srgb << 16) | blendfunc_drgb) {
-                        case (GL_SRC_ALPHA << 16) | GL_ONE_MINUS_SRC_ALPHA:
-                            r = _mm_packus_epi16(
-                                    _mm_add_epi16(muldiv255(_mm_sub_epi16(slo, dlo), alphas(slo)), dlo),
-                                    _mm_add_epi16(muldiv255(_mm_sub_epi16(shi, dhi), alphas(shi)), dhi));
-                            break;
-                        case (GL_CONSTANT_COLOR << 16) | GL_ONE_MINUS_SRC_COLOR:
-                            r = _mm_packus_epi16(
-                                    _mm_add_epi16(dlo, muldiv255(_mm_sub_epi16(blendcolor, dlo), slo)),
-                                    _mm_add_epi16(dhi, muldiv255(_mm_sub_epi16(blendcolor, dhi), shi)));
-                            break;
-                        case (GL_ONE << 16) | GL_ONE_MINUS_SRC_COLOR:
-                            r = _mm_packus_epi16(
-                                    _mm_add_epi16(slo, _mm_sub_epi16(dlo, muldiv255(dlo, slo))),
-                                    _mm_add_epi16(shi, _mm_sub_epi16(dhi, muldiv255(dhi, shi))));
-                            break;
-                        case (GL_ONE << 16) | GL_ONE_MINUS_SRC_ALPHA:
-                            r = _mm_packus_epi16(
-                                    _mm_add_epi16(slo, _mm_sub_epi16(dlo, muldiv255(dlo, alphas(slo)))),
-                                    _mm_add_epi16(shi, _mm_sub_epi16(dhi, muldiv255(dhi, alphas(shi)))));
-                            break;
-                        case (GL_ZERO << 16) | GL_ONE_MINUS_SRC_COLOR:
-                            r = _mm_packus_epi16(
-                                    _mm_sub_epi16(dlo, muldiv255(dlo, slo)),
-                                    _mm_sub_epi16(dhi, muldiv255(dhi, shi)));
-                            break;
-                        case (GL_ZERO << 16) | GL_ONE_MINUS_SRC_ALPHA:
-                            r = _mm_packus_epi16(
-                                    _mm_sub_epi16(dlo, muldiv255(dlo, alphas(slo))),
-                                    _mm_sub_epi16(dhi, muldiv255(dhi, alphas(shi))));
-                            break;
-                        case (GL_ZERO << 16) | GL_SRC_COLOR:
-                            r = _mm_packus_epi16(
-                                    muldiv255(slo, dlo),
-                                    muldiv255(shi, dhi));
-                            break;
-                        case (GL_ZERO << 16) | GL_SRC_ALPHA:
-                            r = _mm_packus_epi16(
-                                    muldiv255(alphas(slo), dlo),
-                                    muldiv255(alphas(shi), dhi));
-                            break;
-                        case (GL_ONE << 16) | GL_ONE:
-                            r = _mm_packus_epi16(_mm_add_epi16(slo, dlo), _mm_add_epi16(shi, dhi));
-                            break;
-                        case (GL_ZERO << 16) | GL_ONE:
-                            r = _mm_packus_epi16(dlo, dhi);
-                            break;
-                        case (GL_ONE << 16) | GL_ZERO:
-                            r = _mm_packus_epi16(slo, shi);
-                            break;
-                        case (GL_ONE_MINUS_DST_ALPHA << 16) | GL_ONE:
-                            r = _mm_packus_epi16(
-                                    _mm_add_epi16(dlo, _mm_sub_epi16(slo, muldiv255(slo, alphas(slo)))),
-                                    _mm_add_epi16(dhi, _mm_sub_epi16(shi, muldiv255(shi, alphas(shi)))));
-                            break;
-                        default:
-                            assert(false);
-                            break;
-                        }
-                        if (blendfunc_separate) {
-                            __m128i a;
-                            switch ((blendfunc_sa << 16) | blendfunc_da) {
-                            case (GL_ONE << 16) | GL_ONE:
-                                a = _mm_packus_epi16(_mm_add_epi16(dlo, slo), _mm_add_epi16(dhi, shi));
-                                break;
-                            case (GL_ZERO << 16) | GL_ONE:
-                                a = _mm_packus_epi16(dlo, dhi);
-                                break;
-                            case (GL_ONE << 16) | GL_ZERO:
-                                a = _mm_packus_epi16(slo, shi);
-                                break;
-                            case (GL_ONE << 16) | GL_ONE_MINUS_SRC_COLOR:
-                                a = _mm_packus_epi16(
-                                        _mm_add_epi16(slo, _mm_sub_epi16(dlo, muldiv255(dlo, slo))),
-                                        _mm_add_epi16(shi, _mm_sub_epi16(dhi, muldiv255(dhi, shi))));
-                                break;
-                            case (GL_ZERO << 16) | GL_SRC_COLOR:
-                                a = _mm_packus_epi16(
-                                        muldiv255(dlo, slo),
-                                        muldiv255(dhi, shi));
-                            default:
-                                assert(false);
-                                break;
-                            }
-                            r = _mm_or_si128(_mm_and_si128(_mm_set1_epi32(0x00FFFFFF), r),
-                                             _mm_andnot_si128(_mm_set1_epi32(0x00FFFFFF), a));
-                        }
-                    }
-                    if (!discarded) {
-                        if (span & ~3) {
-                            _mm_storeu_si128((__m128i*)buf, r);
-                        } else if (span & 2) {
-                            _mm_storel_epi64((__m128i*)buf, r);
-                            if (span & 1) *(int32_t*)(buf + 8) = _mm_cvtsi128_si32(_mm_shuffle_epi32(r, 0xAA));
-                        } else {
-                            *(int32_t*)buf = _mm_cvtsi128_si32(r);
-                        }
-                    } else {
-                        if (span < 4) discarded |= 0xF << span;
-                        if (!(discarded & 1)) *(int32_t*)buf = _mm_cvtsi128_si32(r);
-                        if (!(discarded & 2)) *(int32_t*)(buf + 4) = _mm_cvtsi128_si32(_mm_shuffle_epi32(r, 0x55));
-                        if (!(discarded & 4)) *(int32_t*)(buf + 8) = _mm_cvtsi128_si32(_mm_shuffle_epi32(r, 0xAA));
-                        if (!(discarded & 8)) *(int32_t*)(buf + 12) = _mm_cvtsi128_si32(_mm_shuffle_epi32(r, 0xFF));
-                        frag_shader.isPixelDiscarded = false;
                     }
                     buf += fbpp * 4;
                 }
@@ -1007,6 +1021,7 @@ void triangle(brush_solid_frag &shader, brush_solid_vert::FlatOutputs &flat_outs
         }
 
         auto output = get_nth(frag_shader.get_output(), 0);
+        int dbg_pixel = _mm_cvtsi128_si32(pack_pixels(frag_shader.get_output()));
         printf("color %f %f %f %f -> %x\n", output.x, output.y, output.z, output.w, dbg_pixel);
 #ifdef  __MACH__
         double end = mach_absolute_time();
