@@ -815,6 +815,43 @@ Vec3f barycentric(Point a, Point b, Point c, Point p) {
 static const size_t fw = 2048;
 static const size_t fh = 2048;
 static uint8_t fdata[fw * fh * 4];
+static uint16_t fzdata[fw * fh];
+
+static inline int check_depth(uint16_t z, int span, uint16_t* zbuf, int discarded) {
+    // SSE2 does not support unsigned comparison, so bias Z to be negative.
+    z -= 0x8000;
+    __m128i src = _mm_set1_epi16(z);
+    __m128i dest;
+    if (span & ~3) {
+        dest = _mm_loadl_epi64((__m128i*)zbuf);
+    } else if (span & 2) {
+        dest = _mm_cvtsi32_si128(*(int32_t*)zbuf);
+        if (span & 1) dest = _mm_unpacklo_epi32(dest, _mm_cvtsi32_si128(zbuf[2]));
+    } else {
+        dest = _mm_cvtsi32_si128(*(int32_t*)zbuf);
+    }
+    __m128i mask;
+    // Invert the depth test to check which pixels failed.
+    switch (depthfunc) {
+    case GL_LESS:
+        // No greater-than-equal in SSE2, so just bias the source depth plus 1.
+        mask = _mm_cmpgt_epi16(_mm_adds_epi16(src, _mm_set1_epi16(1)), dest);
+        break;
+    case GL_LEQUAL:
+        mask = _mm_cmpgt_epi16(src, dest);
+        break;
+    default: assert(false); break;
+    }
+    discarded |= _mm_movemask_ps(mask);
+    if (depthmask) {
+        if (span < 4) discarded |= 0xF << span;
+        if (!(discarded & 1)) zbuf[0] = z;
+        if (!(discarded & 2)) zbuf[1] = z;
+        if (!(discarded & 4)) zbuf[2] = z;
+        if (!(discarded & 8)) zbuf[3] = z;
+    }
+    return discarded;
+}
 
 static inline __m128i pack_pixels(vec4 output) {
     output *= 255.5f;
@@ -957,12 +994,13 @@ static inline void discard_pixels(__m128i r, int span, uint8_t* buf, int discard
     if (!(discarded & 8)) *(int32_t*)(buf + 12) = _mm_cvtsi128_si32(_mm_shuffle_epi32(r, 0xFF));
 }
 
-void triangle(brush_solid_frag &shader, brush_solid_vert::FlatOutputs &flat_outs, brush_solid_vert::InterpOutputs interp_outs[4], Point a, Point b, Point c) {
+void triangle(brush_solid_frag &shader, brush_solid_vert::FlatOutputs &flat_outs, brush_solid_vert::InterpOutputs interp_outs[4], Point a, Point b, Point c, uint16_t z) {
         float fx0 = 0;
         float fy0 = 0;
         float fx1 = fw;
         float fy1 = fh;
         uint8_t *fbuf = fdata;
+        uint16_t *fdepth = fzdata;
         size_t fbpp = 4;
         size_t fstride = fw * fbpp;
 
@@ -1064,6 +1102,7 @@ void triangle(brush_solid_frag &shader, brush_solid_vert::FlatOutputs &flat_outs
         int shaded_lines = 0;
         frag_shader.read_flat_inputs(flat_outs);
         fbuf += int(y) * fstride;
+        fdepth += int(y) * fw;
         while (y < fy1) {
             if (y > l1.y) {
                 l0i = l1i;
@@ -1105,11 +1144,15 @@ void triangle(brush_solid_frag &shader, brush_solid_vert::FlatOutputs &flat_outs
                 }
                 stepo = stepo * 4;
                 uint8_t* buf = fbuf + startx * fbpp;
+                uint16_t* depth = fdepth + startx;
                 for (; span > 0; span -= 4) {
                     frag_shader.main();
                     frag_shader.step_interp_inputs(stepo);
                     int discarded = _mm_movemask_ps(frag_shader.isPixelDiscarded);
                     if (discarded < 0xF) {
+                        if (depthtest) {
+                            discarded = check_depth(z, span, depth, discarded);
+                        }
                         __m128i r = pack_pixels(frag_shader.get_output());
                         if (blend) {
                             r = blend_pixels(r, span, buf);
@@ -1121,6 +1164,7 @@ void triangle(brush_solid_frag &shader, brush_solid_vert::FlatOutputs &flat_outs
                         }
                     }
                     buf += fbpp * 4;
+                    depth += 4;
                 }
             }
             lx += lm;
@@ -1198,7 +1242,8 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
                                         c = Point { xw, yw };
                                         printf("%f %f\n", xw, yw);
                                 }
-                                triangle(frag_shader, flat_outs, interp_outs, a, b, c);
+                                uint16_t z = uint16_t(0xFFFF * (1.0f + 0.5f * gl_Position.z.x / gl_Position.w.x));
+                                triangle(frag_shader, flat_outs, interp_outs, a, b, c, z);
                         }
 
                 } else {
