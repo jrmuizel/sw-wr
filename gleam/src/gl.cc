@@ -140,6 +140,35 @@ struct Viewport {
 
 Viewport viewport;
 
+#define GL_BLEND                0x0BE2
+#define GL_ZERO                 0
+#define GL_ONE                  1
+#define GL_SRC_COLOR            0x0300
+#define GL_ONE_MINUS_SRC_COLOR  0x0301
+#define GL_SRC_ALPHA            0x0302
+#define GL_ONE_MINUS_SRC_ALPHA  0x0303
+#define GL_DST_ALPHA            0x0304
+#define GL_ONE_MINUS_DST_ALPHA  0x0305
+#define GL_DST_COLOR            0x0306
+#define GL_ONE_MINUS_DST_COLOR  0x0307
+#define GL_CONSTANT_COLOR           0x8001U
+#define GL_ONE_MINUS_CONSTANT_COLOR 0x8002U
+#define GL_CONSTANT_ALPHA           0x8003U
+#define GL_ONE_MINUS_CONSTANT_ALPHA 0x8004U
+
+bool blend = false;
+GLenum blendfunc_srgb = GL_ONE;
+GLenum blendfunc_drgb = GL_ZERO;
+GLenum blendfunc_sa = GL_ONE;
+GLenum blendfunc_da = GL_ZERO;
+bool blendfunc_separate = false;
+
+#define GL_FUNC_ADD                       0x8006
+
+GLenum blend_equation_mode = GL_FUNC_ADD;
+
+__m128i blendcolor = _mm_set1_epi16(0);
+
 using namespace glsl;
 
 #define GL_TEXTURE0                       0x84C0
@@ -235,9 +264,53 @@ void SetViewport(int x, int y, int width, int height) {
 	viewport.y = y;
 	viewport.width = width;
 	viewport.height = height;
-
 }
 
+void Enable(GLenum cap) {
+    switch (cap) {
+    case GL_BLEND: blend = true; break;
+    }
+}
+
+void Disable(GLenum cap) {
+    switch (cap) {
+    case GL_BLEND: blend = false; break;
+    }
+}
+
+void BlendFunc(GLenum srgb, GLenum drgb, GLenum sa, GLenum da) {
+    blendfunc_srgb = srgb;
+    blendfunc_drgb = drgb;
+    switch (sa) {
+    case GL_SRC_ALPHA: sa = GL_SRC_COLOR; break;
+    case GL_ONE_MINUS_SRC_ALPHA: sa = GL_ONE_MINUS_SRC_COLOR; break;
+    case GL_DST_ALPHA: sa = GL_DST_COLOR; break;
+    case GL_ONE_MINUS_DST_ALPHA: sa = GL_ONE_MINUS_DST_COLOR; break;
+    case GL_CONSTANT_ALPHA: sa = GL_CONSTANT_COLOR; break;
+    case GL_ONE_MINUS_CONSTANT_ALPHA: sa = GL_ONE_MINUS_CONSTANT_COLOR; break;
+    }
+    blendfunc_sa = sa;
+    switch (da) {
+    case GL_SRC_ALPHA: da = GL_SRC_COLOR; break;
+    case GL_ONE_MINUS_SRC_ALPHA: da = GL_ONE_MINUS_SRC_COLOR; break;
+    case GL_DST_ALPHA: da = GL_DST_COLOR; break;
+    case GL_ONE_MINUS_DST_ALPHA: da = GL_ONE_MINUS_DST_COLOR; break;
+    case GL_CONSTANT_ALPHA: da = GL_CONSTANT_COLOR; break;
+    case GL_ONE_MINUS_CONSTANT_ALPHA: da = GL_ONE_MINUS_CONSTANT_COLOR; break;
+    }
+    blendfunc_da = da;
+    blendfunc_separate = srgb != sa || drgb != da;
+}
+
+void BlendColor(GLfloat r, GLfloat g, GLfloat b, GLfloat a) {
+        __m128i c32 = _mm_cvtps_epi32(_mm_mul_ps(_mm_set_ps(a, b, g, r), _mm_set1_ps(255.5f)));
+        blendcolor = _mm_packs_epi32(c32, c32);
+}
+
+void BlendEquation(GLenum mode) {
+        assert(mode == GL_FUNC_ADD);
+        blend_equation_mode = mode;
+}
 
 void ActiveTexture(GLenum texture) {
         assert(texture >= GL_TEXTURE0);
@@ -635,7 +708,39 @@ Vec3f barycentric(Point a, Point b, Point c, Point p) {
         return Vec3f{-1,1,1}; // in this case generate negative coordinates, it will be thrown away by the rasterizator
 }
 
+static const size_t fw = 2048;
+static const size_t fh = 2048;
+static uint8_t fdata[fw * fh * 4];
+
 void triangle(brush_solid_frag &shader, brush_solid_vert::FlatOutputs &flat_outs, brush_solid_vert::InterpOutputs interp_outs[4], Point a, Point b, Point c) {
+        float fx0 = 0;
+        float fy0 = 0;
+        float fx1 = fw;
+        float fy1 = fh;
+        uint8_t *fbuf = fdata;
+        size_t fbpp = 4;
+        size_t fstride = fw * fbpp;
+
+        GLuint fbid = current_framebuffer[GL_DRAW_FRAMEBUFFER];
+        if (fbid != 0) {
+            auto fbi = framebuffers.find(fbid);
+            if (fbi != framebuffers.end()) {
+                const Framebuffer &fb = fbi->second;
+                auto ti = textures.find(fb.color_attachment);
+                if (ti != textures.end()) {
+                    const Texture &t = ti->second;
+                    printf("internal_format: %x, width: %d, height: %d\n", t.internal_format, t.width, t.height);
+                } else {
+                    printf("unbound color attachment %d for framebuffer %d\n", fb.color_attachment, fbid);
+                }
+            } else {
+                printf("unbound framebuffer %d\n", fbid);
+            }
+            assert(false);
+        } else {
+            printf("default framebuffer 0\n");
+        }
+
 #ifdef  __MACH__
         double start = mach_absolute_time();
 #else
@@ -689,84 +794,232 @@ void triangle(brush_solid_frag &shader, brush_solid_vert::FlatOutputs &flat_outs
             r1 = p[r1i];
         }
 
-        Point l = l0;
+        float lx = l0.x;
         float lm = (l1.x - l0.x) / (l1.y - l0.y);
-        Point r = r0;
+        float rx = r0.x;
         float rm = (r1.x - r0.x) / (r1.y - r0.y);
-        assert(l.y == r.y);
-        l.y = r.y = floor(l.y + 0.5f) + 0.5f;
-        l.x += (l.y - l0.y) * lm;
-        r.x += (r.y - r0.y) * rm;
+        assert(l0.y == r0.y);
+        float y = floor(std::max(l0.y, fy0) + 0.5f) + 0.5f;
+        lx += (y - l0.y) * lm;
+        rx += (y - r0.y) * rm;
         brush_solid_vert::InterpOutputs lo = interp_outs[l0i];
         brush_solid_vert::InterpOutputs lom = (interp_outs[l1i] - lo) * (1.0f / (l1.y - l0.y));
-        lo = lo + lom * (l.y - l0.y);
+        lo = lo + lom * (y - l0.y);
         brush_solid_vert::InterpOutputs ro = interp_outs[r0i];
         brush_solid_vert::InterpOutputs rom = (interp_outs[r1i] - ro) * (1.0f / (r1.y - r0.y));
-        ro = ro + rom * (r.y - r0.y);
+        ro = ro + rom * (y - r0.y);
         int shaded_pixels = 0;
+        int shaded_lines = 0;
         frag_shader.read_flat_inputs(flat_outs);
-        while (true) {
-            if (l.y > l1.y) {
+        int dbg_pixel = 0;
+        fbuf += int(y) * fstride;
+        while (y < fy1) {
+            if (y > l1.y) {
                 l0i = l1i;
                 l0 = l1;
                 l1i = (l1i+1)%3;
                 l1 = p[l1i];
                 if (l1.y <= l0.y) break;
                 lm = (l1.x - l0.x) / (l1.y - l0.y);
-                l.x = l0.x + (l.y - l0.y) * lm;
+                lx = l0.x + (y - l0.y) * lm;
                 lo = interp_outs[l0i];
                 lom = (interp_outs[l1i] - lo) * (1.0f / (l1.y - l0.y));
-                lo = lo + lom * (l.y - l0.y);
+                lo = lo + lom * (y - l0.y);
             }
-            if (r.y > r1.y) {
+            if (y > r1.y) {
                 r0i = r1i;
                 r0 = r1;
                 r1i = (r1i+2)%3;
                 r1 = p[r1i];
                 if (r1.y <= r0.y) break;
                 rm = (r1.x - r0.x) / (r1.y - r0.y);
-                r.x = r0.x + (r.y - r0.y) * rm;
+                rx = r0.x + (y - r0.y) * rm;
                 ro = interp_outs[r0i];
                 rom = (interp_outs[r1i] - ro) * (1.0f / (r1.y - r0.y));
-                ro = ro + rom * (r.y - r0.y);
+                ro = ro + rom * (y - r0.y);
             }
-            Point p = l;
-            p.x = floor(l.x + 0.5f) + 0.5f;
-            if (p.x < r.x) {
-                brush_solid_vert::InterpOutputs stepo = (ro - lo) * (1.0f / (r.x - l.x));
+            int startx = int(std::max(lx, fx0) + 0.5f);
+            int endx = int(std::min(rx, fx1) + 0.5f);
+            int span = endx - startx;
+            if (span > 0) {
+                shaded_lines++;
+                shaded_pixels += span;
+                brush_solid_vert::InterpOutputs stepo = (ro - lo) * (1.0f / (rx - lx));
                 {
-                    brush_solid_vert::InterpOutputs o0 = lo + stepo * (p.x - l.x);
+                    brush_solid_vert::InterpOutputs o0 = lo + stepo * (startx + 0.5f - lx);
                     brush_solid_vert::InterpOutputs o1 = o0 + stepo;
                     brush_solid_vert::InterpOutputs o2 = o1 + stepo;
                     brush_solid_vert::InterpOutputs o3 = o2 + stepo;
                     frag_shader.read_interp_inputs(o0, o1, o2, o3);
                 }
                 stepo = stepo * 4;
-                for (; p.x < r.x; p.x += 4) {
-                    shaded_pixels += 4;
+                uint8_t* buf = fbuf + startx * fbpp;
+                for (; span > 0; span -= 4) {
                     frag_shader.main();
                     frag_shader.step_interp_inputs(stepo);
+                    int discarded = _mm_movemask_epi8(frag_shader.isPixelDiscarded);
+                    if (discarded == 0xFFFF) continue;
+                    auto output = frag_shader.get_output() * 255.5f;
+                    __m128i rxz = _mm_packs_epi32(_mm_cvtps_epi32(output.x), _mm_cvtps_epi32(output.z));
+                    __m128i ryw = _mm_packs_epi32(_mm_cvtps_epi32(output.y), _mm_cvtps_epi32(output.w));
+                    __m128i rxy = _mm_unpacklo_epi16(rxz, ryw);
+                    __m128i rzw = _mm_unpackhi_epi16(rxz, ryw);
+                    __m128i rlo = _mm_unpacklo_epi32(rxy, rzw);
+                    __m128i rhi = _mm_unpackhi_epi32(rxy, rzw);
+                    __m128i r = _mm_packus_epi16(rlo, rhi);
+                    dbg_pixel = _mm_cvtsi128_si32(r);
+                    if (blend) {
+                        const __m128i zero = _mm_setzero_si128();
+                        __m128i slo = _mm_unpacklo_epi8(r, zero);
+                        __m128i shi = _mm_unpackhi_epi8(r, zero);
+                        __m128i dlo, dhi;
+                        switch (span) {
+                            case 3:
+                                dlo = _mm_unpacklo_epi8(_mm_loadl_epi64((__m128i*)buf), zero);
+                                dhi = _mm_unpacklo_epi8(_mm_cvtsi32_si128(*(int32_t*)(buf + 8)), zero);
+                                break;
+                            case 2:
+                                dlo = _mm_unpacklo_epi8(_mm_loadl_epi64((__m128i*)buf), zero);
+                                dhi = zero;
+                                break;
+                            case 1:
+                                dlo = _mm_unpacklo_epi8(_mm_cvtsi32_si128(*(int32_t*)buf), zero);
+                                dhi = zero;
+                                break;
+                            default: {
+                                __m128i dst = _mm_loadu_si128((__m128i*)buf);
+                                dlo = _mm_unpacklo_epi8(dst, zero);
+                                dhi = _mm_unpackhi_epi8(dst, zero);
+                                break;
+                            }
+                        }
+                        // (x*y + x) >> 8, cheap approximation of (x*y) / 255
+                        #define muldiv255(x, y) ({ __m128i b = x; _mm_srli_epi16(_mm_add_epi16(_mm_mullo_epi16(b, y), b), 8); })
+                        #define alphas(c) _mm_shufflehi_epi16(_mm_shufflelo_epi16(c, 0xFF), 0xFF)
+                        switch ((blendfunc_srgb << 16) | blendfunc_drgb) {
+                        case (GL_SRC_ALPHA << 16) | GL_ONE_MINUS_SRC_ALPHA:
+                            r = _mm_packus_epi16(
+                                    _mm_add_epi16(muldiv255(_mm_sub_epi16(slo, dlo), alphas(slo)), dlo),
+                                    _mm_add_epi16(muldiv255(_mm_sub_epi16(shi, dhi), alphas(shi)), dhi));
+                            break;
+                        case (GL_CONSTANT_COLOR << 16) | GL_ONE_MINUS_SRC_COLOR:
+                            r = _mm_packus_epi16(
+                                    _mm_add_epi16(dlo, muldiv255(_mm_sub_epi16(blendcolor, dlo), slo)),
+                                    _mm_add_epi16(dhi, muldiv255(_mm_sub_epi16(blendcolor, dhi), shi)));
+                            break;
+                        case (GL_ONE << 16) | GL_ONE_MINUS_SRC_COLOR:
+                            r = _mm_packus_epi16(
+                                    _mm_add_epi16(slo, _mm_sub_epi16(dlo, muldiv255(dlo, slo))),
+                                    _mm_add_epi16(shi, _mm_sub_epi16(dhi, muldiv255(dhi, shi))));
+                            break;
+                        case (GL_ONE << 16) | GL_ONE_MINUS_SRC_ALPHA:
+                            r = _mm_packus_epi16(
+                                    _mm_add_epi16(slo, _mm_sub_epi16(dlo, muldiv255(dlo, alphas(slo)))),
+                                    _mm_add_epi16(shi, _mm_sub_epi16(dhi, muldiv255(dhi, alphas(shi)))));
+                            break;
+                        case (GL_ZERO << 16) | GL_ONE_MINUS_SRC_COLOR:
+                            r = _mm_packus_epi16(
+                                    _mm_sub_epi16(dlo, muldiv255(dlo, slo)),
+                                    _mm_sub_epi16(dhi, muldiv255(dhi, shi)));
+                            break;
+                        case (GL_ZERO << 16) | GL_ONE_MINUS_SRC_ALPHA:
+                            r = _mm_packus_epi16(
+                                    _mm_sub_epi16(dlo, muldiv255(dlo, alphas(slo))),
+                                    _mm_sub_epi16(dhi, muldiv255(dhi, alphas(shi))));
+                            break;
+                        case (GL_ZERO << 16) | GL_SRC_COLOR:
+                            r = _mm_packus_epi16(
+                                    muldiv255(slo, dlo),
+                                    muldiv255(shi, dhi));
+                            break;
+                        case (GL_ZERO << 16) | GL_SRC_ALPHA:
+                            r = _mm_packus_epi16(
+                                    muldiv255(alphas(slo), dlo),
+                                    muldiv255(alphas(shi), dhi));
+                            break;
+                        case (GL_ONE << 16) | GL_ONE:
+                            r = _mm_packus_epi16(_mm_add_epi16(slo, dlo), _mm_add_epi16(shi, dhi));
+                            break;
+                        case (GL_ZERO << 16) | GL_ONE:
+                            r = _mm_packus_epi16(dlo, dhi);
+                            break;
+                        case (GL_ONE << 16) | GL_ZERO:
+                            r = _mm_packus_epi16(slo, shi);
+                            break;
+                        case (GL_ONE_MINUS_DST_ALPHA << 16) | GL_ONE:
+                            r = _mm_packus_epi16(
+                                    _mm_add_epi16(dlo, _mm_sub_epi16(slo, muldiv255(slo, alphas(slo)))),
+                                    _mm_add_epi16(dhi, _mm_sub_epi16(shi, muldiv255(shi, alphas(shi)))));
+                            break;
+                        default:
+                            assert(false);
+                            break;
+                        }
+                        if (blendfunc_separate) {
+                            __m128i a;
+                            switch ((blendfunc_sa << 16) | blendfunc_da) {
+                            case (GL_ONE << 16) | GL_ONE:
+                                a = _mm_packus_epi16(_mm_add_epi16(dlo, slo), _mm_add_epi16(dhi, shi));
+                                break;
+                            case (GL_ZERO << 16) | GL_ONE:
+                                a = _mm_packus_epi16(dlo, dhi);
+                                break;
+                            case (GL_ONE << 16) | GL_ZERO:
+                                a = _mm_packus_epi16(slo, shi);
+                                break;
+                            case (GL_ONE << 16) | GL_ONE_MINUS_SRC_COLOR:
+                                a = _mm_packus_epi16(
+                                        _mm_add_epi16(slo, _mm_sub_epi16(dlo, muldiv255(dlo, slo))),
+                                        _mm_add_epi16(shi, _mm_sub_epi16(dhi, muldiv255(dhi, shi))));
+                                break;
+                            case (GL_ZERO << 16) | GL_SRC_COLOR:
+                                a = _mm_packus_epi16(
+                                        muldiv255(dlo, slo),
+                                        muldiv255(dhi, shi));
+                            default:
+                                assert(false);
+                                break;
+                            }
+                            r = _mm_or_si128(_mm_and_si128(_mm_set1_epi32(0x00FFFFFF), r),
+                                             _mm_andnot_si128(_mm_set1_epi32(0x00FFFFFF), a));
+                        }
+                    }
+                    if (!discarded) {
+                        switch (span) {
+                        case 3:
+                            _mm_storel_epi64((__m128i*)buf, r);
+                            *(int32_t*)(buf + 8) = _mm_cvtsi128_si32(_mm_shuffle_epi32(r, 0xAA));
+                            break;
+                        case 2: _mm_storel_epi64((__m128i*)buf, r); break;
+                        case 1: *(int32_t*)buf = _mm_cvtsi128_si32(r); break;
+                        default: _mm_storeu_si128((__m128i*)buf, r); break;
+                        }
+                    } else {
+                        if (span < 4) discarded |= 0xFFFF << (span*4);
+                        if (!(discarded & 0x000F)) *(int32_t*)buf = _mm_cvtsi128_si32(r);
+                        if (!(discarded & 0x00F0)) *(int32_t*)(buf + 4) = _mm_cvtsi128_si32(_mm_shuffle_epi32(r, 0x55));
+                        if (!(discarded & 0x0F00)) *(int32_t*)(buf + 8) = _mm_cvtsi128_si32(_mm_shuffle_epi32(r, 0xAA));
+                        if (!(discarded & 0xF000)) *(int32_t*)(buf + 12) = _mm_cvtsi128_si32(_mm_shuffle_epi32(r, 0xFF));
+                    }
+                    buf += fbpp * 4;
                 }
             }
-            l.x += lm;
-            l.y++;
-            r.x += rm;
-            r.y++;
+            lx += lm;
+            rx += rm;
+            y++;
             lo = lo + lom;
             ro = ro + rom;
+            fbuf += fstride;
         }
 
-        printf("color %f %f %f %f\n",
-               frag_shader.oFragColor.x.x,
-               frag_shader.oFragColor.y.x,
-               frag_shader.oFragColor.z.x,
-               frag_shader.oFragColor.w.x);
+        auto output = get_nth(frag_shader.get_output(), 0);
+        printf("color %f %f %f %f -> %x\n", output.x, output.y, output.z, output.w, dbg_pixel);
 #ifdef  __MACH__
         double end = mach_absolute_time();
 #else
         double end = ({ struct timespec tp; clock_gettime(CLOCK_MONOTONIC, &tp); tp.tv_sec * 1e9 + tp.tv_nsec; });
 #endif
-        printf("%fms for %d pixels\n", (end - start)/(1000.*1000.), shaded_pixels);
+        printf("%fms for %d pixels in %d rows\n", (end - start)/(1000.*1000.), shaded_pixels, shaded_lines);
 }
 
 void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indices, GLsizei instancecount) {
@@ -835,21 +1088,4 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
         printf("dodraw");
 }
 
-#define GL_ZERO                           0
-#define GL_ONE                            1
-#define GL_FUNC_ADD                       0x8006
-
-GLenum blend_sfactor = GL_ONE;
-GLenum blend_dfactor = GL_ZERO;
-GLenum blend_equation_mode = GL_FUNC_ADD;
-
-void BlendFunc(GLenum sfactor, GLenum dfactor) {
-        blend_sfactor = sfactor;
-        blend_dfactor = dfactor;
-}
-
-void BlendEquation(GLenum mode) {
-        assert(mode == GL_FUNC_ADD);
-        blend_equation_mode = mode;
-}
 }

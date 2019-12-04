@@ -24,8 +24,11 @@ extern "C" {
     fn BindVertexArray(vao: GLuint);
     fn BindFramebuffer(target: GLenum, fb: GLuint);
     fn BindRenderbuffer(target: GLenum, rb: GLuint);
-    fn BlendFunc(sfactor: GLenum, dfactor: GLenum);
+    fn BlendFunc(srgb: GLenum, drgb: GLenum, sa: GLenum, da: GLenum);
+    fn BlendColor(r: GLfloat, g: GLfloat, b: GLfloat, a: GLfloat);
     fn BlendEquation(mode: GLenum);
+    fn Enable(cap: GLenum);
+    fn Disable(cap: GLenum);
     fn GenBuffers(n: i32, result: *mut u32);
     fn GenTextures(n: i32, result: *mut u32);
     fn GenFramebuffers(n: i32, result: *mut u32);
@@ -102,7 +105,7 @@ extern "C" {
     fn Uniform1i(location: GLint, v0: GLint);
     fn Uniform4fv(location: GLint, count: GLsizei, value: *const GLfloat);
     fn UniformMatrix4fv(location: GLint, count: GLsizei, transpose: GLboolean, value: *const GLfloat);
-    
+
     fn DrawElementsInstanced(mode: GLenum, count: GLsizei, type_: GLenum, indices: *const c_void, instancecount: GLsizei);
     fn EnableVertexAttribArray(index: GLuint);
     fn VertexAttribDivisor(index: GLuint, divisor: GLuint);
@@ -1614,16 +1617,21 @@ impl Gl for GlFns {
     }
 
     fn blend_color(&self, r: f32, g: f32, b: f32, a: f32) {
-        panic!();
         unsafe {
-            self.ffi_gl_.BlendColor(r, g, b, a);
+            if SW {
+                BlendColor(r, g, b, a);
+            } else {
+                self.ffi_gl_.BlendColor(r, g, b, a);
+            }
         }
     }
 
     fn blend_func(&self, sfactor: GLenum, dfactor: GLenum) {
         unsafe {
-            if SW { BlendFunc(sfactor, dfactor); } else {
-            self.ffi_gl_.BlendFunc(sfactor, dfactor);
+            if SW {
+                BlendFunc(sfactor, dfactor, sfactor, dfactor);
+            } else {
+                self.ffi_gl_.BlendFunc(sfactor, dfactor);
             }
         }
     }
@@ -1635,10 +1643,13 @@ impl Gl for GlFns {
         src_alpha: GLenum,
         dest_alpha: GLenum,
     ) {
-        panic!();
         unsafe {
-            self.ffi_gl_
-                .BlendFuncSeparate(src_rgb, dest_rgb, src_alpha, dest_alpha);
+            if SW {
+                BlendFunc(src_rgb, dest_rgb, src_alpha, dest_alpha);
+            } else {
+                self.ffi_gl_
+                    .BlendFuncSeparate(src_rgb, dest_rgb, src_alpha, dest_alpha);
+            }
         }
     }
 
@@ -1687,7 +1698,11 @@ impl Gl for GlFns {
         println!("enable {}", cap);
         //panic!();
         unsafe {
-            self.ffi_gl_.Enable(cap);
+            if SW {
+                Enable(cap);
+            } else {
+                self.ffi_gl_.Enable(cap);
+            }
         }
     }
 
@@ -1695,7 +1710,11 @@ impl Gl for GlFns {
         println!("disable {}", cap);
         //panic!();
         unsafe {
-            self.ffi_gl_.Disable(cap);
+            if SW {
+                Disable(cap);
+            } else {
+                self.ffi_gl_.Disable(cap);
+            }
         }
     }
 

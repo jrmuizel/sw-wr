@@ -718,6 +718,7 @@ template<typename T> void read_interp_inputs(const T& a, const T& b, const T& c,
 template<typename T> void step_interp_inputs(const T& delta) {
   vClipMaskUv += delta.vClipMaskUv;
 }
+vec4 get_output() { return oFragColor; }
 Bool isPixelDiscarded = false;
 vec4 oFragColor;
 sampler2DArray sColor0;
