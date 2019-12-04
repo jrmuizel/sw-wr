@@ -118,6 +118,20 @@ extern "C" {
         level: GLint,
         layer: GLint,
     );
+    fn FramebufferRenderbuffer(
+        target: GLenum,
+        attachment: GLenum,
+        renderbuffertarget: GLenum,
+        renderbuffer: GLuint,
+    );
+    fn RenderbufferStorage(
+        target: GLenum,
+        internalformat: GLenum,
+        width: GLsizei,
+        height: GLsizei,
+    );
+    fn DepthMask(flag: GLboolean);
+    fn DepthFunc(func: GLenum);
 }
 
 impl GlFns {
@@ -525,12 +539,16 @@ impl Gl for GlFns {
                  renderbuffer);
         //panic!();
         unsafe {
-            self.ffi_gl_.FramebufferRenderbuffer(
-                target,
-                attachment,
-                renderbuffertarget,
-                renderbuffer,
-            );
+            if SW {
+                FramebufferRenderbuffer(target, attachment, renderbuffertarget, renderbuffer);
+            } else {
+                self.ffi_gl_.FramebufferRenderbuffer(
+                    target,
+                    attachment,
+                    renderbuffertarget,
+                    renderbuffer,
+                );
+            }
         }
     }
 
@@ -544,8 +562,12 @@ impl Gl for GlFns {
         println!("renderbuffer_storage {} {} {} {}", target, internalformat, width, height);
         //panic!();
         unsafe {
-            self.ffi_gl_
-                .RenderbufferStorage(target, internalformat, width, height);
+            if SW {
+                RenderbufferStorage(target, internalformat, width, height);
+            } else {
+                self.ffi_gl_
+                    .RenderbufferStorage(target, internalformat, width, height);
+            }
         }
     }
 
@@ -553,7 +575,11 @@ impl Gl for GlFns {
         println!("depth_func {}", func);
         //panic!();
         unsafe {
-            self.ffi_gl_.DepthFunc(func);
+            if SW {
+                DepthFunc(func);
+            } else {
+                self.ffi_gl_.DepthFunc(func);
+            }
         }
     }
 
@@ -1984,7 +2010,11 @@ impl Gl for GlFns {
         println!("depth_mask {}", flag);
         //panic!();
         unsafe {
-            self.ffi_gl_.DepthMask(flag as GLboolean);
+            if SW {
+                DepthMask(flag as GLboolean);
+            } else {
+                self.ffi_gl_.DepthMask(flag as GLboolean);
+            }
         }
     }
 

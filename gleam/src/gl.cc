@@ -47,6 +47,11 @@ struct VertexAttrib {
 #define GL_INT                            0x1404
 #define GL_FLOAT                          0x1406
 
+#define GL_DEPTH_COMPONENT                0x1902
+#define GL_DEPTH_COMPONENT16              0x81A5
+#define GL_DEPTH_COMPONENT24              0x81A6
+#define GL_DEPTH_COMPONENT32              0x81A7
+
 int bytes_for_internal_format(GLenum internal_format) {
         switch (internal_format) {
                 case GL_RGBA32F:
@@ -57,6 +62,12 @@ int bytes_for_internal_format(GLenum internal_format) {
                         return 4;
                 case GL_R8:
                         return 1;
+                case GL_DEPTH_COMPONENT:
+                case GL_DEPTH_COMPONENT16:
+                        return 2;
+                case GL_DEPTH_COMPONENT24:
+                case GL_DEPTH_COMPONENT32:
+                        return 4;
                 default:
                         printf("internal format: %x\n", internal_format);
                         assert(0);
@@ -81,9 +92,15 @@ struct Buffer {
 struct Framebuffer {
         GLint color_attachment;
         GLint layer;
+        GLint depth_attachment;
+
+        Framebuffer() : color_attachment(0), layer(0), depth_attachment(0) {}
 };
 
 struct Renderbuffer {
+        GLint texture;
+
+        Renderbuffer() : texture(0) {}
 };
 
 struct Program {
@@ -168,6 +185,20 @@ bool blendfunc_separate = false;
 GLenum blend_equation_mode = GL_FUNC_ADD;
 
 __m128i blendcolor = _mm_set1_epi16(0);
+
+#define GL_NEVER                0x0200
+#define GL_LESS                 0x0201
+#define GL_EQUAL                0x0202
+#define GL_LEQUAL               0x0203
+#define GL_GREATER              0x0204
+#define GL_NOTEQUAL             0x0205
+#define GL_GEQUAL               0x0206
+#define GL_ALWAYS               0x0207
+#define GL_DEPTH_TEST           0x0B71
+
+bool depthtest = false;
+bool depthmask = true;
+GLenum depthfunc = GL_LESS;
 
 using namespace glsl;
 
@@ -269,12 +300,14 @@ void SetViewport(int x, int y, int width, int height) {
 void Enable(GLenum cap) {
     switch (cap) {
     case GL_BLEND: blend = true; break;
+    case GL_DEPTH_TEST: depthtest = true; break;
     }
 }
 
 void Disable(GLenum cap) {
     switch (cap) {
     case GL_BLEND: blend = false; break;
+    case GL_DEPTH_TEST: depthtest = false; break;
     }
 }
 
@@ -310,6 +343,14 @@ void BlendColor(GLfloat r, GLfloat g, GLfloat b, GLfloat a) {
 void BlendEquation(GLenum mode) {
         assert(mode == GL_FUNC_ADD);
         blend_equation_mode = mode;
+}
+
+void DepthMask(GLboolean flag) {
+    depthmask = flag;
+}
+
+void DepthFunc(GLenum func) {
+    depthfunc = func;
 }
 
 void ActiveTexture(GLenum texture) {
@@ -523,6 +564,26 @@ void GenFramebuffers(int n, int *result) {
         }
 }
 
+void RenderbufferStorage(
+        GLenum target,
+        GLenum internalformat,
+        GLsizei width,
+        GLsizei height) {
+    // Just refer a renderbuffer to a texture to simplify things for now...
+    Renderbuffer &r = renderbuffers[current_renderbuffer[target]];
+    GenTextures(1, &r.texture);
+    current_texture[target] = r.texture;
+    switch (internalformat) {
+        case GL_DEPTH_COMPONENT:
+        case GL_DEPTH_COMPONENT24:
+        case GL_DEPTH_COMPONENT32:
+            // Force depth format to 16 bits...
+            internalformat = GL_DEPTH_COMPONENT16;
+            break;
+    }
+    TexStorage2D(target, 1, internalformat, width, height);
+}
+
 int bytes_per_type(GLenum type) {
         switch (type) {
                 case GL_INT: return 4;
@@ -662,6 +723,26 @@ void FramebufferTextureLayer(
         } else {
                 assert(0);
         }
+}
+
+#define GL_RENDERBUFFER                   0x8D41
+
+void FramebufferRenderbuffer(
+    GLenum target,
+    GLenum attachment,
+    GLenum renderbuffertarget,
+    GLuint renderbuffer)
+{
+    assert(target == GL_DRAW_FRAMEBUFFER);
+    assert(renderbuffertarget == GL_RENDERBUFFER);
+    Framebuffer &fb = framebuffers[current_framebuffer[target]];
+    Renderbuffer &rb = renderbuffers[renderbuffer];
+    if (attachment == GL_COLOR_ATTACHMENT0) {
+        fb.color_attachment = rb.texture;
+        fb.layer = 0;
+    } else if (attachment == GL_DEPTH_ATTACHMENT) {
+        fb.depth_attachment = rb.texture;
+    }
 }
 
 #define GL_POINTS                         0x0000
