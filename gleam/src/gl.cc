@@ -1026,8 +1026,8 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
         assert(mode == GL_TRIANGLES);
         assert(type == GL_UNSIGNED_SHORT);
         assert(count == 6);
-        assert(instancecount == 1);
         assert(indices == 0);
+        for (int instance = 0; instance < instancecount; instance++) {
         if (indices == 0) {
                 Buffer &indices_buf = buffers[current_buffer[GL_ELEMENT_ARRAY_BUFFER]];
                 printf("current_vertex_array %d\n", current_vertex_array);
@@ -1048,7 +1048,7 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
                         unsigned short *indices = (unsigned short*)indices_buf.buf;
                         for (int i = 0; i < count; i+=3) {
                                 printf(" %d\n", indices[i]);
-                                shader.load_attribs_for_tri(v.attribs, indices, i);
+                                shader.load_attribs_for_tri(v.attribs, indices, i, instance);
                                 shader.main();
                                 brush_solid_vert::FlatOutputs flat_outs;
                                 shader.store_flat_outputs(flat_outs);
@@ -1084,6 +1084,7 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
                 } else {
                         assert(0);
                 }
+        }
         }
         printf("dodraw");
 }

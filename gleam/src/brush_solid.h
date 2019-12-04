@@ -159,7 +159,7 @@ static void bind_attrib_location(char *name, int index) {
 if (strcmp("aPosition", name) == 0) { aPosition_location_index = index; }
 if (strcmp("aData", name) == 0) { aData_location_index = index; }
 }
-void load_attribs_for_tri(VertexAttrib *attribs, unsigned short *indices, int start) {
+void load_attribs_for_tri(VertexAttrib *attribs, unsigned short *indices, int start, int instance) {
 for (int n = 0; n < 3; n++) {
   VertexAttrib &va = attribs[aPosition_location_index];
   vec3_scalar scalar;
@@ -168,8 +168,7 @@ for (int n = 0; n < 3; n++) {
     src = (char*)va.buf + va.stride * indices[start + n];
   } else {
     assert(va.divisor == 1);
-    // XXX handle multiple instances
-    src = (char*)va.buf;
+    src = (char*)va.buf + va.stride * instance;
   }
   assert(src + va.size <= va.buf + va.buf_size);
   memcpy(&scalar, src, va.size);
@@ -183,8 +182,7 @@ for (int n = 0; n < 3; n++) {
     src = (char*)va.buf + va.stride * indices[start + n];
   } else {
     assert(va.divisor == 1);
-    // XXX handle multiple instances
-    src = (char*)va.buf;
+    src = (char*)va.buf + va.stride * instance;
   }
   assert(src + va.size <= va.buf + va.buf_size);
   memcpy(&scalar, src, va.size);
