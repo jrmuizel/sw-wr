@@ -857,41 +857,35 @@ void triangle(brush_solid_frag &shader, brush_solid_vert::FlatOutputs &flat_outs
                 for (; span > 0; span -= 4) {
                     frag_shader.main();
                     frag_shader.step_interp_inputs(stepo);
-                    int discarded = _mm_movemask_epi8(frag_shader.isPixelDiscarded);
-                    if (discarded == 0xFFFF) continue;
-                    auto output = frag_shader.get_output() * 255.5f;
-                    __m128i rxz = _mm_packs_epi32(_mm_cvtps_epi32(output.x), _mm_cvtps_epi32(output.z));
-                    __m128i ryw = _mm_packs_epi32(_mm_cvtps_epi32(output.y), _mm_cvtps_epi32(output.w));
-                    __m128i rxy = _mm_unpacklo_epi16(rxz, ryw);
-                    __m128i rzw = _mm_unpackhi_epi16(rxz, ryw);
-                    __m128i rlo = _mm_unpacklo_epi32(rxy, rzw);
-                    __m128i rhi = _mm_unpackhi_epi32(rxy, rzw);
-                    __m128i r = _mm_packus_epi16(rlo, rhi);
+                    int discarded = _mm_movemask_ps(frag_shader.isPixelDiscarded);
+                    if (discarded == 0xF) { frag_shader.isPixelDiscarded = false; continue; }
+                    __m128i r;
+                    {
+                        auto output = frag_shader.get_output() * 255.5f;
+                        __m128i rxz = _mm_packs_epi32(_mm_cvtps_epi32(output.x), _mm_cvtps_epi32(output.z));
+                        __m128i ryw = _mm_packs_epi32(_mm_cvtps_epi32(output.y), _mm_cvtps_epi32(output.w));
+                        __m128i rxy = _mm_unpacklo_epi16(rxz, ryw);
+                        __m128i rzw = _mm_unpackhi_epi16(rxz, ryw);
+                        __m128i rlo = _mm_unpacklo_epi32(rxy, rzw);
+                        __m128i rhi = _mm_unpackhi_epi32(rxy, rzw);
+                        r = _mm_packus_epi16(rlo, rhi);
+                    }
                     dbg_pixel = _mm_cvtsi128_si32(r);
                     if (blend) {
                         const __m128i zero = _mm_setzero_si128();
                         __m128i slo = _mm_unpacklo_epi8(r, zero);
                         __m128i shi = _mm_unpackhi_epi8(r, zero);
                         __m128i dlo, dhi;
-                        switch (span) {
-                            case 3:
-                                dlo = _mm_unpacklo_epi8(_mm_loadl_epi64((__m128i*)buf), zero);
-                                dhi = _mm_unpacklo_epi8(_mm_cvtsi32_si128(*(int32_t*)(buf + 8)), zero);
-                                break;
-                            case 2:
-                                dlo = _mm_unpacklo_epi8(_mm_loadl_epi64((__m128i*)buf), zero);
-                                dhi = zero;
-                                break;
-                            case 1:
-                                dlo = _mm_unpacklo_epi8(_mm_cvtsi32_si128(*(int32_t*)buf), zero);
-                                dhi = zero;
-                                break;
-                            default: {
-                                __m128i dst = _mm_loadu_si128((__m128i*)buf);
-                                dlo = _mm_unpacklo_epi8(dst, zero);
-                                dhi = _mm_unpackhi_epi8(dst, zero);
-                                break;
-                            }
+                        if (span & ~3) {
+                            __m128i dst = _mm_loadu_si128((__m128i*)buf);
+                            dlo = _mm_unpacklo_epi8(dst, zero);
+                            dhi = _mm_unpackhi_epi8(dst, zero);
+                        } else if (span & 2) {
+                            dlo = _mm_unpacklo_epi8(_mm_loadl_epi64((__m128i*)buf), zero);
+                            dhi = span & 1 ? _mm_unpacklo_epi8(_mm_cvtsi32_si128(*(int32_t*)(buf + 8)), zero) : zero;
+                        } else {
+                            dlo = _mm_unpacklo_epi8(_mm_cvtsi32_si128(*(int32_t*)buf), zero);
+                            dhi = zero;
                         }
                         // (x*y + x) >> 8, cheap approximation of (x*y) / 255
                         #define muldiv255(x, y) ({ __m128i b = x; _mm_srli_epi16(_mm_add_epi16(_mm_mullo_epi16(b, y), b), 8); })
@@ -985,21 +979,21 @@ void triangle(brush_solid_frag &shader, brush_solid_vert::FlatOutputs &flat_outs
                         }
                     }
                     if (!discarded) {
-                        switch (span) {
-                        case 3:
+                        if (span & ~3) {
+                            _mm_storeu_si128((__m128i*)buf, r);
+                        } else if (span & 2) {
                             _mm_storel_epi64((__m128i*)buf, r);
-                            *(int32_t*)(buf + 8) = _mm_cvtsi128_si32(_mm_shuffle_epi32(r, 0xAA));
-                            break;
-                        case 2: _mm_storel_epi64((__m128i*)buf, r); break;
-                        case 1: *(int32_t*)buf = _mm_cvtsi128_si32(r); break;
-                        default: _mm_storeu_si128((__m128i*)buf, r); break;
+                            if (span & 1) *(int32_t*)(buf + 8) = _mm_cvtsi128_si32(_mm_shuffle_epi32(r, 0xAA));
+                        } else {
+                            *(int32_t*)buf = _mm_cvtsi128_si32(r);
                         }
                     } else {
-                        if (span < 4) discarded |= 0xFFFF << (span*4);
-                        if (!(discarded & 0x000F)) *(int32_t*)buf = _mm_cvtsi128_si32(r);
-                        if (!(discarded & 0x00F0)) *(int32_t*)(buf + 4) = _mm_cvtsi128_si32(_mm_shuffle_epi32(r, 0x55));
-                        if (!(discarded & 0x0F00)) *(int32_t*)(buf + 8) = _mm_cvtsi128_si32(_mm_shuffle_epi32(r, 0xAA));
-                        if (!(discarded & 0xF000)) *(int32_t*)(buf + 12) = _mm_cvtsi128_si32(_mm_shuffle_epi32(r, 0xFF));
+                        if (span < 4) discarded |= 0xF << span;
+                        if (!(discarded & 1)) *(int32_t*)buf = _mm_cvtsi128_si32(r);
+                        if (!(discarded & 2)) *(int32_t*)(buf + 4) = _mm_cvtsi128_si32(_mm_shuffle_epi32(r, 0x55));
+                        if (!(discarded & 4)) *(int32_t*)(buf + 8) = _mm_cvtsi128_si32(_mm_shuffle_epi32(r, 0xAA));
+                        if (!(discarded & 8)) *(int32_t*)(buf + 12) = _mm_cvtsi128_si32(_mm_shuffle_epi32(r, 0xFF));
+                        frag_shader.isPixelDiscarded = false;
                     }
                     buf += fbpp * 4;
                 }
