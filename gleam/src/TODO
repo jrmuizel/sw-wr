@@ -1,16 +1,16 @@
 Make `wrench --no-picture-caching show rect.yaml` work
-- implement vertex attribute interpolation (can copy tinyrenderer if needed here)
-- implement pixel shader parallelization (currently we're only using one lane)
-- implement output merger/blend
- - llvmpipe runs the shader 4 times to get a 4x4 block of pixels
- that it can convert to integers and then shuffle into the right
- order
+- Display the output somehow. (write a png)
 
 Next:
 - make `wrench --no-picture-caching show benchmarking/text-rendering.yaml' work
 - handle different shaders
 - handle different features
 - specialize texture samplers some how. i.e. we want to know at compile time what the format of a texture is
+- investigate larger tiles:
+ llvmpipe runs the shader 4 times to get a 4x4 block of pixels
+ that it can convert to integers and then shuffle into the right
+ order
+
 
 Future
 - mask texture loads
