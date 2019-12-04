@@ -779,6 +779,8 @@ void FramebufferRenderbuffer(
 void LinkProgram(GLuint program) {
 }
 
+}
+
 struct Point {
         float x;
         float y;
@@ -817,12 +819,13 @@ static const size_t fh = 2048;
 static uint8_t fdata[fw * fh * 4];
 static uint16_t fzdata[fw * fh];
 
+template<bool FULL_SPAN, bool DISCARD>
 static inline int check_depth(uint16_t z, int span, uint16_t* zbuf, int discarded) {
     // SSE2 does not support unsigned comparison, so bias Z to be negative.
     z -= 0x8000;
     __m128i src = _mm_set1_epi16(z);
     __m128i dest;
-    if (span & ~3) {
+    if (FULL_SPAN) {
         dest = _mm_loadl_epi64((__m128i*)zbuf);
     } else if (span & 2) {
         dest = _mm_cvtsi32_si128(*(int32_t*)zbuf);
@@ -844,11 +847,15 @@ static inline int check_depth(uint16_t z, int span, uint16_t* zbuf, int discarde
     }
     discarded |= _mm_movemask_ps(mask);
     if (depthmask) {
-        if (span < 4) discarded |= 0xF << span;
-        if (!(discarded & 1)) zbuf[0] = z;
-        if (!(discarded & 2)) zbuf[1] = z;
-        if (!(discarded & 4)) zbuf[2] = z;
-        if (!(discarded & 8)) zbuf[3] = z;
+        if (!FULL_SPAN) discarded |= 0xF << span;
+        if (DISCARD) {
+            if (!(discarded & 1)) zbuf[0] = z;
+            if (!(discarded & 2)) zbuf[1] = z;
+            if (!(discarded & 4)) zbuf[2] = z;
+            if (!(discarded & 8)) zbuf[3] = z;
+        } else {
+            _mm_storel_epi64((__m128i*)zbuf, src);
+        }
     }
     return discarded;
 }
@@ -864,12 +871,13 @@ static inline __m128i pack_pixels(vec4 output) {
     return _mm_packus_epi16(rlo, rhi);
 }
 
+template<bool FULL_SPAN>
 static inline __m128i blend_pixels(__m128i r, int span, const uint8_t* buf) {
     const __m128i zero = _mm_setzero_si128();
     __m128i slo = _mm_unpacklo_epi8(r, zero);
     __m128i shi = _mm_unpackhi_epi8(r, zero);
     __m128i dlo, dhi;
-    if (span & ~3) {
+    if (FULL_SPAN) {
         __m128i dst = _mm_loadu_si128((__m128i*)buf);
         dlo = _mm_unpacklo_epi8(dst, zero);
         dhi = _mm_unpackhi_epi8(dst, zero);
@@ -975,8 +983,9 @@ static inline __m128i blend_pixels(__m128i r, int span, const uint8_t* buf) {
     return r;
 }
 
+template<bool FULL_SPAN>
 static inline void write_pixels(__m128i r, int span, uint8_t* buf) {
-    if (span & ~3) {
+    if (FULL_SPAN) {
         _mm_storeu_si128((__m128i*)buf, r);
     } else if (span & 2) {
         _mm_storel_epi64((__m128i*)buf, r);
@@ -986,12 +995,35 @@ static inline void write_pixels(__m128i r, int span, uint8_t* buf) {
     }
 }
 
+template<bool FULL_SPAN>
 static inline void discard_pixels(__m128i r, int span, uint8_t* buf, int discarded) {
-    if (span < 4) discarded |= 0xF << span;
+    if (!FULL_SPAN) discarded |= 0xF << span;
     if (!(discarded & 1)) *(int32_t*)buf = _mm_cvtsi128_si32(r);
     if (!(discarded & 2)) *(int32_t*)(buf + 4) = _mm_cvtsi128_si32(_mm_shuffle_epi32(r, 0x55));
     if (!(discarded & 4)) *(int32_t*)(buf + 8) = _mm_cvtsi128_si32(_mm_shuffle_epi32(r, 0xAA));
     if (!(discarded & 8)) *(int32_t*)(buf + 12) = _mm_cvtsi128_si32(_mm_shuffle_epi32(r, 0xFF));
+}
+
+template<bool FULL_SPAN>
+static inline void commit_output(int span, uint8_t* buf, uint16_t *depth, uint16_t z) {
+    int discarded = _mm_movemask_ps(frag_shader.isPixelDiscarded);
+    if (!discarded) {
+        __m128i r = pack_pixels(frag_shader.get_output());
+        if (!depthtest) {
+            if (blend) r = blend_pixels<FULL_SPAN>(r, span, buf);
+            write_pixels<FULL_SPAN>(r, span, buf);
+        } else {
+            discarded = check_depth<FULL_SPAN, false>(z, span, depth, discarded);
+            if (blend) r = blend_pixels<FULL_SPAN>(r, span, buf);
+            if (!discarded) write_pixels<FULL_SPAN>(r, span, buf);
+            else discard_pixels<FULL_SPAN>(r, span, buf, discarded);
+        }
+    } else if (discarded < 0xF) {
+        __m128i r = pack_pixels(frag_shader.get_output());
+        if (depthtest) discarded = check_depth<FULL_SPAN, true>(z, span, depth, discarded);
+        if (blend) r = blend_pixels<FULL_SPAN>(r, span, buf);
+        discard_pixels<FULL_SPAN>(r, span, buf, discarded);
+    }
 }
 
 void triangle(brush_solid_frag &shader, brush_solid_vert::FlatOutputs &flat_outs, brush_solid_vert::InterpOutputs interp_outs[4], Point a, Point b, Point c, uint16_t z) {
@@ -1145,26 +1177,14 @@ void triangle(brush_solid_frag &shader, brush_solid_vert::FlatOutputs &flat_outs
                 stepo = stepo * 4;
                 uint8_t* buf = fbuf + startx * fbpp;
                 uint16_t* depth = fdepth + startx;
-                for (; span > 0; span -= 4) {
+                for (; span >= 4; span -= 4, buf += fbpp * 4, depth += 4) {
                     frag_shader.main();
                     frag_shader.step_interp_inputs(stepo);
-                    int discarded = _mm_movemask_ps(frag_shader.isPixelDiscarded);
-                    if (discarded < 0xF) {
-                        if (depthtest) {
-                            discarded = check_depth(z, span, depth, discarded);
-                        }
-                        __m128i r = pack_pixels(frag_shader.get_output());
-                        if (blend) {
-                            r = blend_pixels(r, span, buf);
-                        }
-                        if (discarded) {
-                            discard_pixels(r, span, buf, discarded);
-                        } else {
-                            write_pixels(r, span, buf);
-                        }
-                    }
-                    buf += fbpp * 4;
-                    depth += 4;
+                    commit_output<true>(span, buf, depth, z);
+                }
+                if (span > 0) {
+                    frag_shader.main();
+                    commit_output<false>(span, buf, depth, z);
                 }
             }
             lx += lm;
@@ -1185,6 +1205,8 @@ void triangle(brush_solid_frag &shader, brush_solid_vert::FlatOutputs &flat_outs
 #endif
         printf("%fms for %d pixels in %d rows\n", (end - start)/(1000.*1000.), shaded_pixels, shaded_lines);
 }
+
+extern "C" {
 
 void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indices, GLsizei instancecount) {
         assert(mode == GL_TRIANGLES);
