@@ -465,6 +465,13 @@ void DepthMask(GLboolean flag) {
 }
 
 void DepthFunc(GLenum func) {
+    switch (func) {
+    case GL_LESS:
+    case GL_LEQUAL:
+        break;
+    default:
+        assert(false);
+    }
     depthfunc = func;
 }
 
@@ -1014,8 +1021,8 @@ Vec3f barycentric(Point a, Point b, Point c, Point p) {
         return Vec3f{-1,1,1}; // in this case generate negative coordinates, it will be thrown away by the rasterizator
 }
 
-template<int FULL_SPANS, bool DISCARD>
-static inline int check_depth(uint16_t z, int span, uint16_t* zbuf, int discarded) {
+template<int FULL_SPANS>
+static inline int check_depth(uint16_t z, int span, uint16_t* zbuf, int discarded = 0) {
     __m128i dest;
     if (FULL_SPANS > 1) {
         dest = _mm_loadu_si128((__m128i*)zbuf);
@@ -1028,32 +1035,44 @@ static inline int check_depth(uint16_t z, int span, uint16_t* zbuf, int discarde
         dest = _mm_cvtsi32_si128(*(int32_t*)zbuf);
     }
     __m128i src = _mm_set1_epi16(z);
-    __m128i mask;
-    // Invert the depth test to check which pixels failed.
-    switch (depthfunc) {
-    case GL_LESS:
-        // No greater-than-equal in SSE2, so just bias the source depth plus 1.
-        mask = _mm_cmpgt_epi16(_mm_adds_epi16(src, _mm_set1_epi16(1)), dest);
-        break;
-    case GL_LEQUAL:
-        mask = _mm_cmpgt_epi16(src, dest);
-        break;
-    default: assert(false); break;
+    // Invert the depth test to check which pixels failed and should be discarded.
+    __m128i mask = depthfunc == GL_LEQUAL ?
+        // GL_LEQUAL: Not(LessEqual) = Greater
+        _mm_cmpgt_epi16(src, dest) :
+        // GL_LESS: Not(Less) = GreaterEqual
+        // No GreaterEqual in SSE2, so use Not(Less) directly.
+        _mm_xor_si128(_mm_cmplt_epi16(src, dest), _mm_set1_epi16(0xFFFF));
+    uint32_t failed = _mm_movemask_epi8(_mm_packus_epi16(mask, mask));
+    if (FULL_SPANS > 1) {
+        failed &= 0xFF;
+    } else if (FULL_SPANS) {
+        failed &= 0xF;
+    } else {
+        failed |= (0xF << span) & 0xF;
     }
-    discarded |= _mm_movemask_epi8(_mm_packus_epi16(mask, _mm_setzero_si128()));
-    if (depthmask) {
+    discarded |= failed;
+    if (depthmask && discarded != (FULL_SPANS > 1 ? 0xFF : 0xF)) {
         if (FULL_SPANS > 1) {
-           _mm_storeu_si128((__m128i*)zbuf, src);
-        } else {
-            if (!FULL_SPANS) discarded |= (0xF << span) & 0xF;
-            if (DISCARD) {
-                if (!(discarded & 1)) zbuf[0] = z;
-                if (!(discarded & 2)) zbuf[1] = z;
-                if (!(discarded & 4)) zbuf[2] = z;
-                if (!(discarded & 8)) zbuf[3] = z;
+            if (!discarded) {
+                _mm_storeu_si128((__m128i*)zbuf, src);
             } else {
-                _mm_storel_epi64((__m128i*)zbuf, src);
+                _mm_storeu_si128((__m128i*)zbuf,
+                    _mm_or_si128(_mm_and_si128(mask, dest),
+                                 _mm_andnot_si128(mask, src)));
             }
+        } else if (FULL_SPANS) {
+            if (!discarded) {
+                _mm_storel_epi64((__m128i*)zbuf, src);
+            } else {
+                _mm_storel_epi64((__m128i*)zbuf,
+                    _mm_or_si128(_mm_and_si128(mask, dest),
+                                 _mm_andnot_si128(mask, src)));
+            }
+        } else {
+            if (!(discarded & 1)) zbuf[0] = z;
+            if (!(discarded & 2)) zbuf[1] = z;
+            if (!(discarded & 4)) zbuf[2] = z;
+            if (!(discarded & 8)) zbuf[3] = z;
         }
     }
     return discarded;
@@ -1222,22 +1241,15 @@ static inline void commit_output_no_depth_test(int span, uint32_t* buf, int disc
 template<bool FULL_SPAN>
 static inline void commit_output(int span, uint32_t* buf, uint16_t *depth, uint16_t z) {
     int discarded = _mm_movemask_ps(frag_shader.discard_mask());
-    if (!discarded) {
+    if (depthtest) discarded = check_depth<FULL_SPAN ? 1 : 0>(z, span, depth, discarded);
+    if (discarded != 0xF) {
         __m128i r = pack_pixels(frag_shader.get_output());
-        if (!depthtest) {
-            if (blend) r = blend_pixels<FULL_SPAN>(r, span, buf);
+        if (blend) r = blend_pixels<FULL_SPAN>(r, span, buf);
+        if (!discarded) {
             write_pixels<FULL_SPAN>(r, span, buf);
         } else {
-            discarded = check_depth<FULL_SPAN ? 1 : 0, false>(z, span, depth, discarded);
-            if (blend) r = blend_pixels<FULL_SPAN>(r, span, buf);
-            if (!discarded) write_pixels<FULL_SPAN>(r, span, buf);
-            else discard_pixels<FULL_SPAN>(r, span, buf, discarded);
+            discard_pixels<FULL_SPAN>(r, span, buf, discarded);
         }
-    } else if (discarded != 0xF) {
-        __m128i r = pack_pixels(frag_shader.get_output());
-        if (depthtest) discarded = check_depth<FULL_SPAN ? 1 : 0, true>(z, span, depth, discarded);
-        if (blend) r = blend_pixels<FULL_SPAN>(r, span, buf);
-        discard_pixels<FULL_SPAN>(r, span, buf, discarded);
     }
 }
 
@@ -1378,7 +1390,7 @@ void triangle(brush_solid_frag &shader, brush_solid_vert::FlatOutputs &flat_outs
                 if (!frag_shader.uses_discard()) {
                     if (depthtest) {
                         for (; span >= 8; span -= 8, buf += 8, depth += 8) {
-                            int discarded = check_depth<2, false>(z, span, depth, 0);
+                            int discarded = check_depth<2>(z, span, depth);
                             if (discarded == 0xFF) continue;
                             frag_shader.main();
                             frag_shader.step_interp_inputs(stepo);
@@ -1388,13 +1400,10 @@ void triangle(brush_solid_frag &shader, brush_solid_vert::FlatOutputs &flat_outs
                             commit_output_no_depth_test(span, buf + 4, discarded>>4);
                         }
                     } else {
-                        for (; span >= 8; span -= 8, buf += 8, depth += 8) {
+                        for (; span >= 4; span -= 4, buf += 4) {
                             frag_shader.main();
                             frag_shader.step_interp_inputs(stepo);
                             commit_output_no_depth_test(span, buf);
-                            frag_shader.main();
-                            frag_shader.step_interp_inputs(stepo);
-                            commit_output_no_depth_test(span, buf + 4);
                         }
                     }
                 }
