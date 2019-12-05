@@ -216,7 +216,6 @@ void store_interp_outputs(InterpOutputs dest[4]) {
     dest[n].vClipMaskUv = get_nth(vClipMaskUv, n);
   }
 }
-Bool isPixelDiscarded = false;
 int32_t uMode;
 mat4_scalar uTransform;
 vec3 aPosition;
@@ -792,4 +791,6 @@ void main(void) {
  Fragment frag = brush_fs();
  write_output((frag).color);
 }
+bool uses_discard() { return false; }
+Bool discard_mask() { return false; }
 };

@@ -946,10 +946,12 @@ Vec3f barycentric(Point a, Point b, Point c, Point p) {
         return Vec3f{-1,1,1}; // in this case generate negative coordinates, it will be thrown away by the rasterizator
 }
 
-template<bool FULL_SPAN, bool DISCARD>
+template<int FULL_SPANS, bool DISCARD>
 static inline int check_depth(uint16_t z, int span, uint16_t* zbuf, int discarded) {
     __m128i dest;
-    if (FULL_SPAN) {
+    if (FULL_SPANS > 1) {
+        dest = _mm_loadu_si128((__m128i*)zbuf);
+    } else if (FULL_SPANS) {
         dest = _mm_loadl_epi64((__m128i*)zbuf);
     } else if (span & 2) {
         dest = _mm_cvtsi32_si128(*(int32_t*)zbuf);
@@ -970,16 +972,20 @@ static inline int check_depth(uint16_t z, int span, uint16_t* zbuf, int discarde
         break;
     default: assert(false); break;
     }
-    discarded |= _mm_movemask_ps(_mm_unpacklo_epi16(mask, mask));
+    discarded |= _mm_movemask_epi8(_mm_packus_epi16(mask, _mm_setzero_si128()));
     if (depthmask) {
-        if (!FULL_SPAN) discarded |= 0xF << span;
-        if (DISCARD) {
-            if (!(discarded & 1)) zbuf[0] = z;
-            if (!(discarded & 2)) zbuf[1] = z;
-            if (!(discarded & 4)) zbuf[2] = z;
-            if (!(discarded & 8)) zbuf[3] = z;
+        if (FULL_SPANS > 1) {
+           _mm_storeu_si128((__m128i*)zbuf, src);
         } else {
-            _mm_storel_epi64((__m128i*)zbuf, src);
+            if (!FULL_SPANS) discarded |= (0xF << span) & 0xF;
+            if (DISCARD) {
+                if (!(discarded & 1)) zbuf[0] = z;
+                if (!(discarded & 2)) zbuf[1] = z;
+                if (!(discarded & 4)) zbuf[2] = z;
+                if (!(discarded & 8)) zbuf[3] = z;
+            } else {
+                _mm_storel_epi64((__m128i*)zbuf, src);
+            }
         }
     }
     return discarded;
@@ -1129,23 +1135,33 @@ static inline void discard_pixels(__m128i r, int span, uint32_t* buf, int discar
     if (!(discarded & 8)) buf[3] = _mm_cvtsi128_si32(_mm_shuffle_epi32(r, 0xFF));
 }
 
+static inline void commit_output_no_depth_test(int span, uint32_t* buf, int discarded = 0) {
+    __m128i r = pack_pixels(frag_shader.get_output());
+    if (blend) r = blend_pixels<true>(r, span, buf);
+    if (!discarded) {
+        write_pixels<true>(r, span, buf);
+    } else if (discarded != 0xF) {
+        discard_pixels<true>(r, span, buf, discarded);
+    }
+}
+
 template<bool FULL_SPAN>
 static inline void commit_output(int span, uint32_t* buf, uint16_t *depth, uint16_t z) {
-    int discarded = _mm_movemask_ps(frag_shader.isPixelDiscarded);
+    int discarded = _mm_movemask_ps(frag_shader.discard_mask());
     if (!discarded) {
         __m128i r = pack_pixels(frag_shader.get_output());
         if (!depthtest) {
             if (blend) r = blend_pixels<FULL_SPAN>(r, span, buf);
             write_pixels<FULL_SPAN>(r, span, buf);
         } else {
-            discarded = check_depth<FULL_SPAN, false>(z, span, depth, discarded);
+            discarded = check_depth<FULL_SPAN ? 1 : 0, false>(z, span, depth, discarded);
             if (blend) r = blend_pixels<FULL_SPAN>(r, span, buf);
             if (!discarded) write_pixels<FULL_SPAN>(r, span, buf);
             else discard_pixels<FULL_SPAN>(r, span, buf, discarded);
         }
-    } else if (discarded < 0xF) {
+    } else if (discarded != 0xF) {
         __m128i r = pack_pixels(frag_shader.get_output());
-        if (depthtest) discarded = check_depth<FULL_SPAN, true>(z, span, depth, discarded);
+        if (depthtest) discarded = check_depth<FULL_SPAN ? 1 : 0, true>(z, span, depth, discarded);
         if (blend) r = blend_pixels<FULL_SPAN>(r, span, buf);
         discard_pixels<FULL_SPAN>(r, span, buf, discarded);
     }
@@ -1285,6 +1301,29 @@ void triangle(brush_solid_frag &shader, brush_solid_vert::FlatOutputs &flat_outs
                 stepo = stepo * 4;
                 uint32_t* buf = fbuf + startx;
                 uint16_t* depth = fdepth + startx;
+                if (!frag_shader.uses_discard()) {
+                    if (depthtest) {
+                        for (; span >= 8; span -= 8, buf += 8, depth += 8) {
+                            int discarded = check_depth<2, false>(z, span, depth, 0);
+                            if (discarded == 0xFF) continue;
+                            frag_shader.main();
+                            frag_shader.step_interp_inputs(stepo);
+                            commit_output_no_depth_test(span, buf, discarded&0xF);
+                            frag_shader.main();
+                            frag_shader.step_interp_inputs(stepo);
+                            commit_output_no_depth_test(span, buf + 4, discarded>>4);
+                        }
+                    } else {
+                        for (; span >= 8; span -= 8, buf += 8, depth += 8) {
+                            frag_shader.main();
+                            frag_shader.step_interp_inputs(stepo);
+                            commit_output_no_depth_test(span, buf);
+                            frag_shader.main();
+                            frag_shader.step_interp_inputs(stepo);
+                            commit_output_no_depth_test(span, buf + 4);
+                        }
+                    }
+                }
                 for (; span >= 4; span -= 4, buf += 4, depth += 4) {
                     frag_shader.main();
                     frag_shader.step_interp_inputs(stepo);
