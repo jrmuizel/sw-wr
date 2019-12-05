@@ -19,6 +19,8 @@ using namespace std;
 typedef uint32_t GLuint;
 typedef int32_t GLboolean;
 typedef float GLfloat;
+typedef double GLdouble;
+typedef uint32_t GLbitfield;
 
 typedef int32_t GLint;
 typedef int32_t GLsizei;
@@ -109,11 +111,11 @@ struct Program {
 
 struct Texture {
     GLenum target;
-    GLenum levels;
+    int levels;
     GLenum internal_format;
-    GLenum width;
-    GLenum height;
-    GLenum depth;
+    int width;
+    int height;
+    int depth;
     char *buf;
 };
 
@@ -133,21 +135,21 @@ map<GLuint, Renderbuffer> renderbuffers;
 map<GLuint, Shader> shaders;
 map<GLuint, Program> programs;
 
-GLuint buffer_count;
+GLuint buffer_count = 1;
 map<GLenum, GLuint> current_buffer;
 
-GLuint texture_count;
+GLuint texture_count = 1;
 map<GLenum, GLuint> current_texture;
 map<GLenum, GLuint> current_framebuffer;
 map<GLenum, GLuint> current_renderbuffer;
 
-GLuint vertex_array_count;
+GLuint vertex_array_count = 1;
 GLuint current_vertex_array;
-GLuint shader_count;
+GLuint shader_count = 1;
 
-GLuint renderbuffer_count;
-GLuint framebuffer_count;
-GLuint program_count;
+GLuint renderbuffer_count = 1;
+GLuint framebuffer_count = 1;
+GLuint program_count = 1;
 
 struct Viewport {
 	int x;
@@ -214,6 +216,9 @@ struct Scissor {
 
 Scissor scissor;
 
+GLfloat clearcolor[4] = { 0, 0, 0, 0 };
+GLdouble cleardepth = 1;
+
 using namespace glsl;
 
 #define GL_TEXTURE0                       0x84C0
@@ -239,36 +244,62 @@ GLuint texture_slots[16];
 
 sampler2D lookup_sampler(int texture) {
         sampler2D s = new sampler2D_impl; //XXX: going to leak it
-        Texture &t = textures[texture_slots[texture]];
-        s->width = t.width;
-        s->height = t.height;
-        s->stride = bytes_for_internal_format(t.internal_format) * t.width;
-        s->buf = (uint32_t*)t.buf; //XXX: wrong
-        s->format = gl_format_to_texture_format(t.internal_format);
+        if (!texture_slots[texture]) {
+            s->width = 0;
+            s->height = 0;
+            s->stride = 0;
+            s->buf = nullptr;
+            s->format = TextureFormat::RGBA8;
+        } else {
+            Texture &t = textures[texture_slots[texture]];
+            s->width = t.width;
+            s->height = t.height;
+            s->stride = bytes_for_internal_format(t.internal_format) * t.width;
+            s->buf = (uint32_t*)t.buf; //XXX: wrong
+            s->format = gl_format_to_texture_format(t.internal_format);
+        }
         return s;
 }
 
 isampler2D lookup_isampler(int texture) {
         isampler2D s = new isampler2D_impl; //XXX: going to leak it
-        Texture &t = textures[texture_slots[texture]];
-        s->width = t.width;
-        s->height = t.height;
-        s->stride = bytes_for_internal_format(t.internal_format) * t.width;
-        s->buf = (uint32_t*)t.buf; //XXX: wrong
-        s->format = gl_format_to_texture_format(t.internal_format);
+        if (!texture_slots[texture]) {
+            s->width = 0;
+            s->height = 0;
+            s->stride = 0;
+            s->buf = nullptr;
+            s->format = TextureFormat::RGBA32I;
+        } else {
+            Texture &t = textures[texture_slots[texture]];
+            s->width = t.width;
+            s->height = t.height;
+            s->stride = bytes_for_internal_format(t.internal_format) * t.width;
+            s->buf = (uint32_t*)t.buf; //XXX: wrong
+            s->format = gl_format_to_texture_format(t.internal_format);
+        }
         return s;
 }
 
 sampler2DArray lookup_sampler_array(int texture) {
         sampler2DArray s = new sampler2DArray_impl; //XXX: going to leak it
-        Texture &t = textures[texture_slots[texture]];
-        s->width = t.width;
-        s->height = t.height;
-        s->depth = t.depth;
-        s->stride = bytes_for_internal_format(t.internal_format) * t.width;
-        s->height_stride = bytes_for_internal_format(t.internal_format) * t.width * t.height;
-        s->buf = (uint32_t*)t.buf; //XXX: wrong
-        s->format = gl_format_to_texture_format(t.internal_format);
+        if (!texture_slots[texture]) {
+            s->width = 0;
+            s->height = 0;
+            s->depth = 0;
+            s->stride = 0;
+            s->height_stride = 0;
+            s->buf = nullptr;
+            s->format = TextureFormat::RGBA8;
+        } else {
+            Texture &t = textures[texture_slots[texture]];
+            s->width = t.width;
+            s->height = t.height;
+            s->depth = t.depth;
+            s->stride = bytes_for_internal_format(t.internal_format) * t.width;
+            s->height_stride = bytes_for_internal_format(t.internal_format) * t.width * t.height;
+            s->buf = (uint32_t*)t.buf; //XXX: wrong
+            s->format = gl_format_to_texture_format(t.internal_format);
+        }
         return s;
 }
 
@@ -376,6 +407,17 @@ void SetScissor(GLint x, GLint y, GLsizei width, GLsizei height) {
     scissor.height = height;
 }
 
+void ClearColor(GLfloat r, GLfloat g, GLfloat b, GLfloat a) {
+    clearcolor[0] = r;
+    clearcolor[1] = g;
+    clearcolor[2] = b;
+    clearcolor[3] = a;
+}
+
+void ClearDepth(GLdouble depth) {
+    cleardepth = depth;
+}
+
 void ActiveTexture(GLenum texture) {
         assert(texture >= GL_TEXTURE0);
         assert(texture <= GL_TEXTURE16); // this is just arbitrary
@@ -445,11 +487,11 @@ void BindRenderbuffer(GLenum target, GLuint rb) {
 
 void TexStorage3D(
         GLenum target,
-        GLenum levels,
+        GLint levels,
         GLenum internal_format,
-        GLenum width,
-        GLenum height,
-        GLenum depth
+        GLsizei width,
+        GLsizei height,
+        GLsizei depth
     ) {
     Texture &t = textures[current_texture[target]];
 
@@ -464,10 +506,10 @@ void TexStorage3D(
 
 void TexStorage2D(
         GLenum target,
-        GLenum levels,
+        GLint levels,
         GLenum internal_format,
-        GLenum width,
-        GLenum height
+        GLsizei width,
+        GLsizei height
     ) {
     Texture &t = textures[current_texture[target]];
     t.levels = levels;
@@ -768,6 +810,96 @@ void FramebufferRenderbuffer(
     }
 }
 
+}
+
+Framebuffer& get_draw_framebuffer() {
+    GLuint id = 0;
+    {
+        auto i = current_framebuffer.find(GL_DRAW_FRAMEBUFFER);
+        if (i != current_framebuffer.end()) id = i->second;
+    }
+    {
+        auto i = framebuffers.find(id);
+        if (i != framebuffers.end()) return i->second;
+    }
+    // allocate a default framebuffer
+    Framebuffer& fb = framebuffers[0];
+    const size_t width = 2048;
+    const size_t height = 2048;
+    GenTextures(1, &fb.color_attachment);
+    fb.layer = 0;
+    current_texture[GL_DRAW_FRAMEBUFFER] = fb.color_attachment;
+    TexStorage2D(GL_DRAW_FRAMEBUFFER, 1, GL_RGBA8, width, height);
+    GenTextures(1, &fb.depth_attachment);
+    current_texture[GL_DRAW_FRAMEBUFFER] = fb.depth_attachment;
+    TexStorage2D(GL_DRAW_FRAMEBUFFER, 1, GL_DEPTH_COMPONENT16, width, height);
+    return fb;
+}
+
+extern "C" {
+
+#define GL_COLOR_BUFFER_BIT         0x00004000
+#define GL_DEPTH_BUFFER_BIT         0x00000100
+#define GL_STENCIL_BUFFER_BIT       0x00000400
+
+void Clear(GLbitfield mask) {
+    Framebuffer& fb = get_draw_framebuffer();
+    if ((mask & GL_COLOR_BUFFER_BIT) && fb.color_attachment) {
+        Texture& t = textures[fb.color_attachment];
+        int x0 = 0, y0 = 0, x1 = t.width, y1 = t.height;
+        if (scissortest) {
+            x0 = std::max(x0, scissor.x);
+            y0 = std::max(y0, scissor.y);
+            x1 = std::min(x1, scissor.x + scissor.width);
+            y1 = std::min(y1, scissor.y + scissor.height);
+        }
+        if (t.internal_format == GL_RGBA8) {
+            __m128 colorf = _mm_loadu_ps(clearcolor);
+            __m128i colori = _mm_cvtps_epi32(_mm_mul_ps(colorf, _mm_set1_ps(255.5f)));
+            colori = _mm_packs_epi32(colori, colori);
+            colori = _mm_packus_epi16(colori, colori);
+            uint32_t color = _mm_cvtsi128_si32(colori);
+            uint32_t* buf = (uint32_t*)t.buf + t.width * t.height * fb.layer + t.width * y0 + x0;
+            for (int y = y0; y < y1; y++) {
+                int x = x0;
+                for (; x + 4 <= x1; x += 4, buf += 4) {
+                    _mm_storeu_si128((__m128i*)buf, colori);
+                }
+                for (; x < x1; x++, buf++) {
+                    *buf = color;
+                }
+                buf += t.width - (x1 - x0);
+            }
+        } else {
+            assert(false);
+        }
+    }
+    if ((mask & GL_DEPTH_BUFFER_BIT) && fb.depth_attachment) {
+        Texture& t = textures[fb.depth_attachment];
+        assert(t.internal_format == GL_DEPTH_COMPONENT16);
+        int x0 = 0, y0 = 0, x1 = t.width, y1 = t.height;
+        if (scissortest) {
+            x0 = std::max(x0, scissor.x);
+            y0 = std::max(y0, scissor.y);
+            x1 = std::min(x1, scissor.x + scissor.width);
+            y1 = std::min(y1, scissor.y + scissor.height);
+        }
+        uint16_t depth = uint16_t(0xFFFF * cleardepth) - 0x8000;
+        __m128i depthi = _mm_set1_epi16(depth);
+        uint16_t* buf = (uint16_t*)t.buf + t.width * y0 + x0;
+        for (int y = y0; y < y1; y++) {
+            int x = x0;
+            for (; x + 8 <= x1; x += 8, buf += 8) {
+                _mm_storeu_si128((__m128i*)buf, depthi);
+            }
+            for (; x < x1; x++, buf++) {
+                *buf = depth;
+            }
+            buf += (t.width - x1) + x0;
+        }
+    }
+}
+
 #define GL_POINTS                         0x0000
 #define GL_LINES                          0x0001
 #define GL_LINE_LOOP                      0x0002
@@ -814,16 +946,8 @@ Vec3f barycentric(Point a, Point b, Point c, Point p) {
         return Vec3f{-1,1,1}; // in this case generate negative coordinates, it will be thrown away by the rasterizator
 }
 
-static const size_t fw = 2048;
-static const size_t fh = 2048;
-static uint8_t fdata[fw * fh * 4];
-static uint16_t fzdata[fw * fh];
-
 template<bool FULL_SPAN, bool DISCARD>
 static inline int check_depth(uint16_t z, int span, uint16_t* zbuf, int discarded) {
-    // SSE2 does not support unsigned comparison, so bias Z to be negative.
-    z -= 0x8000;
-    __m128i src = _mm_set1_epi16(z);
     __m128i dest;
     if (FULL_SPAN) {
         dest = _mm_loadl_epi64((__m128i*)zbuf);
@@ -833,6 +957,7 @@ static inline int check_depth(uint16_t z, int span, uint16_t* zbuf, int discarde
     } else {
         dest = _mm_cvtsi32_si128(*(int32_t*)zbuf);
     }
+    __m128i src = _mm_set1_epi16(z);
     __m128i mask;
     // Invert the depth test to check which pixels failed.
     switch (depthfunc) {
@@ -845,7 +970,7 @@ static inline int check_depth(uint16_t z, int span, uint16_t* zbuf, int discarde
         break;
     default: assert(false); break;
     }
-    discarded |= _mm_movemask_ps(mask);
+    discarded |= _mm_movemask_ps(_mm_unpacklo_epi16(mask, mask));
     if (depthmask) {
         if (!FULL_SPAN) discarded |= 0xF << span;
         if (DISCARD) {
@@ -872,7 +997,7 @@ static inline __m128i pack_pixels(vec4 output) {
 }
 
 template<bool FULL_SPAN>
-static inline __m128i blend_pixels(__m128i r, int span, const uint8_t* buf) {
+static inline __m128i blend_pixels(__m128i r, int span, const uint32_t* buf) {
     const __m128i zero = _mm_setzero_si128();
     __m128i slo = _mm_unpacklo_epi8(r, zero);
     __m128i shi = _mm_unpackhi_epi8(r, zero);
@@ -885,9 +1010,9 @@ static inline __m128i blend_pixels(__m128i r, int span, const uint8_t* buf) {
         dhi = zero;
         if (span & 2) {
             dlo = _mm_unpacklo_epi8(_mm_loadl_epi64((__m128i*)buf), zero);
-            if (span & 1) dhi = _mm_unpacklo_epi8(_mm_cvtsi32_si128(*(int32_t*)(buf + 8)), zero);
+            if (span & 1) dhi = _mm_unpacklo_epi8(_mm_cvtsi32_si128(buf[2]), zero);
         } else {
-            dlo = _mm_unpacklo_epi8(_mm_cvtsi32_si128(*(int32_t*)buf), zero);
+            dlo = _mm_unpacklo_epi8(_mm_cvtsi32_si128(buf[0]), zero);
         }
     }
     // (x*y + x) >> 8, cheap approximation of (x*y) / 255
@@ -984,28 +1109,28 @@ static inline __m128i blend_pixels(__m128i r, int span, const uint8_t* buf) {
 }
 
 template<bool FULL_SPAN>
-static inline void write_pixels(__m128i r, int span, uint8_t* buf) {
+static inline void write_pixels(__m128i r, int span, uint32_t* buf) {
     if (FULL_SPAN) {
         _mm_storeu_si128((__m128i*)buf, r);
     } else if (span & 2) {
         _mm_storel_epi64((__m128i*)buf, r);
-        if (span & 1) *(int32_t*)(buf + 8) = _mm_cvtsi128_si32(_mm_shuffle_epi32(r, 0xAA));
+        if (span & 1) buf[2] = _mm_cvtsi128_si32(_mm_shuffle_epi32(r, 0xAA));
     } else {
-        *(int32_t*)buf = _mm_cvtsi128_si32(r);
+        buf[0] = _mm_cvtsi128_si32(r);
     }
 }
 
 template<bool FULL_SPAN>
-static inline void discard_pixels(__m128i r, int span, uint8_t* buf, int discarded) {
+static inline void discard_pixels(__m128i r, int span, uint32_t* buf, int discarded) {
     if (!FULL_SPAN) discarded |= 0xF << span;
-    if (!(discarded & 1)) *(int32_t*)buf = _mm_cvtsi128_si32(r);
-    if (!(discarded & 2)) *(int32_t*)(buf + 4) = _mm_cvtsi128_si32(_mm_shuffle_epi32(r, 0x55));
-    if (!(discarded & 4)) *(int32_t*)(buf + 8) = _mm_cvtsi128_si32(_mm_shuffle_epi32(r, 0xAA));
-    if (!(discarded & 8)) *(int32_t*)(buf + 12) = _mm_cvtsi128_si32(_mm_shuffle_epi32(r, 0xFF));
+    if (!(discarded & 1)) buf[0] = _mm_cvtsi128_si32(r);
+    if (!(discarded & 2)) buf[1] = _mm_cvtsi128_si32(_mm_shuffle_epi32(r, 0x55));
+    if (!(discarded & 4)) buf[2] = _mm_cvtsi128_si32(_mm_shuffle_epi32(r, 0xAA));
+    if (!(discarded & 8)) buf[3] = _mm_cvtsi128_si32(_mm_shuffle_epi32(r, 0xFF));
 }
 
 template<bool FULL_SPAN>
-static inline void commit_output(int span, uint8_t* buf, uint16_t *depth, uint16_t z) {
+static inline void commit_output(int span, uint32_t* buf, uint16_t *depth, uint16_t z) {
     int discarded = _mm_movemask_ps(frag_shader.isPixelDiscarded);
     if (!discarded) {
         __m128i r = pack_pixels(frag_shader.get_output());
@@ -1027,35 +1152,18 @@ static inline void commit_output(int span, uint8_t* buf, uint16_t *depth, uint16
 }
 
 void triangle(brush_solid_frag &shader, brush_solid_vert::FlatOutputs &flat_outs, brush_solid_vert::InterpOutputs interp_outs[4], Point a, Point b, Point c, uint16_t z) {
+        Framebuffer& fb = get_draw_framebuffer();
+        Texture& colortex = textures[fb.color_attachment];
+        assert(colortex.internal_format == GL_RGBA8);
+        Texture& depthtex = textures[fb.depth_attachment];
+        assert(depthtex.internal_format == GL_DEPTH_COMPONENT16);
+        assert(colortex.width == depthtex.width && colortex.height == depthtex.height);
         float fx0 = 0;
         float fy0 = 0;
-        float fx1 = fw;
-        float fy1 = fh;
-        uint8_t *fbuf = fdata;
-        uint16_t *fdepth = fzdata;
-        size_t fbpp = 4;
-        size_t fstride = fw * fbpp;
-
-        GLuint fbid = current_framebuffer[GL_DRAW_FRAMEBUFFER];
-        if (fbid != 0) {
-            auto fbi = framebuffers.find(fbid);
-            if (fbi != framebuffers.end()) {
-                const Framebuffer &fb = fbi->second;
-                auto ti = textures.find(fb.color_attachment);
-                if (ti != textures.end()) {
-                    const Texture &t = ti->second;
-                    printf("internal_format: %x, width: %d, height: %d\n", t.internal_format, t.width, t.height);
-                } else {
-                    printf("unbound color attachment %d for framebuffer %d\n", fb.color_attachment, fbid);
-                }
-            } else {
-                printf("unbound framebuffer %d\n", fbid);
-            }
-            assert(false);
-        } else {
-            printf("default framebuffer 0\n");
-        }
-
+        float fx1 = colortex.width;
+        float fy1 = colortex.height;
+        uint32_t *fbuf = (uint32_t*)colortex.buf;
+        uint16_t *fdepth = (uint16_t*)depthtex.buf;
         if (scissortest) {
             fx0 = std::max(fx0, float(scissor.x));
             fy0 = std::max(fy0, float(scissor.y));
@@ -1133,8 +1241,8 @@ void triangle(brush_solid_frag &shader, brush_solid_vert::FlatOutputs &flat_outs
         int shaded_pixels = 0;
         int shaded_lines = 0;
         frag_shader.read_flat_inputs(flat_outs);
-        fbuf += int(y) * fstride;
-        fdepth += int(y) * fw;
+        fbuf += int(y) * colortex.width;
+        fdepth += int(y) * depthtex.width;
         while (y < fy1) {
             if (y > l1.y) {
                 l0i = l1i;
@@ -1175,9 +1283,9 @@ void triangle(brush_solid_frag &shader, brush_solid_vert::FlatOutputs &flat_outs
                     frag_shader.read_interp_inputs(o0, o1, o2, o3);
                 }
                 stepo = stepo * 4;
-                uint8_t* buf = fbuf + startx * fbpp;
+                uint32_t* buf = fbuf + startx;
                 uint16_t* depth = fdepth + startx;
-                for (; span >= 4; span -= 4, buf += fbpp * 4, depth += 4) {
+                for (; span >= 4; span -= 4, buf += 4, depth += 4) {
                     frag_shader.main();
                     frag_shader.step_interp_inputs(stepo);
                     commit_output<true>(span, buf, depth, z);
@@ -1192,7 +1300,7 @@ void triangle(brush_solid_frag &shader, brush_solid_vert::FlatOutputs &flat_outs
             y++;
             lo = lo + lom;
             ro = ro + rom;
-            fbuf += fstride;
+            fbuf += colortex.width;
         }
 
         auto output = get_nth(frag_shader.get_output(), 0);
@@ -1352,7 +1460,8 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
                                         c = Point { xw, yw };
                                         printf("%f %f\n", xw, yw);
                                 }
-                                uint16_t z = uint16_t(0xFFFF * (1.0f + 0.5f * gl_Position.z.x / gl_Position.w.x));
+                                // SSE2 does not support unsigned comparison, so bias Z to be negative.
+                                uint16_t z = uint16_t(0xFFFF * (1.0f + 0.5f * gl_Position.z.x / gl_Position.w.x)) - 0x8000;
                                 triangle(frag_shader, flat_outs, interp_outs, a, b, c, z);
                         }
 
@@ -1365,8 +1474,10 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
 }
 
 void Finish() {
-        //writetga("out.tga", fw, fh, fdata);
-        write_png("out.png", fdata, fw, fh);
+        Framebuffer& fb = get_draw_framebuffer();
+        Texture& t = textures[fb.color_attachment];
+        //writetga("out.tga", t.width, t.height, t.buf);
+        write_png("out.png", t.buf, t.width, t.height);
 }
 
 }

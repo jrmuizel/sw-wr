@@ -133,6 +133,9 @@ extern "C" {
     fn DepthMask(flag: GLboolean);
     fn DepthFunc(func: GLenum);
     fn SetScissor(x: GLint, y: GLint, width: GLsizei, height: GLsizei);
+    fn ClearColor(r: GLfloat, g: GLfloat, b: GLfloat, a: GLfloat);
+    fn ClearDepth(depth: GLdouble);
+    fn Clear(mask: GLbitfield);
     fn Finish();
 }
 
@@ -2483,7 +2486,11 @@ impl Gl for GlFns {
     fn clear_color(&self, r: f32, g: f32, b: f32, a: f32) {
         //panic!();
         unsafe {
-            self.ffi_gl_.ClearColor(r, g, b, a);
+            if SW {
+                ClearColor(r, g, b, a);
+            } else {
+                self.ffi_gl_.ClearColor(r, g, b, a);
+            }
         }
     }
 
@@ -2491,7 +2498,11 @@ impl Gl for GlFns {
         println!("clear {}", buffer_mask);
         //panic!();
         unsafe {
-            self.ffi_gl_.Clear(buffer_mask);
+            if SW {
+                Clear(buffer_mask);
+            } else {
+                self.ffi_gl_.Clear(buffer_mask);
+            }
         }
     }
 
@@ -2499,7 +2510,11 @@ impl Gl for GlFns {
         println!("clear_depth {}", depth);
         //panic!();
         unsafe {
-            self.ffi_gl_.ClearDepth(depth as GLclampd);
+            if SW {
+                ClearDepth(depth as GLclampd);
+            } else {
+                self.ffi_gl_.ClearDepth(depth as GLclampd);
+            }
         }
     }
 
