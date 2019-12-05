@@ -183,11 +183,55 @@ GLenum blendfunc_sa = GL_ONE;
 GLenum blendfunc_da = GL_ZERO;
 bool blendfunc_separate = false;
 
-#define GL_FUNC_ADD                       0x8006
+#define GL_FUNC_ADD             0x8006
 
 GLenum blend_equation_mode = GL_FUNC_ADD;
 
 __m128i blendcolor = _mm_set1_epi16(0);
+
+// for GL defines to fully expand
+#define EXPAND_KEY(x, y, z, w) x ## y ## z ## w
+#define BLEND_KEY(x, y) EXPAND_KEY(BLEND_KEY_, x, _, y)
+#define FOR_EACH_BLEND_KEY(macro) \
+    macro(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA) \
+    macro(GL_CONSTANT_COLOR, GL_ONE_MINUS_SRC_COLOR) \
+    macro(GL_ONE, GL_ONE_MINUS_SRC_COLOR) \
+    macro(GL_ONE, GL_ONE_MINUS_SRC_ALPHA) \
+    macro(GL_ZERO, GL_ONE_MINUS_SRC_COLOR) \
+    macro(GL_ZERO, GL_ONE_MINUS_SRC_ALPHA) \
+    macro(GL_ZERO, GL_SRC_COLOR) \
+    macro(GL_ZERO, GL_SRC_ALPHA) \
+    macro(GL_ONE, GL_ONE) \
+    macro(GL_ZERO, GL_ONE) \
+    macro(GL_ONE, GL_ZERO) \
+    macro(GL_ONE_MINUS_DST_ALPHA, GL_ONE)
+
+#define DEFINE_BLEND_KEY(x, y) BLEND_KEY(x, y),
+enum BlendKey : uint8_t
+{
+    BLEND_KEY_NONE = 0,
+    FOR_EACH_BLEND_KEY(DEFINE_BLEND_KEY)
+};
+
+BlendKey blend_key = BLEND_KEY_NONE;
+
+#define BLEND_ALPHA_KEY(x, y) EXPAND_KEY(BLEND_ALPHA_KEY_, x, _, y)
+#define FOR_EACH_BLEND_ALPHA_KEY(macro) \
+    macro(GL_ONE, GL_ONE) \
+    macro(GL_ZERO, GL_ONE) \
+    macro(GL_ONE, GL_ZERO) \
+    macro(GL_ONE, GL_ONE_MINUS_SRC_COLOR) \
+    macro(GL_ZERO, GL_SRC_COLOR)
+
+#define DEFINE_BLEND_ALPHA_KEY(x, y) BLEND_ALPHA_KEY(x, y),
+enum BlendAlphaKey : uint8_t
+{
+    BLEND_ALPHA_KEY_NONE = 0,
+    FOR_EACH_BLEND_ALPHA_KEY(DEFINE_BLEND_ALPHA_KEY)
+};
+
+BlendAlphaKey blend_alpha_key = BLEND_ALPHA_KEY_NONE;
+
 
 #define GL_NEVER                0x0200
 #define GL_LESS                 0x0201
@@ -361,6 +405,17 @@ void Disable(GLenum cap) {
 void BlendFunc(GLenum srgb, GLenum drgb, GLenum sa, GLenum da) {
     blendfunc_srgb = srgb;
     blendfunc_drgb = drgb;
+    switch ((srgb << 16) | drgb) {
+    #define MAP_BLEND_KEY(x, y) \
+        case (x << 16) | y: \
+            blend_key = BLEND_KEY(x, y); \
+            break;
+    FOR_EACH_BLEND_KEY(MAP_BLEND_KEY)
+    default:
+        assert(false);
+        break;
+    }
+
     switch (sa) {
     case GL_SRC_ALPHA: sa = GL_SRC_COLOR; break;
     case GL_ONE_MINUS_SRC_ALPHA: sa = GL_ONE_MINUS_SRC_COLOR; break;
@@ -380,6 +435,19 @@ void BlendFunc(GLenum srgb, GLenum drgb, GLenum sa, GLenum da) {
     }
     blendfunc_da = da;
     blendfunc_separate = srgb != sa || drgb != da;
+    blend_alpha_key = BLEND_ALPHA_KEY_NONE;
+    if (blendfunc_separate) {
+        switch ((sa << 16) | da) {
+        #define MAP_BLEND_ALPHA_KEY(x, y) \
+            case (x << 16) | y: \
+                blend_alpha_key = BLEND_ALPHA_KEY(x, y); \
+                break;
+        FOR_EACH_BLEND_ALPHA_KEY(MAP_BLEND_ALPHA_KEY)
+        default:
+            assert(false);
+            break;
+        }
+    }
 }
 
 void BlendColor(GLfloat r, GLfloat g, GLfloat b, GLfloat a) {
@@ -810,7 +878,7 @@ void FramebufferRenderbuffer(
     }
 }
 
-}
+} // extern "C"
 
 Framebuffer& get_draw_framebuffer() {
     GLuint id = 0;
@@ -911,7 +979,7 @@ void Clear(GLbitfield mask) {
 void LinkProgram(GLuint program) {
 }
 
-}
+} // extern "C"
 
 struct Point {
         float x;
@@ -1024,88 +1092,94 @@ static inline __m128i blend_pixels(__m128i r, int span, const uint32_t* buf) {
     // (x*y + x) >> 8, cheap approximation of (x*y) / 255
     #define muldiv255(x, y) ({ __m128i b = x; _mm_srli_epi16(_mm_add_epi16(_mm_mullo_epi16(b, y), b), 8); })
     #define alphas(c) _mm_shufflehi_epi16(_mm_shufflelo_epi16(c, 0xFF), 0xFF)
-    switch ((blendfunc_srgb << 16) | blendfunc_drgb) {
-    case (GL_SRC_ALPHA << 16) | GL_ONE_MINUS_SRC_ALPHA:
+    switch (blend_key) {
+    case BLEND_KEY_NONE:
+        break;
+    case BLEND_KEY(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA):
         r = _mm_packus_epi16(
                 _mm_add_epi16(muldiv255(_mm_sub_epi16(slo, dlo), alphas(slo)), dlo),
                 _mm_add_epi16(muldiv255(_mm_sub_epi16(shi, dhi), alphas(shi)), dhi));
         break;
-    case (GL_CONSTANT_COLOR << 16) | GL_ONE_MINUS_SRC_COLOR:
+    case BLEND_KEY(GL_CONSTANT_COLOR, GL_ONE_MINUS_SRC_COLOR):
         r = _mm_packus_epi16(
                 _mm_add_epi16(dlo, muldiv255(_mm_sub_epi16(blendcolor, dlo), slo)),
                 _mm_add_epi16(dhi, muldiv255(_mm_sub_epi16(blendcolor, dhi), shi)));
         break;
-    case (GL_ONE << 16) | GL_ONE_MINUS_SRC_COLOR:
+    case BLEND_KEY(GL_ONE, GL_ONE_MINUS_SRC_COLOR):
         r = _mm_packus_epi16(
                 _mm_add_epi16(slo, _mm_sub_epi16(dlo, muldiv255(dlo, slo))),
                 _mm_add_epi16(shi, _mm_sub_epi16(dhi, muldiv255(dhi, shi))));
         break;
-    case (GL_ONE << 16) | GL_ONE_MINUS_SRC_ALPHA:
+    case BLEND_KEY(GL_ONE, GL_ONE_MINUS_SRC_ALPHA):
         r = _mm_packus_epi16(
                 _mm_add_epi16(slo, _mm_sub_epi16(dlo, muldiv255(dlo, alphas(slo)))),
                 _mm_add_epi16(shi, _mm_sub_epi16(dhi, muldiv255(dhi, alphas(shi)))));
         break;
-    case (GL_ZERO << 16) | GL_ONE_MINUS_SRC_COLOR:
+    case BLEND_KEY(GL_ZERO, GL_ONE_MINUS_SRC_COLOR):
         r = _mm_packus_epi16(
                 _mm_sub_epi16(dlo, muldiv255(dlo, slo)),
                 _mm_sub_epi16(dhi, muldiv255(dhi, shi)));
         break;
-    case (GL_ZERO << 16) | GL_ONE_MINUS_SRC_ALPHA:
+    case BLEND_KEY(GL_ZERO, GL_ONE_MINUS_SRC_ALPHA):
         r = _mm_packus_epi16(
                 _mm_sub_epi16(dlo, muldiv255(dlo, alphas(slo))),
                 _mm_sub_epi16(dhi, muldiv255(dhi, alphas(shi))));
         break;
-    case (GL_ZERO << 16) | GL_SRC_COLOR:
+    case BLEND_KEY(GL_ZERO, GL_SRC_COLOR):
         r = _mm_packus_epi16(
                 muldiv255(slo, dlo),
                 muldiv255(shi, dhi));
         break;
-    case (GL_ZERO << 16) | GL_SRC_ALPHA:
+    case BLEND_KEY(GL_ZERO, GL_SRC_ALPHA):
         r = _mm_packus_epi16(
                 muldiv255(alphas(slo), dlo),
                 muldiv255(alphas(shi), dhi));
         break;
-    case (GL_ONE << 16) | GL_ONE:
+    case BLEND_KEY(GL_ONE, GL_ONE):
         r = _mm_packus_epi16(_mm_add_epi16(slo, dlo), _mm_add_epi16(shi, dhi));
         break;
-    case (GL_ZERO << 16) | GL_ONE:
+    case BLEND_KEY(GL_ZERO, GL_ONE):
         r = _mm_packus_epi16(dlo, dhi);
         break;
-    case (GL_ONE << 16) | GL_ZERO:
+    case BLEND_KEY(GL_ONE, GL_ZERO):
         r = _mm_packus_epi16(slo, shi);
         break;
-    case (GL_ONE_MINUS_DST_ALPHA << 16) | GL_ONE:
+    case BLEND_KEY(GL_ONE_MINUS_DST_ALPHA, GL_ONE):
         r = _mm_packus_epi16(
                 _mm_add_epi16(dlo, _mm_sub_epi16(slo, muldiv255(slo, alphas(slo)))),
                 _mm_add_epi16(dhi, _mm_sub_epi16(shi, muldiv255(shi, alphas(shi)))));
         break;
     default:
-        assert(false);
+        UNREACHABLE;
         break;
     }
-    if (blendfunc_separate) {
+    if (blend_alpha_key) {
         __m128i a;
-        switch ((blendfunc_sa << 16) | blendfunc_da) {
-        case (GL_ONE << 16) | GL_ONE:
+        switch (blend_alpha_key) {
+        case BLEND_ALPHA_KEY_NONE:
+            a = r;
+            break;
+        case BLEND_ALPHA_KEY(GL_ONE, GL_ONE):
             a = _mm_packus_epi16(_mm_add_epi16(dlo, slo), _mm_add_epi16(dhi, shi));
             break;
-        case (GL_ZERO << 16) | GL_ONE:
+        case BLEND_ALPHA_KEY(GL_ZERO, GL_ONE):
             a = _mm_packus_epi16(dlo, dhi);
             break;
-        case (GL_ONE << 16) | GL_ZERO:
+        case BLEND_ALPHA_KEY(GL_ONE, GL_ZERO):
             a = _mm_packus_epi16(slo, shi);
             break;
-        case (GL_ONE << 16) | GL_ONE_MINUS_SRC_COLOR:
+        case BLEND_ALPHA_KEY(GL_ONE, GL_ONE_MINUS_SRC_COLOR):
             a = _mm_packus_epi16(
                     _mm_add_epi16(slo, _mm_sub_epi16(dlo, muldiv255(dlo, slo))),
                     _mm_add_epi16(shi, _mm_sub_epi16(dhi, muldiv255(dhi, shi))));
             break;
-        case (GL_ZERO << 16) | GL_SRC_COLOR:
+        case BLEND_ALPHA_KEY(GL_ZERO, GL_SRC_COLOR):
             a = _mm_packus_epi16(
                     muldiv255(dlo, slo),
                     muldiv255(dhi, shi));
+            break;
         default:
-            assert(false);
+            UNREACHABLE;
             break;
         }
         r = _mm_or_si128(_mm_and_si128(_mm_set1_epi32(0x00FFFFFF), r),
@@ -1519,4 +1593,4 @@ void Finish() {
         write_png("out.png", t.buf, t.width, t.height);
 }
 
-}
+} // extern "C"
