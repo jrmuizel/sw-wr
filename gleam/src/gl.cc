@@ -1233,7 +1233,7 @@ static inline void discard_pixels(__m128i r, int span, uint32_t* buf, int discar
     }
     if (!(discarded & 4)) {
         if (!(discarded & 8)) {
-            _mm_storeh_pd((double*)buf, _mm_castsi128_pd(r));
+            _mm_storeh_pd((double*)&buf[2], _mm_castsi128_pd(r));
         } else {
             buf[2] = _mm_cvtsi128_si32(_mm_shuffle_epi32(r, 0xAA));
         }
