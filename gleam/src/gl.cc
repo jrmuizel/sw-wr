@@ -1222,10 +1222,24 @@ static inline void write_pixels(__m128i r, int span, uint32_t* buf) {
 template<bool FULL_SPAN>
 static inline void discard_pixels(__m128i r, int span, uint32_t* buf, int discarded) {
     if (!FULL_SPAN) discarded |= 0xF << span;
-    if (!(discarded & 1)) buf[0] = _mm_cvtsi128_si32(r);
-    if (!(discarded & 2)) buf[1] = _mm_cvtsi128_si32(_mm_shuffle_epi32(r, 0x55));
-    if (!(discarded & 4)) buf[2] = _mm_cvtsi128_si32(_mm_shuffle_epi32(r, 0xAA));
-    if (!(discarded & 8)) buf[3] = _mm_cvtsi128_si32(_mm_shuffle_epi32(r, 0xFF));
+    if (!(discarded & 1)) {
+        if (!(discarded & 2)) {
+            _mm_storel_epi64((__m128i*)buf, r);
+        } else {
+            buf[0] = _mm_cvtsi128_si32(r);
+        }
+    } else if (!(discarded & 2)) {
+        buf[1] = _mm_cvtsi128_si32(_mm_shuffle_epi32(r, 0x55));
+    }
+    if (!(discarded & 4)) {
+        if (!(discarded & 8)) {
+            _mm_storeh_pd((double*)buf, _mm_castsi128_pd(r));
+        } else {
+            buf[2] = _mm_cvtsi128_si32(_mm_shuffle_epi32(r, 0xAA));
+        }
+    } else if (!(discarded & 8)) {
+        buf[3] = _mm_cvtsi128_si32(_mm_shuffle_epi32(r, 0xFF));
+    }
 }
 
 static inline void commit_output_no_depth_test(int span, uint32_t* buf, int discarded = 0) {
