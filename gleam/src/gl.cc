@@ -670,13 +670,14 @@ void TexSubImage3D(
         assert(xoffset + width <= t.width);
         assert(yoffset + height <= t.height);
         assert(zoffset + depth <= t.depth);
-        assert(zoffset == 0);
-        for (int y = yoffset; y < yoffset + height; y++) {
-                for (int x = xoffset; x < xoffset + width; x++) {
-                        dest[y * t.width * 4 + x * 4] = *src++;
-                        dest[y * t.width * 4 + x * 4 + 1] = *src++;
-                        dest[y * t.width * 4 + x * 4 + 2] = *src++;
-                        dest[y * t.width * 4 + x * 4 + 3] = *src++;
+        for (int z = zoffset; z < zoffset + depth; z++) {
+                for (int y = yoffset; y < yoffset + height; y++) {
+                        for (int x = xoffset; x < xoffset + width; x++) {
+                                dest[y * t.width * 4 + z * t.width * t.height * 4 + x * 4] = *src++;
+                                dest[y * t.width * 4 + z * t.width * t.height * 4 + x * 4 + 1] = *src++;
+                                dest[y * t.width * 4 + z * t.width * t.height * 4 + x * 4 + 2] = *src++;
+                                dest[y * t.width * 4 + z * t.width * t.height * 4 + x * 4 + 3] = *src++;
+                        }
                 }
         }
 
