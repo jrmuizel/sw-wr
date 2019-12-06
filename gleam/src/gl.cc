@@ -615,8 +615,8 @@ void TexSubImage2D(
                 assert(ty == GL_UNSIGNED_BYTE);
                 char *dest = t.buf;
                 char *src = (char*)data;
-                for (int y = yoffset; y < height; y++) {
-                        for (int x = xoffset; x < width; x++) {
+                for (int y = yoffset; y < yoffset + height; y++) {
+                        for (int x = xoffset; x < xoffset + width; x++) {
                                 dest[y * t.width + x] = *src++;
                         }
                 }
@@ -624,8 +624,8 @@ void TexSubImage2D(
                 assert(ty == GL_FLOAT);
                 float *dest = (float*)t.buf;
                 float *src = (float*)data;
-                for (int y = yoffset; y < height; y++) {
-                        for (int x = 0; x < width; x++) {
+                for (int y = yoffset; y < yoffset + height; y++) {
+                        for (int x = xoffset; x < xoffset + width; x++) {
                                 dest[y * t.width * 4 + x * 4] = *src++;
                                 dest[y * t.width * 4 + x * 4 + 1] = *src++;
                                 dest[y * t.width * 4 + x * 4 + 2] = *src++;
@@ -637,8 +637,8 @@ void TexSubImage2D(
                 assert(ty == GL_INT);
                 int *dest = (int*)t.buf;
                 int *src = (int*)data;
-                for (int y = yoffset; y < height; y++) {
-                        for (int x = 0; x < width; x++) {
+                for (int y = yoffset; y < yoffset + height; y++) {
+                        for (int x = xoffset; x < xoffset + width; x++) {
                                 dest[y * t.width * 4 + x * 4] = *src++;
                                 dest[y * t.width * 4 + x * 4 + 1] = *src++;
                                 dest[y * t.width * 4 + x * 4 + 2] = *src++;
@@ -667,8 +667,12 @@ void TexSubImage3D(
         assert(ty == GL_UNSIGNED_BYTE);
         char *dest = t.buf;
         char *src = (char*)data;
-        for (int y = yoffset; y < height; y++) {
-                for (int x = 0; x < width; x++) {
+        assert(xoffset + width <= t.width);
+        assert(yoffset + height <= t.height);
+        assert(zoffset + depth <= t.depth);
+        assert(zoffset == 0);
+        for (int y = yoffset; y < yoffset + height; y++) {
+                for (int x = xoffset; x < xoffset + width; x++) {
                         dest[y * t.width * 4 + x * 4] = *src++;
                         dest[y * t.width * 4 + x * 4 + 1] = *src++;
                         dest[y * t.width * 4 + x * 4 + 2] = *src++;
