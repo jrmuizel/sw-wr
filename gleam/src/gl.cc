@@ -266,8 +266,7 @@ using namespace glsl;
 GLenum active_texture;
 GLuint texture_slots[16];
 
-sampler2D lookup_sampler(int texture) {
-        sampler2D s = new sampler2D_impl; //XXX: going to leak it
+sampler2D lookup_sampler(sampler2D_impl *s, int texture) {
         if (!texture_slots[texture]) {
             s->width = 0;
             s->height = 0;
@@ -285,8 +284,7 @@ sampler2D lookup_sampler(int texture) {
         return s;
 }
 
-isampler2D lookup_isampler(int texture) {
-        isampler2D s = new isampler2D_impl; //XXX: going to leak it
+isampler2D lookup_isampler(isampler2D_impl *s, int texture) {
         if (!texture_slots[texture]) {
             s->width = 0;
             s->height = 0;
@@ -304,8 +302,7 @@ isampler2D lookup_isampler(int texture) {
         return s;
 }
 
-sampler2DArray lookup_sampler_array(int texture) {
-        sampler2DArray s = new sampler2DArray_impl; //XXX: going to leak it
+sampler2DArray lookup_sampler_array(sampler2DArray_impl *s, int texture) {
         if (!texture_slots[texture]) {
             s->width = 0;
             s->height = 0;
@@ -1467,6 +1464,8 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
         assert(type == GL_UNSIGNED_SHORT);
         assert(count == 6);
         assert(indices == 0);
+        shader.bind_textures();
+        frag_shader.bind_textures();
         for (int instance = 0; instance < instancecount; instance++) {
         if (indices == 0) {
                 Buffer &indices_buf = buffers[current_buffer[GL_ELEMENT_ARRAY_BUFFER]];
