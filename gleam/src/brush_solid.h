@@ -47,34 +47,34 @@ if (index == 2) {
 assert(0); // uTransform
 }
 if (index == 3) {
-sColor0 = lookup_sampler_array(value);
+sColor0_slot = value;
 }
 if (index == 4) {
-sColor1 = lookup_sampler_array(value);
+sColor1_slot = value;
 }
 if (index == 5) {
-sColor2 = lookup_sampler_array(value);
+sColor2_slot = value;
 }
 if (index == 6) {
-sRenderTasks = lookup_sampler(value);
+sRenderTasks_slot = value;
 }
 if (index == 7) {
-sGpuCache = lookup_sampler(value);
+sGpuCache_slot = value;
 }
 if (index == 8) {
-sTransformPalette = lookup_sampler(value);
+sTransformPalette_slot = value;
 }
 if (index == 9) {
-sPrevPassAlpha = lookup_sampler_array(value);
+sPrevPassAlpha_slot = value;
 }
 if (index == 10) {
-sPrevPassColor = lookup_sampler_array(value);
+sPrevPassColor_slot = value;
 }
 if (index == 11) {
-sPrimitiveHeadersF = lookup_sampler(value);
+sPrimitiveHeadersF_slot = value;
 }
 if (index == 12) {
-sPrimitiveHeadersI = lookup_isampler(value);
+sPrimitiveHeadersI_slot = value;
 }
 }
 void set_uniform_4f(int index, float *value) {
@@ -182,6 +182,38 @@ void store_interp_outputs(void* dest_ptr) {
   for(int n = 0; n < 4; n++) {
     dest[n].vClipMaskUv = get_nth(vClipMaskUv, n);
   }
+}
+sampler2DArray_impl sColor0_impl;
+int sColor0_slot;
+sampler2DArray_impl sColor1_impl;
+int sColor1_slot;
+sampler2DArray_impl sColor2_impl;
+int sColor2_slot;
+sampler2D_impl sRenderTasks_impl;
+int sRenderTasks_slot;
+sampler2D_impl sGpuCache_impl;
+int sGpuCache_slot;
+sampler2D_impl sTransformPalette_impl;
+int sTransformPalette_slot;
+sampler2DArray_impl sPrevPassAlpha_impl;
+int sPrevPassAlpha_slot;
+sampler2DArray_impl sPrevPassColor_impl;
+int sPrevPassColor_slot;
+sampler2D_impl sPrimitiveHeadersF_impl;
+int sPrimitiveHeadersF_slot;
+isampler2D_impl sPrimitiveHeadersI_impl;
+int sPrimitiveHeadersI_slot;
+void bind_textures() {
+sColor0 = lookup_sampler_array(&sColor0_impl, sColor0_slot);
+sColor1 = lookup_sampler_array(&sColor1_impl, sColor1_slot);
+sColor2 = lookup_sampler_array(&sColor2_impl, sColor2_slot);
+sRenderTasks = lookup_sampler(&sRenderTasks_impl, sRenderTasks_slot);
+sGpuCache = lookup_sampler(&sGpuCache_impl, sGpuCache_slot);
+sTransformPalette = lookup_sampler(&sTransformPalette_impl, sTransformPalette_slot);
+sPrevPassAlpha = lookup_sampler_array(&sPrevPassAlpha_impl, sPrevPassAlpha_slot);
+sPrevPassColor = lookup_sampler_array(&sPrevPassColor_impl, sPrevPassColor_slot);
+sPrimitiveHeadersF = lookup_sampler(&sPrimitiveHeadersF_impl, sPrimitiveHeadersF_slot);
+sPrimitiveHeadersI = lookup_isampler(&sPrimitiveHeadersI_impl, sPrimitiveHeadersI_slot);
 }
 int32_t uMode;
 mat4_scalar uTransform;
@@ -613,22 +645,22 @@ vec4 oFragColor
 struct brush_solid_frag {
 void set_uniform_int(int index, int value) {
 if (index == 3) {
-sColor0 = lookup_sampler_array(value);
+sColor0_slot = value;
 }
 if (index == 4) {
-sColor1 = lookup_sampler_array(value);
+sColor1_slot = value;
 }
 if (index == 5) {
-sColor2 = lookup_sampler_array(value);
+sColor2_slot = value;
 }
 if (index == 7) {
-sGpuCache = lookup_sampler(value);
+sGpuCache_slot = value;
 }
 if (index == 9) {
-sPrevPassAlpha = lookup_sampler_array(value);
+sPrevPassAlpha_slot = value;
 }
 if (index == 10) {
-sPrevPassColor = lookup_sampler_array(value);
+sPrevPassColor_slot = value;
 }
 }
 void set_uniform_4f(int index, float *value) {
@@ -689,6 +721,26 @@ void step_interp_inputs(const void* step_ptr) {
   vClipMaskUv += step->vClipMaskUv;
 }
 vec4 get_output() { return oFragColor; }
+sampler2DArray_impl sColor0_impl;
+int sColor0_slot;
+sampler2DArray_impl sColor1_impl;
+int sColor1_slot;
+sampler2DArray_impl sColor2_impl;
+int sColor2_slot;
+sampler2D_impl sGpuCache_impl;
+int sGpuCache_slot;
+sampler2DArray_impl sPrevPassAlpha_impl;
+int sPrevPassAlpha_slot;
+sampler2DArray_impl sPrevPassColor_impl;
+int sPrevPassColor_slot;
+void bind_textures() {
+sColor0 = lookup_sampler_array(&sColor0_impl, sColor0_slot);
+sColor1 = lookup_sampler_array(&sColor1_impl, sColor1_slot);
+sColor2 = lookup_sampler_array(&sColor2_impl, sColor2_slot);
+sGpuCache = lookup_sampler(&sGpuCache_impl, sGpuCache_slot);
+sPrevPassAlpha = lookup_sampler_array(&sPrevPassAlpha_impl, sPrevPassAlpha_slot);
+sPrevPassColor = lookup_sampler_array(&sPrevPassColor_impl, sPrevPassColor_slot);
+}
 Bool isPixelDiscarded = false;
 vec4 oFragColor;
 sampler2DArray sColor0;
