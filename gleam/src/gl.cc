@@ -199,7 +199,7 @@ __m128i blendcolor = _mm_set1_epi16(0);
     macro(GL_ZERO, GL_ONE_MINUS_SRC_ALPHA, 0, 0) \
     macro(GL_ZERO, GL_SRC_COLOR, 0, 0) \
     macro(GL_ONE, GL_ONE, 0, 0) \
-    macro(GL_ONE, GL_ONE, GL_ONE, GL_ONE_MINUS_SRC_ALPHA) \
+    macro(GL_ONE, GL_ONE, GL_ONE, GL_ONE_MINUS_SRC_COLOR) \
     macro(GL_ONE, GL_ZERO, 0, 0) \
     macro(GL_ONE_MINUS_DST_ALPHA, GL_ONE, GL_ZERO, GL_ONE) \
     macro(GL_CONSTANT_COLOR, GL_ONE_MINUS_SRC_COLOR, 0, 0)
@@ -1092,7 +1092,7 @@ static inline __m128i blend_pixels(__m128i r, int span, const uint32_t* buf) {
     case BLEND_KEY(GL_ONE, GL_ONE):
         r = _mm_packus_epi16(_mm_add_epi16(slo, dlo), _mm_add_epi16(shi, dhi));
         break;
-    case BLEND_KEY(GL_ONE, GL_ONE, GL_ONE, GL_ONE_MINUS_SRC_ALPHA):
+    case BLEND_KEY(GL_ONE, GL_ONE, GL_ONE, GL_ONE_MINUS_SRC_COLOR):
         r = _mm_packus_epi16(
                 _mm_add_epi16(slo, _mm_sub_epi16(dlo, _mm_and_si128(muldiv255(dlo, slo), alpha_mask))),
                 _mm_add_epi16(shi, _mm_sub_epi16(dhi, _mm_and_si128(muldiv255(dhi, shi), alpha_mask))));
