@@ -2020,8 +2020,9 @@ vec4 texture(sampler2DArray sampler, vec3 P, Float layer) {
         return vec4();
 }
 vec4 texture(sampler2DArray sampler, vec3 P) {
-        assert(0);
-        return vec4();
+        // just do nearest for now
+        ivec3 coord(round(P.x, sampler->width), round(P.y, sampler->height), round(P.z, sampler->depth));
+        return texelFetch(sampler, coord, 0);
 }
 
 
