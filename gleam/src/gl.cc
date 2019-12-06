@@ -199,7 +199,7 @@ __m128i blendcolor = _mm_set1_epi16(0);
     macro(GL_ZERO, GL_ONE_MINUS_SRC_ALPHA, 0, 0) \
     macro(GL_ZERO, GL_SRC_COLOR, 0, 0) \
     macro(GL_ONE, GL_ONE, 0, 0) \
-    macro(GL_ONE, GL_ONE, GL_ONE, GL_ONE_MINUS_SRC_COLOR) \
+    macro(GL_ONE, GL_ONE, GL_ONE, GL_ONE_MINUS_SRC_ALPHA) \
     macro(GL_ONE, GL_ZERO, 0, 0) \
     macro(GL_ONE_MINUS_DST_ALPHA, GL_ONE, GL_ZERO, GL_ONE) \
     macro(GL_CONSTANT_COLOR, GL_ONE_MINUS_SRC_COLOR, 0, 0)
@@ -377,27 +377,29 @@ void Disable(GLenum cap) {
     }
 }
 
+int remap_blendfunc(GLenum rgb, GLenum a) {
+    switch (a) {
+    case GL_SRC_ALPHA: if (rgb == GL_SRC_COLOR) a = GL_SRC_COLOR; break;
+    case GL_ONE_MINUS_SRC_ALPHA: if (rgb == GL_ONE_MINUS_SRC_COLOR) a = GL_ONE_MINUS_SRC_COLOR; break;
+    case GL_DST_ALPHA: if (rgb == GL_DST_COLOR) a = GL_DST_COLOR; break;
+    case GL_ONE_MINUS_DST_ALPHA: if (rgb == GL_ONE_MINUS_DST_COLOR) a = GL_ONE_MINUS_DST_COLOR; break;
+    case GL_CONSTANT_ALPHA: if (rgb == GL_CONSTANT_COLOR) a = GL_CONSTANT_COLOR; break;
+    case GL_ONE_MINUS_CONSTANT_ALPHA: if (rgb == GL_ONE_MINUS_CONSTANT_COLOR) a = GL_ONE_MINUS_CONSTANT_COLOR; break;
+    case GL_SRC_COLOR: if (rgb == GL_SRC_ALPHA) a = GL_SRC_ALPHA; break;
+    case GL_ONE_MINUS_SRC_COLOR: if (rgb == GL_ONE_MINUS_SRC_ALPHA) a = GL_ONE_MINUS_SRC_ALPHA; break;
+    case GL_DST_COLOR: if (rgb == GL_DST_ALPHA) a = GL_DST_ALPHA; break;
+    case GL_ONE_MINUS_DST_COLOR: if (rgb == GL_ONE_MINUS_DST_ALPHA) a = GL_ONE_MINUS_DST_ALPHA; break;
+    case GL_CONSTANT_COLOR: if (rgb == GL_CONSTANT_ALPHA) a = GL_CONSTANT_ALPHA; break;
+    case GL_ONE_MINUS_CONSTANT_COLOR: if (rgb == GL_ONE_MINUS_CONSTANT_ALPHA) a = GL_ONE_MINUS_CONSTANT_ALPHA; break;
+    }
+}
+
 void BlendFunc(GLenum srgb, GLenum drgb, GLenum sa, GLenum da) {
     blendfunc_srgb = srgb;
     blendfunc_drgb = drgb;
-
-    switch (sa) {
-    case GL_SRC_ALPHA: sa = GL_SRC_COLOR; break;
-    case GL_ONE_MINUS_SRC_ALPHA: sa = GL_ONE_MINUS_SRC_COLOR; break;
-    case GL_DST_ALPHA: sa = GL_DST_COLOR; break;
-    case GL_ONE_MINUS_DST_ALPHA: sa = GL_ONE_MINUS_DST_COLOR; break;
-    case GL_CONSTANT_ALPHA: sa = GL_CONSTANT_COLOR; break;
-    case GL_ONE_MINUS_CONSTANT_ALPHA: sa = GL_ONE_MINUS_CONSTANT_COLOR; break;
-    }
+    sa = remap_blendfunc(srgb, sa);
+    da = remap_blendfunc(drgb, da);
     blendfunc_sa = sa;
-    switch (da) {
-    case GL_SRC_ALPHA: da = GL_SRC_COLOR; break;
-    case GL_ONE_MINUS_SRC_ALPHA: da = GL_ONE_MINUS_SRC_COLOR; break;
-    case GL_DST_ALPHA: da = GL_DST_COLOR; break;
-    case GL_ONE_MINUS_DST_ALPHA: da = GL_ONE_MINUS_DST_COLOR; break;
-    case GL_CONSTANT_ALPHA: da = GL_CONSTANT_COLOR; break;
-    case GL_ONE_MINUS_CONSTANT_ALPHA: da = GL_ONE_MINUS_CONSTANT_COLOR; break;
-    }
     blendfunc_da = da;
 
     #define HASH_BLEND_KEY(x, y, z, w) ((x << 4) | (y) | (z << 24) | (w << 20))
@@ -1092,7 +1094,7 @@ static inline __m128i blend_pixels(__m128i r, int span, const uint32_t* buf) {
     case BLEND_KEY(GL_ONE, GL_ONE):
         r = _mm_packus_epi16(_mm_add_epi16(slo, dlo), _mm_add_epi16(shi, dhi));
         break;
-    case BLEND_KEY(GL_ONE, GL_ONE, GL_ONE, GL_ONE_MINUS_SRC_COLOR):
+    case BLEND_KEY(GL_ONE, GL_ONE, GL_ONE, GL_ONE_MINUS_SRC_ALPHA):
         r = _mm_packus_epi16(
                 _mm_add_epi16(slo, _mm_sub_epi16(dlo, _mm_and_si128(muldiv255(dlo, slo), alpha_mask))),
                 _mm_add_epi16(shi, _mm_sub_epi16(dhi, _mm_and_si128(muldiv255(dhi, shi), alpha_mask))));
