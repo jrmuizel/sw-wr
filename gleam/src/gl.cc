@@ -352,32 +352,6 @@ void load_attrib(T& attrib, VertexAttrib &va, unsigned short *indices, int start
 vec4 gl_Position;
 vec4 gl_FragCoord;
 #include "brush_solid.h"
-//brush_solid
-/*
-clear_color()
-get_string()
-get_integer_v()
-get_string_i()
-get_error()
-active_texture()
-bind_texture()
-bind_vertex_array()
-pixel_store_i()
-bind_buffer()
-gen_textures()
-tex_parmater_i()
-tex_storage_3d()
-tex_storage_2d()
-tex_sub_image_2d()
-gen_buffers()
-gen_vertex_arrays()
-enable_vertex_attrib_array()
-vertex_attrib_divisor()
-vertex_attrib_pointer()
-vertex_attrib_i_pointer()
-buffer_data_untyped()
-tex_sub_image_3d()
-gen_framebuffers()*/
 extern "C" {
 
 void SetViewport(GLint x, GLint y, GLsizei width, GLsizei height) {
