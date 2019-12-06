@@ -170,22 +170,15 @@ vec4_scalar vColor;
 };
 struct InterpOutputs {
 vec4_scalar vClipMaskUv;
-friend InterpOutputs operator-(const InterpOutputs& a, const InterpOutputs& b) {
-  return InterpOutputs{a.vClipMaskUv-b.vClipMaskUv};
-}
-friend InterpOutputs operator+(const InterpOutputs& a, const InterpOutputs& b) {
-  return InterpOutputs{a.vClipMaskUv+b.vClipMaskUv};
-}
-friend InterpOutputs operator*(const InterpOutputs& a, float b) {
-  return InterpOutputs{a.vClipMaskUv*b};
-}
 };
-void store_flat_outputs(FlatOutputs& dest) {
-  dest.vTransformBounds = vTransformBounds;
-  dest.vClipMaskUvBounds = vClipMaskUvBounds;
-  dest.vColor = vColor;
+void store_flat_outputs(void* dest_ptr) {
+  auto* dest = reinterpret_cast<FlatOutputs*>(dest_ptr);
+  dest->vTransformBounds = vTransformBounds;
+  dest->vClipMaskUvBounds = vClipMaskUvBounds;
+  dest->vColor = vColor;
 }
-void store_interp_outputs(InterpOutputs dest[4]) {
+void store_interp_outputs(void* dest_ptr) {
+  auto* dest = reinterpret_cast<InterpOutputs*>(dest_ptr);
   for(int n = 0; n < 4; n++) {
     dest[n].vClipMaskUv = get_nth(vClipMaskUv, n);
   }
@@ -492,9 +485,9 @@ ClipArea fetch_clip_area(I32 index) {
  }
  {
   RenderTaskData task_data = fetch_render_task_data(index);
-  (area).common_data = if_then_else(!(_c6_),(task_data).common_data,(area).common_data);
-  (area).device_pixel_scale = if_then_else(!(_c6_),((task_data).user_data).sel(X),(area).device_pixel_scale);
-  (area).screen_origin = if_then_else(!(_c6_),((task_data).user_data).sel(Y, Z),(area).screen_origin);
+  (area).common_data = if_then_else(~(_c6_),(task_data).common_data,(area).common_data);
+  (area).device_pixel_scale = if_then_else(~(_c6_),((task_data).user_data).sel(X),(area).device_pixel_scale);
+  (area).screen_origin = if_then_else(~(_c6_),((task_data).user_data).sel(Y, Z),(area).screen_origin);
  }
  return area;
 }
@@ -589,9 +582,9 @@ void main(void) {
  {
   I32 segment_address = ((ph).specific_prim_address)+((1)+((segment_index)*(2)));
   std::array<vec4,2> segment_info = fetch_from_gpu_cache_2(segment_address);
-  segment_rect = if_then_else(!(_c3_),RectWithSize((segment_info[0]).sel(X, Y), (segment_info[0]).sel(Z, W)),segment_rect);
-  (segment_rect).p0 = if_then_else(!(_c3_),(segment_rect).p0+((ph).local_rect).p0,(segment_rect).p0);
-  segment_data = if_then_else(!(_c3_),segment_info[1],segment_data);
+  segment_rect = if_then_else(~(_c3_),RectWithSize((segment_info[0]).sel(X, Y), (segment_info[0]).sel(Z, W)),segment_rect);
+  (segment_rect).p0 = if_then_else(~(_c3_),(segment_rect).p0+((ph).local_rect).p0,(segment_rect).p0);
+  segment_data = if_then_else(~(_c3_),segment_info[1],segment_data);
  }
  VertexInfo vi;
  PictureTask pic_task = fetch_picture_task(render_task_index);
@@ -603,7 +596,7 @@ void main(void) {
  }
  {
   bvec4 edge_mask = notEqual((edge_flags)&(make_ivec4(1, 2, 4, 8)), make_ivec4(0));
-  vi = if_then_else(!(_c4_),write_transform_vertex(segment_rect, (ph).local_rect, (ph).local_clip_rect, mix(make_vec4(0.), make_vec4(1.), edge_mask), (ph).z, transform, pic_task, !(_c4_)),vi);
+  vi = if_then_else(~(_c4_),write_transform_vertex(segment_rect, (ph).local_rect, (ph).local_clip_rect, mix(make_vec4(0.), make_vec4(1.), edge_mask), (ph).z, transform, pic_task, ~(_c4_)),vi);
  }
  brush_vs(vi, (ph).specific_prim_address, (ph).local_rect, segment_rect, (ph).user_data, segment_user_data, (transform).m, pic_task, brush_flags, segment_data);
 }
@@ -678,16 +671,22 @@ if (index == 10) {
 assert(0); // sPrevPassColor
 }
 }
-template<typename T> void read_flat_inputs(const T& src) {
-  vTransformBounds = src.vTransformBounds;
-  vClipMaskUvBounds = src.vClipMaskUvBounds;
-  vColor = src.vColor;
+typedef brush_solid_vert::FlatOutputs FlatInputs;
+typedef brush_solid_vert::InterpOutputs InterpInputs;
+void read_flat_inputs(const void* src_ptr) {
+  auto* src = reinterpret_cast<const FlatInputs*>(src_ptr);
+  vTransformBounds = src->vTransformBounds;
+  vClipMaskUvBounds = src->vClipMaskUvBounds;
+  vColor = src->vColor;
 }
-template<typename T> void read_interp_inputs(const T& a, const T& b, const T& c, const T& d) {
-  vClipMaskUv = assemble(a.vClipMaskUv, b.vClipMaskUv, c.vClipMaskUv, d.vClipMaskUv);
+void read_interp_inputs(const void* init_ptr, const void* step_ptr) {
+  auto* init = reinterpret_cast<const InterpInputs*>(init_ptr);
+  auto* step = reinterpret_cast<const InterpInputs*>(step_ptr);
+  vClipMaskUv = init_interp(init->vClipMaskUv, step->vClipMaskUv);
 }
-template<typename T> void step_interp_inputs(const T& delta) {
-  vClipMaskUv += delta.vClipMaskUv;
+void step_interp_inputs(const void* step_ptr) {
+  auto* step = reinterpret_cast<const InterpInputs*>(step_ptr);
+  vClipMaskUv += step->vClipMaskUv;
 }
 vec4 get_output() { return oFragColor; }
 Bool isPixelDiscarded = false;

@@ -1177,7 +1177,12 @@ static inline void commit_output(int span, uint32_t* buf, uint16_t *depth, uint1
     }
 }
 
-void draw_quad(brush_solid_frag &shader, brush_solid_vert::FlatOutputs &flat_outs, brush_solid_vert::InterpOutputs interp_outs[4], const Point p[4], Point zw) {
+static const size_t MAX_FLATS = 4 * 64;
+typedef char Flats[MAX_FLATS];
+static const size_t MAX_INTERPOLANTS = 16;
+typedef float Interpolants __attribute__((ext_vector_type(MAX_INTERPOLANTS)));
+
+void draw_quad(brush_solid_frag &shader, Flats flat_outs, Interpolants interp_outs[4], const Point p[4], Point zw) {
         Framebuffer& fb = get_draw_framebuffer();
         Texture& colortex = textures[fb.color_attachment];
         assert(colortex.internal_format == GL_RGBA8);
@@ -1261,11 +1266,11 @@ void draw_quad(brush_solid_frag &shader, brush_solid_vert::FlatOutputs &flat_out
         float y = floor(std::max(l0.y, fy0) + 0.5f) + 0.5f;
         lx += (y - l0.y) * lm;
         rx += (y - r0.y) * rm;
-        brush_solid_vert::InterpOutputs lo = interp_outs[l0i];
-        brush_solid_vert::InterpOutputs lom = (interp_outs[l1i] - lo) * (1.0f / (l1.y - l0.y));
+        Interpolants lo = interp_outs[l0i];
+        Interpolants lom = (interp_outs[l1i] - lo) * (1.0f / (l1.y - l0.y));
         lo = lo + lom * (y - l0.y);
-        brush_solid_vert::InterpOutputs ro = interp_outs[r0i];
-        brush_solid_vert::InterpOutputs rom = (interp_outs[r1i] - ro) * (1.0f / (r1.y - r0.y));
+        Interpolants ro = interp_outs[r0i];
+        Interpolants rom = (interp_outs[r1i] - ro) * (1.0f / (r1.y - r0.y));
         ro = ro + rom * (y - r0.y);
         int shaded_pixels = 0;
         int shaded_lines = 0;
@@ -1283,7 +1288,7 @@ void draw_quad(brush_solid_frag &shader, brush_solid_vert::FlatOutputs &flat_out
                 lx = l0.x + (y - l0.y) * lm;
                 lo = interp_outs[l0i];
                 lom = (interp_outs[l1i] - lo) * (1.0f / (l1.y - l0.y));
-                lo = lo + lom * (y - l0.y);
+                lo += lom * (y - l0.y);
             }
             if (y > r1.y) {
                 r0i = r1i;
@@ -1295,7 +1300,7 @@ void draw_quad(brush_solid_frag &shader, brush_solid_vert::FlatOutputs &flat_out
                 rx = r0.x + (y - r0.y) * rm;
                 ro = interp_outs[r0i];
                 rom = (interp_outs[r1i] - ro) * (1.0f / (r1.y - r0.y));
-                ro = ro + rom * (y - r0.y);
+                ro += rom * (y - r0.y);
             }
             int startx = int(std::max(lx, fx0) + 0.5f);
             int endx = int(std::min(rx, fx1) + 0.5f);
@@ -1303,17 +1308,14 @@ void draw_quad(brush_solid_frag &shader, brush_solid_vert::FlatOutputs &flat_out
             if (span > 0) {
                 shaded_lines++;
                 shaded_pixels += span;
-                gl_FragCoord.x = assemble(startx + 0.5f, startx + 1.5f, startx + 2.5f, startx + 3.5f);
+                gl_FragCoord.x = init_interp(startx + 0.5f, 1);
                 gl_FragCoord.y = y;
-                brush_solid_vert::InterpOutputs stepo = (ro - lo) * (1.0f / (rx - lx));
+                Interpolants stepo = (ro - lo) * (1.0f / (rx - lx));
                 {
-                    brush_solid_vert::InterpOutputs o0 = lo + stepo * (startx + 0.5f - lx);
-                    brush_solid_vert::InterpOutputs o1 = o0 + stepo;
-                    brush_solid_vert::InterpOutputs o2 = o1 + stepo;
-                    brush_solid_vert::InterpOutputs o3 = o2 + stepo;
-                    frag_shader.read_interp_inputs(o0, o1, o2, o3);
+                    Interpolants o = lo + stepo * (startx + 0.5f - lx);
+                    frag_shader.read_interp_inputs(&o, &stepo);
                 }
-                stepo = stepo * 4;
+                stepo *= 4;
                 uint32_t* buf = fbuf + startx;
                 uint16_t* depth = fdepth + startx;
                 if (!frag_shader.uses_discard()) {
@@ -1321,28 +1323,28 @@ void draw_quad(brush_solid_frag &shader, brush_solid_vert::FlatOutputs &flat_out
                         for (; span >= 8; span -= 8, buf += 8, depth += 8) {
                             int discarded = check_depth<2>(z, span, depth);
                             if (discarded == 0xFF) {
-                                frag_shader.step_interp_inputs(stepo);
-                                frag_shader.step_interp_inputs(stepo);
+                                frag_shader.step_interp_inputs(&stepo);
+                                frag_shader.step_interp_inputs(&stepo);
                                 continue;
                             }
                             frag_shader.main();
-                            frag_shader.step_interp_inputs(stepo);
+                            frag_shader.step_interp_inputs(&stepo);
                             commit_output_no_depth_test(span, buf, discarded&0xF);
                             frag_shader.main();
-                            frag_shader.step_interp_inputs(stepo);
+                            frag_shader.step_interp_inputs(&stepo);
                             commit_output_no_depth_test(span, buf + 4, discarded>>4);
                         }
                     } else {
                         for (; span >= 4; span -= 4, buf += 4) {
                             frag_shader.main();
-                            frag_shader.step_interp_inputs(stepo);
+                            frag_shader.step_interp_inputs(&stepo);
                             commit_output_no_depth_test(span, buf);
                         }
                     }
                 }
                 for (; span >= 4; span -= 4, buf += 4, depth += 4) {
                     frag_shader.main();
-                    frag_shader.step_interp_inputs(stepo);
+                    frag_shader.step_interp_inputs(&stepo);
                     commit_output<true>(span, buf, depth, z);
                 }
                 if (span > 0) {
@@ -1353,8 +1355,8 @@ void draw_quad(brush_solid_frag &shader, brush_solid_vert::FlatOutputs &flat_out
             lx += lm;
             rx += rm;
             y++;
-            lo = lo + lom;
-            ro = ro + rom;
+            lo += lom;
+            ro += rom;
             fbuf += colortex.width;
         }
 
@@ -1489,9 +1491,9 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
                                 shader.load_attribs(v.attribs, indices, i, instance, 4);
                                 printf("native quad %d %d %d %d\n", indices[i], indices[i+1], indices[i+2], indices[i+3]);
                                 shader.main();
-                                brush_solid_vert::FlatOutputs flat_outs;
+                                Flats flat_outs;
                                 shader.store_flat_outputs(flat_outs);
-                                brush_solid_vert::InterpOutputs interp_outs[4];
+                                Interpolants interp_outs[4];
                                 shader.store_interp_outputs(interp_outs);
                                 Float w = 1.0f / gl_Position.w;
                                 vec3 clip = gl_Position.sel(X, Y, Z) * w;
@@ -1515,9 +1517,9 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
                                     printf("triangle %d %d %d %d\n", indices[i], indices[i+1], indices[i+2]);
                                 }
                                 shader.main();
-                                brush_solid_vert::FlatOutputs flat_outs;
+                                Flats flat_outs;
                                 shader.store_flat_outputs(flat_outs);
-                                brush_solid_vert::InterpOutputs interp_outs[4];
+                                Interpolants interp_outs[4];
                                 shader.store_interp_outputs(interp_outs);
                                 Float w = 1.0f / gl_Position.w;
                                 vec3 clip = gl_Position.sel(X, Y, Z) * w;

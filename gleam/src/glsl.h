@@ -522,7 +522,7 @@ Float ceil(Float v) {
     }
 
 
-    U32 round(Float v, Float scale) { return _mm_cvtps_epi32(v*scale); }
+    I32 round(Float v, Float scale) { return _mm_cvtps_epi32(v*scale); }
 
 Float fract(Float v) { return v - floor(v); }
 
@@ -1071,6 +1071,13 @@ struct vec3 {
         }
         friend vec3 operator+(vec3 a, vec3 b) {
                 return vec3(a.x+b.x, a.y+b.y, a.z+b.z);
+        }
+
+        vec3 operator+=(vec3_scalar a) {
+                x += a.x;
+                y += a.y;
+                z += a.z;
+                return *this;
         }
 };
 
@@ -2171,8 +2178,8 @@ vec3 abs(vec3 v) {
 }
 
 mat2 inverse(mat2 v) {
-        assert(0);
-        return mat2();
+        Float det = v[0].x*v[1].y - v[0].y * v[1].x;
+        return mat2(vec2(v[1].y, -v[0].y), vec2(-v[1].x, v[0].x))* (1./det);
 }
 
 int32_t get_nth(I32 a, int n) {
@@ -2241,22 +2248,23 @@ void put_nth(vec4 &dst, int n, vec4_scalar src) {
         dst.w[n] = src.w;
 }
 
-Float assemble(float a, float b, float c, float d) {
-    return (Float){a, b, c, d};
+Float init_interp(float init0, float step) {
+    float init1 = init0 + step;
+    float init2 = init1 + step;
+    float init3 = init2 + step;
+    return {init0, init1, init2, init3};
 }
 
-vec2 assemble(vec2_scalar a, vec2_scalar b, vec2_scalar c, vec2_scalar d) {
-    return vec2(assemble(a.x, b.x, c.x, d.x), assemble(a.y, b.y, c.y, d.y));
+vec2 init_interp(vec2_scalar init, vec2_scalar step) {
+    return vec2(init_interp(init.x, step.x), init_interp(init.y, step.y));
 }
 
-vec3 assemble(vec3_scalar a, vec3_scalar b, vec3_scalar c, vec3_scalar d) {
-    return vec3(assemble(a.x, b.x, c.x, d.x), assemble(a.y, b.y, c.y, d.y),
-                assemble(a.z, b.z, c.z, d.z));
+vec3 init_interp(vec3_scalar init, vec3_scalar step) {
+    return vec3(init_interp(init.x, step.x), init_interp(init.y, step.y), init_interp(init.z, step.z));
 }
 
-vec4 assemble(vec4_scalar a, vec4_scalar b, vec4_scalar c, vec4_scalar d) {
-    return vec4(assemble(a.x, b.x, c.x, d.x), assemble(a.y, b.y, c.y, d.y),
-                assemble(a.z, b.z, c.z, d.z), assemble(a.w, b.w, c.w, d.w));
+vec4 init_interp(vec4_scalar init, vec4_scalar step) {
+    return vec4(init_interp(init.x, step.x), init_interp(init.y, step.y), init_interp(init.z, step.z), init_interp(init.w, step.w));
 }
 
 template <size_t SIZE>
