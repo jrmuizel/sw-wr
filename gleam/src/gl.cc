@@ -1203,7 +1203,7 @@ static inline void commit_output(int span, uint32_t* buf, uint16_t *depth, uint1
     }
 }
 
-void draw_quad(brush_solid_frag &shader, brush_solid_vert::FlatOutputs &flat_outs, brush_solid_vert::InterpOutputs interp_outs[4], Point a, Point b, Point c, Point d, uint16_t z) {
+void draw_quad(brush_solid_frag &shader, brush_solid_vert::FlatOutputs &flat_outs, brush_solid_vert::InterpOutputs interp_outs[4], const Point p[4], Point zw) {
         Framebuffer& fb = get_draw_framebuffer();
         Texture& colortex = textures[fb.color_attachment];
         assert(colortex.internal_format == GL_RGBA8);
@@ -1226,10 +1226,10 @@ void draw_quad(brush_solid_frag &shader, brush_solid_vert::FlatOutputs &flat_out
         auto top_left = Point{std::numeric_limits<float>::max(), std::numeric_limits<float>::max()};
         auto bot_right = Point{std::numeric_limits<float>::lowest(), std::numeric_limits<float>::lowest()};
 
-        top_left.x = std::min(std::min(a.x, b.x), std::min(c.x, d.x));
-        top_left.y = std::min(std::min(a.y, b.y), std::min(c.y, d.y));
-        bot_right.x = std::max(std::max(a.x, b.x), std::max(c.x, d.x));
-        bot_right.y = std::max(std::max(a.y, b.y), std::max(c.y, d.y));
+        top_left.x = std::min(std::min(p[0].x, p[1].x), std::min(p[2].x, p[3].x));
+        top_left.y = std::min(std::min(p[0].y, p[1].y), std::min(p[2].y, p[3].y));
+        bot_right.x = std::max(std::max(p[0].x, p[1].x), std::max(p[2].x, p[3].x));
+        bot_right.y = std::max(std::max(p[0].y, p[1].y), std::max(p[2].y, p[3].y));
 
         printf("bbox: %f %f %f %f\n", top_left.x, top_left.y, bot_right.x, bot_right.y);
 
@@ -1239,14 +1239,22 @@ void draw_quad(brush_solid_frag &shader, brush_solid_vert::FlatOutputs &flat_out
         double start = ({ struct timespec tp; clock_gettime(CLOCK_MONOTONIC, &tp); tp.tv_sec * 1e9 + tp.tv_nsec; });
 #endif
 
-        int nump = c.x != d.x || c.y != d.y ? 4 : 3;
-        Point p[4] = { a, b, c, d };
+        // SSE2 does not support unsigned comparison, so bias Z to be negative.
+        uint16_t z = uint16_t(0xFFFF * zw.x) - 0x8000;
+        gl_FragCoord.z = zw.x;
+        gl_FragCoord.w = zw.y;
+
+        int nump = p[2].x != p[3].x || p[2].y != p[3].y ? 4 : 3;
         Point l0, r0, l1, r1;
         int l0i, r0i, l1i, r1i;
         {
-            int top = b.y < a.y ? 1 : 0;
-            if (c.y < p[top].y) top = 2;
-            if (d.y < p[top].y) top = 3;
+            int top = 0;
+            for (int k = 1; k < 4; k++) {
+                if (p[k].y < p[top].y) {
+                    top = k;
+                    break;
+                }
+            }
             int next = (top+1)%nump;
             int prev = (top+nump-1)%nump;
             if (p[top].y == p[next].y) {
@@ -1321,6 +1329,8 @@ void draw_quad(brush_solid_frag &shader, brush_solid_vert::FlatOutputs &flat_out
             if (span > 0) {
                 shaded_lines++;
                 shaded_pixels += span;
+                gl_FragCoord.x = assemble(startx + 0.5f, startx + 1.5f, startx + 2.5f, startx + 3.5f);
+                gl_FragCoord.y = y;
                 brush_solid_vert::InterpOutputs stepo = (ro - lo) * (1.0f / (rx - lx));
                 {
                     brush_solid_vert::InterpOutputs o0 = lo + stepo * (startx + 0.5f - lx);
@@ -1336,7 +1346,11 @@ void draw_quad(brush_solid_frag &shader, brush_solid_vert::FlatOutputs &flat_out
                     if (depthtest) {
                         for (; span >= 8; span -= 8, buf += 8, depth += 8) {
                             int discarded = check_depth<2>(z, span, depth);
-                            if (discarded == 0xFF) continue;
+                            if (discarded == 0xFF) {
+                                frag_shader.step_interp_inputs(stepo);
+                                frag_shader.step_interp_inputs(stepo);
+                                continue;
+                            }
                             frag_shader.main();
                             frag_shader.step_interp_inputs(stepo);
                             commit_output_no_depth_test(span, buf, discarded&0xF);
@@ -1496,7 +1510,6 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
                         assert(indices_buf.size == count * 2);
                         unsigned short *indices = (unsigned short*)indices_buf.buf;
                         if (mode == GL_QUADS) for (int i = 0; i + 4 <= count; i += 4) {
-                                bool use_quad = false;
                                 shader.load_attribs(v.attribs, indices, i, instance, 4);
                                 printf("native quad %d %d %d %d\n", indices[i], indices[i+1], indices[i+2], indices[i+3]);
                                 shader.main();
@@ -1504,18 +1517,17 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
                                 shader.store_flat_outputs(flat_outs);
                                 brush_solid_vert::InterpOutputs interp_outs[4];
                                 shader.store_interp_outputs(interp_outs);
+                                Float w = 1.0f / gl_Position.w;
+                                vec3 clip = gl_Position.sel(X, Y, Z) * w;
                                 Point p[4];
-                                for (int k = 0; k <= 3; k++)
+                                vec3 screen = (clip + 1)*vec3(viewport.width/2, viewport.height/2, 0.5f) + vec3(viewport.x, viewport.y, 0);
+                                for (int k = 0; k < 4; k++)
                                 {
                                         printf("%f %f %f %f\n", gl_Position.x[k], gl_Position.y[k], gl_Position.z[k], gl_Position.y[k]);
-                                        float xw = (gl_Position.x[k] + 1)*(viewport.width/2) + viewport.x;
-                                        float yw = (gl_Position.y[k] + 1)*(viewport.height/2) + viewport.y;
-                                        p[k] = Point { xw, yw };
-                                        printf("%f %f\n", xw, yw);
+                                        p[k] = Point { screen.x[k], screen.y[k] };
+                                        printf("%f %f\n", p[k].x, p[k].y);
                                 }
-                                // SSE2 does not support unsigned comparison, so bias Z to be negative.
-                                uint16_t z = uint16_t(0xFFFF * (1.0f + 0.5f * gl_Position.z.x / gl_Position.w.x)) - 0x8000;
-                                draw_quad(frag_shader, flat_outs, interp_outs, p[0], p[1], p[2], p[3], z);
+                                draw_quad(frag_shader, flat_outs, interp_outs, p, Point { screen.z.x, w.x });
                         } else for (int i = 0; i + 3 <= count; i += 3) {
                                 bool use_quad = false;
                                 shader.load_attribs(v.attribs, indices, i, instance);
@@ -1531,30 +1543,24 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
                                 shader.store_flat_outputs(flat_outs);
                                 brush_solid_vert::InterpOutputs interp_outs[4];
                                 shader.store_interp_outputs(interp_outs);
+                                Float w = 1.0f / gl_Position.w;
+                                vec3 clip = gl_Position.sel(X, Y, Z) * w;
                                 Point p[4];
-                                for (int k = 0; k <= 3; k++)
+                                vec3 screen = (clip + 1)*vec3(viewport.width/2, viewport.height/2, 0.5f) + vec3(viewport.x, viewport.y, 0);
+                                for (int k = 0; k < (use_quad ? 4 : 3); k++)
                                 {
                                         printf("%f %f %f %f\n", gl_Position.x[k], gl_Position.y[k], gl_Position.z[k], gl_Position.y[k]);
-                                        float xw = (gl_Position.x[k] + 1)*(viewport.width/2) + viewport.x;
-                                        float yw = (gl_Position.y[k] + 1)*(viewport.height/2) + viewport.y;
-                                        p[k] = Point { xw, yw };
-                                        printf("%f %f\n", xw, yw);
+                                        p[k] = Point { screen.x[k], screen.y[k] };
+                                        printf("%f %f\n", p[k].x, p[k].y);
                                 }
                                 if (use_quad)
                                 {
-                                        printf("%f %f %f %f\n", gl_Position.x.w, gl_Position.y.w, gl_Position.z.w, gl_Position.y.w);
-                                        float xw = (gl_Position.x.w + 1)*(viewport.width/2) + viewport.x;
-                                        float yw = (gl_Position.y.w + 1)*(viewport.height/2) + viewport.y;
-                                        p[3] = Point { xw, yw };
-                                        printf("%f %f\n", xw, yw);
                                         std::swap(p[2], p[3]);
                                         i += 3;
                                 } else {
                                         p[3] = p[2];
                                 }
-                                // SSE2 does not support unsigned comparison, so bias Z to be negative.
-                                uint16_t z = uint16_t(0xFFFF * (1.0f + 0.5f * gl_Position.z.x / gl_Position.w.x)) - 0x8000;
-                                draw_quad(frag_shader, flat_outs, interp_outs, p[0], p[1], p[2], p[3], z);
+                                draw_quad(frag_shader, flat_outs, interp_outs, p, Point { screen.z.x, w.x });
                         }
 
                 } else {
