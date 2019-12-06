@@ -392,6 +392,7 @@ int remap_blendfunc(GLenum rgb, GLenum a) {
     case GL_CONSTANT_COLOR: if (rgb == GL_CONSTANT_ALPHA) a = GL_CONSTANT_ALPHA; break;
     case GL_ONE_MINUS_CONSTANT_COLOR: if (rgb == GL_ONE_MINUS_CONSTANT_ALPHA) a = GL_ONE_MINUS_CONSTANT_ALPHA; break;
     }
+    return a;
 }
 
 void BlendFunc(GLenum srgb, GLenum drgb, GLenum sa, GLenum da) {
