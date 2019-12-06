@@ -327,6 +327,27 @@ sampler2DArray lookup_sampler_array(int texture) {
         return s;
 }
 
+template<typename T>
+void load_attrib(T& attrib, VertexAttrib &va, unsigned short *indices, int start, int instance, int count, int dest) {
+    for (int n = 0; n < count; n++) {
+        char* src;
+        if (va.divisor == 0) {
+            src = (char*)va.buf + va.stride * indices[start + n];
+        } else {
+            assert(va.divisor == 1);
+            src = (char*)va.buf + va.stride * instance;
+        }
+        assert(src + va.size <= va.buf + va.buf_size);
+        typedef decltype(get_nth(attrib, 0)) scalar_type;
+        if (sizeof(scalar_type) > va.size) {
+            scalar_type scalar = {0};
+            memcpy(&scalar, src, va.size);
+            put_nth(attrib, dest + n, scalar);
+        } else {
+            put_nth(attrib, dest + n, *reinterpret_cast<scalar_type*>(src));
+        }
+    }
+}
 
 vec4 gl_Position;
 vec4 gl_FragCoord;
@@ -957,6 +978,7 @@ void Clear(GLbitfield mask) {
 #define GL_TRIANGLES                      0x0004
 #define GL_TRIANGLE_STRIP                 0x0005
 #define GL_TRIANGLE_FAN                   0x0006
+#define GL_QUADS                          0x0007
 
 void LinkProgram(GLuint program) {
 }
@@ -967,34 +989,6 @@ struct Point {
         float x;
         float y;
 };
-
-struct Vec3f {
-        float x;
-        float y;
-        float z;
-};
-
-
-Vec3f cross(Vec3f v1, Vec3f v2) {
-    return Vec3f{v1.y*v2.z - v1.z*v2.y, v1.z*v2.x - v1.x*v2.z, v1.x*v2.y - v1.y*v2.x};
-}
-
-Vec3f barycentric(Point a, Point b, Point c, Point p) {
-        Vec3f s[2];
-        s[0].x = c.x - a.x;
-        s[0].y = b.x - a.x;
-        s[0].z = a.x - p.x;
-
-        s[1].x = c.y - a.y;
-        s[1].y = b.y - a.y;
-        s[1].z = a.y - p.y;
-
-        Vec3f u = cross(s[0], s[1]);
-
-        if (std::abs(u.z)>1e-2) // dont forget that u[2] is integer. If it is zero then triangle ABC is degenerate
-                return Vec3f{1.f-(u.x+u.y)/u.z, u.y/u.z, u.x/u.z};
-        return Vec3f{-1,1,1}; // in this case generate negative coordinates, it will be thrown away by the rasterizator
-}
 
 template<int FULL_SPANS>
 static inline int check_depth(uint16_t z, int span, uint16_t* zbuf, int discarded = 0) {
@@ -1209,7 +1203,7 @@ static inline void commit_output(int span, uint32_t* buf, uint16_t *depth, uint1
     }
 }
 
-void triangle(brush_solid_frag &shader, brush_solid_vert::FlatOutputs &flat_outs, brush_solid_vert::InterpOutputs interp_outs[4], Point a, Point b, Point c, uint16_t z) {
+void draw_quad(brush_solid_frag &shader, brush_solid_vert::FlatOutputs &flat_outs, brush_solid_vert::InterpOutputs interp_outs[4], Point a, Point b, Point c, Point d, uint16_t z) {
         Framebuffer& fb = get_draw_framebuffer();
         Texture& colortex = textures[fb.color_attachment];
         assert(colortex.internal_format == GL_RGBA8);
@@ -1229,48 +1223,42 @@ void triangle(brush_solid_frag &shader, brush_solid_vert::FlatOutputs &flat_outs
             fy1 = std::min(fy1, float(scissor.y + scissor.height));
         }
 
+        auto top_left = Point{std::numeric_limits<float>::max(), std::numeric_limits<float>::max()};
+        auto bot_right = Point{std::numeric_limits<float>::lowest(), std::numeric_limits<float>::lowest()};
+
+        top_left.x = std::min(std::min(a.x, b.x), std::min(c.x, d.x));
+        top_left.y = std::min(std::min(a.y, b.y), std::min(c.y, d.y));
+        bot_right.x = std::max(std::max(a.x, b.x), std::max(c.x, d.x));
+        bot_right.y = std::max(std::max(a.y, b.y), std::max(c.y, d.y));
+
+        printf("bbox: %f %f %f %f\n", top_left.x, top_left.y, bot_right.x, bot_right.y);
+
 #ifdef  __MACH__
         double start = mach_absolute_time();
 #else
         double start = ({ struct timespec tp; clock_gettime(CLOCK_MONOTONIC, &tp); tp.tv_sec * 1e9 + tp.tv_nsec; });
 #endif
 
-        auto top_left = Point{std::numeric_limits<float>::max(), std::numeric_limits<float>::max()};
-        auto bot_right = Point{std::numeric_limits<float>::lowest(), std::numeric_limits<float>::lowest()};
-
-        top_left.x = std::min(top_left.x, a.x);
-        top_left.x = std::min(top_left.x, b.x);
-        top_left.x = std::min(top_left.x, c.x);
-
-        top_left.y = std::min(top_left.y, a.y);
-        top_left.y = std::min(top_left.y, b.y);
-        top_left.y = std::min(top_left.y, c.y);
-
-        bot_right.x = std::max(bot_right.x, a.x);
-        bot_right.x = std::max(bot_right.x, b.x);
-        bot_right.x = std::max(bot_right.x, c.x);
-
-        bot_right.y = std::max(bot_right.y, a.y);
-        bot_right.y = std::max(bot_right.y, b.y);
-        bot_right.y = std::max(bot_right.y, c.y);
-
-        printf("bbox: %f %f %f %f\n", top_left.x, top_left.y, bot_right.x, bot_right.y);
-
-        Point p[3] = { a, b, c };
+        int nump = c.x != d.x || c.y != d.y ? 4 : 3;
+        Point p[4] = { a, b, c, d };
         Point l0, r0, l1, r1;
         int l0i, r0i, l1i, r1i;
         {
-            int top = b.y < a.y ? (c.y < b.y ? 2 : 1) : (c.y < a.y ? 2 : 0);
-            int next = (top+1)%3;
-            int prev = (top+2)%3;
+            int top = b.y < a.y ? 1 : 0;
+            if (c.y < p[top].y) top = 2;
+            if (d.y < p[top].y) top = 3;
+            int next = (top+1)%nump;
+            int prev = (top+nump-1)%nump;
             if (p[top].y == p[next].y) {
                 l0i = next;
+                l1i = (next+1)%nump;
                 r0i = top;
-                l1i = r1i = prev;
+                r1i = prev;
             } else if (p[top].y == p[prev].y) {
                 l0i = top;
+                l1i = next;
                 r0i = prev;
-                l1i = r1i = next;
+                r1i = (prev+nump-1)%nump;
             } else {
                 l0i = r0i = top;
                 l1i = next;
@@ -1280,6 +1268,7 @@ void triangle(brush_solid_frag &shader, brush_solid_vert::FlatOutputs &flat_outs
             r0 = p[r0i];
             l1 = p[l1i];
             r1 = p[r1i];
+            printf("l0: %d(%f,%f), r0: %d(%f,%f) -> l1: %d(%f,%f), r1: %d(%f,%f)\n", l0i, l0.x, l0.y, r0i, r0.x, r0.y, l1i, l1.x, l1.y, r1i, r1.x, r1.y);
         }
 
         float lx = l0.x;
@@ -1305,7 +1294,7 @@ void triangle(brush_solid_frag &shader, brush_solid_vert::FlatOutputs &flat_outs
             if (y > l1.y) {
                 l0i = l1i;
                 l0 = l1;
-                l1i = (l1i+1)%3;
+                l1i = (l1i+1)%nump;
                 l1 = p[l1i];
                 if (l1.y <= l0.y) break;
                 lm = (l1.x - l0.x) / (l1.y - l0.y);
@@ -1317,7 +1306,7 @@ void triangle(brush_solid_frag &shader, brush_solid_vert::FlatOutputs &flat_outs
             if (y > r1.y) {
                 r0i = r1i;
                 r0 = r1;
-                r1i = (r1i+2)%3;
+                r1i = (r1i+nump-1)%nump;
                 r1 = p[r1i];
                 if (r1.y <= r0.y) break;
                 rm = (r1.x - r0.x) / (r1.y - r0.y);
@@ -1381,6 +1370,11 @@ void triangle(brush_solid_frag &shader, brush_solid_vert::FlatOutputs &flat_outs
             fbuf += colortex.width;
         }
 
+#ifdef  __MACH__
+        double end = mach_absolute_time();
+#else
+        double end = ({ struct timespec tp; clock_gettime(CLOCK_MONOTONIC, &tp); tp.tv_sec * 1e9 + tp.tv_nsec; });
+#endif
         auto output = get_nth(frag_shader.get_output(), 0);
         auto pixels = pack_pixels(frag_shader.get_output());
         int pixel0 = _mm_cvtsi128_si32(_mm_shuffle_epi32(pixels, 0));
@@ -1388,11 +1382,6 @@ void triangle(brush_solid_frag &shader, brush_solid_vert::FlatOutputs &flat_outs
         int pixel2 = _mm_cvtsi128_si32(_mm_shuffle_epi32(pixels, 0xAA));
         int pixel3 = _mm_cvtsi128_si32(_mm_shuffle_epi32(pixels, 0xFF));
         printf("color %f %f %f %f -> %x, %x, %x, %x\n", output.x, output.y, output.z, output.w, pixel0, pixel1, pixel2, pixel3);
-#ifdef  __MACH__
-        double end = mach_absolute_time();
-#else
-        double end = ({ struct timespec tp; clock_gettime(CLOCK_MONOTONIC, &tp); tp.tv_sec * 1e9 + tp.tv_nsec; });
-#endif
         printf("%fms for %d pixels in %d rows\n", (end - start)/(1000.*1000.), shaded_pixels, shaded_lines);
 }
 
@@ -1500,15 +1489,22 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
                                 Buffer &vertex_buf = buffers[attr.vertex_buffer];
                                 attr.buf = vertex_buf.buf;
                                 attr.buf_size = vertex_buf.size;
-                                printf("%d %x %d %d %d\n", i, attr.type, attr.size, attr.stride, attr.offset);
+                                printf("%d %x %d %d %d %d\n", i, attr.type, attr.size, attr.stride, attr.offset, attr.divisor);
                         }
                 }
                 if (type == GL_UNSIGNED_SHORT) {
                         assert(indices_buf.size == count * 2);
                         unsigned short *indices = (unsigned short*)indices_buf.buf;
-                        for (int i = 0; i < count; i+=3) {
-                                printf(" %d\n", indices[i]);
-                                shader.load_attribs_for_tri(v.attribs, indices, i, instance);
+                        for (int i = 0; i + 3 <= count; i += 3) {
+                                bool use_quad = false;
+                                shader.load_attribs(v.attribs, indices, i, instance);
+                                if (i + 6 <= count && indices[i+3] == indices[i+2] && indices[i+4] == indices[i+1]) {
+                                    use_quad = true;
+                                    shader.load_attribs(v.attribs, indices, i+5, instance, 1, 3);
+                                    printf("quad %d %d %d %d\n", indices[i], indices[i+1], indices[i+2], indices[i+5]);
+                                } else {
+                                    printf("triangle %d %d %d %d\n", indices[i], indices[i+1], indices[i+2]);
+                                }
                                 shader.main();
                                 brush_solid_vert::FlatOutputs flat_outs;
                                 shader.store_flat_outputs(flat_outs);
@@ -1517,6 +1513,7 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
                                 Point a;
                                 Point b;
                                 Point c;
+                                Point d;
                                 {
                                         printf("%f %f %f %f\n", gl_Position.x.x, gl_Position.y.x, gl_Position.z.x, gl_Position.y.x);
                                         float xw = (gl_Position.x.x + 1)*(viewport.width/2) + viewport.x;
@@ -1538,9 +1535,21 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
                                         c = Point { xw, yw };
                                         printf("%f %f\n", xw, yw);
                                 }
+                                if (use_quad)
+                                {
+                                        printf("%f %f %f %f\n", gl_Position.x.w, gl_Position.y.w, gl_Position.z.w, gl_Position.y.w);
+                                        float xw = (gl_Position.x.w + 1)*(viewport.width/2) + viewport.x;
+                                        float yw = (gl_Position.y.w + 1)*(viewport.height/2) + viewport.y;
+                                        d = Point { xw, yw };
+                                        printf("%f %f\n", xw, yw);
+                                        std::swap(c, d);
+                                        i += 3;
+                                } else {
+                                        d = c;
+                                }
                                 // SSE2 does not support unsigned comparison, so bias Z to be negative.
                                 uint16_t z = uint16_t(0xFFFF * (1.0f + 0.5f * gl_Position.z.x / gl_Position.w.x)) - 0x8000;
-                                triangle(frag_shader, flat_outs, interp_outs, a, b, c, z);
+                                draw_quad(frag_shader, flat_outs, interp_outs, a, b, c, d, z);
                         }
 
                 } else {
