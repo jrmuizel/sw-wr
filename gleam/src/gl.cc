@@ -377,7 +377,7 @@ void Disable(GLenum cap) {
     }
 }
 
-int remap_blendfunc(GLenum rgb, GLenum a) {
+GLenum remap_blendfunc(GLenum rgb, GLenum a) {
     switch (a) {
     case GL_SRC_ALPHA: if (rgb == GL_SRC_COLOR) a = GL_SRC_COLOR; break;
     case GL_ONE_MINUS_SRC_ALPHA: if (rgb == GL_ONE_MINUS_SRC_COLOR) a = GL_ONE_MINUS_SRC_COLOR; break;
