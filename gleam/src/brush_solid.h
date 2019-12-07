@@ -1,28 +1,18 @@
 static int brush_solid_get_uniform_location(char *name) {
 
-if (strcmp("sColor0", name) == 0) { return 3; }
+if (strcmp("sGpuCache", name) == 0) { return 2; }
 
-if (strcmp("sColor1", name) == 0) { return 4; }
+if (strcmp("sPrevPassAlpha", name) == 0) { return 7; }
 
-if (strcmp("sColor2", name) == 0) { return 5; }
+if (strcmp("sPrimitiveHeadersF", name) == 0) { return 4; }
 
-if (strcmp("sGpuCache", name) == 0) { return 7; }
+if (strcmp("sPrimitiveHeadersI", name) == 0) { return 5; }
 
-if (strcmp("sPrevPassAlpha", name) == 0) { return 9; }
+if (strcmp("sRenderTasks", name) == 0) { return 1; }
 
-if (strcmp("sPrevPassColor", name) == 0) { return 10; }
+if (strcmp("sTransformPalette", name) == 0) { return 3; }
 
-if (strcmp("sPrimitiveHeadersF", name) == 0) { return 11; }
-
-if (strcmp("sPrimitiveHeadersI", name) == 0) { return 12; }
-
-if (strcmp("sRenderTasks", name) == 0) { return 6; }
-
-if (strcmp("sTransformPalette", name) == 0) { return 8; }
-
-if (strcmp("uMode", name) == 0) { return 1; }
-
-if (strcmp("uTransform", name) == 0) { return 2; }
+if (strcmp("uTransform", name) == 0) { return 6; }
 
 return -1;
 
@@ -40,116 +30,62 @@ vec4 vColor
 */
 struct brush_solid_vert {
 void set_uniform_int(int index, int value) {
-if (index == 1) {
-uMode = int32_t(value);
-}
-if (index == 2) {
+if (index == 6) {
 assert(0); // uTransform
 }
-if (index == 3) {
-sColor0_slot = value;
-}
-if (index == 4) {
-sColor1_slot = value;
-}
-if (index == 5) {
-sColor2_slot = value;
-}
-if (index == 6) {
+if (index == 1) {
 sRenderTasks_slot = value;
 }
-if (index == 7) {
+if (index == 2) {
 sGpuCache_slot = value;
 }
-if (index == 8) {
+if (index == 3) {
 sTransformPalette_slot = value;
 }
-if (index == 9) {
-sPrevPassAlpha_slot = value;
-}
-if (index == 10) {
-sPrevPassColor_slot = value;
-}
-if (index == 11) {
+if (index == 4) {
 sPrimitiveHeadersF_slot = value;
 }
-if (index == 12) {
+if (index == 5) {
 sPrimitiveHeadersI_slot = value;
 }
 }
 void set_uniform_4f(int index, float *value) {
-if (index == 1) {
-assert(0); // uMode
-}
-if (index == 2) {
+if (index == 6) {
 assert(0); // uTransform
 }
-if (index == 3) {
-assert(0); // sColor0
-}
-if (index == 4) {
-assert(0); // sColor1
-}
-if (index == 5) {
-assert(0); // sColor2
-}
-if (index == 6) {
+if (index == 1) {
 assert(0); // sRenderTasks
 }
-if (index == 7) {
+if (index == 2) {
 assert(0); // sGpuCache
 }
-if (index == 8) {
+if (index == 3) {
 assert(0); // sTransformPalette
 }
-if (index == 9) {
-assert(0); // sPrevPassAlpha
-}
-if (index == 10) {
-assert(0); // sPrevPassColor
-}
-if (index == 11) {
+if (index == 4) {
 assert(0); // sPrimitiveHeadersF
 }
-if (index == 12) {
+if (index == 5) {
 assert(0); // sPrimitiveHeadersI
 }
 }
 void set_uniform_matrix4fv(int index, const float *value) {
-if (index == 1) {
-assert(0); // uMode
-}
-if (index == 2) {
+if (index == 6) {
 uTransform = mat4_scalar::load_from_ptr(value);
 }
-if (index == 3) {
-assert(0); // sColor0
-}
-if (index == 4) {
-assert(0); // sColor1
-}
-if (index == 5) {
-assert(0); // sColor2
-}
-if (index == 6) {
+if (index == 1) {
 assert(0); // sRenderTasks
 }
-if (index == 7) {
+if (index == 2) {
 assert(0); // sGpuCache
 }
-if (index == 8) {
+if (index == 3) {
 assert(0); // sTransformPalette
 }
-if (index == 9) {
-assert(0); // sPrevPassAlpha
-}
-if (index == 10) {
-assert(0); // sPrevPassColor
-}
-if (index == 11) {
+if (index == 4) {
 assert(0); // sPrimitiveHeadersF
 }
-if (index == 12) {
+if (index == 5) {
 assert(0); // sPrimitiveHeadersI
 }
 }
@@ -159,9 +95,9 @@ static void bind_attrib_location(char *name, int index) {
 if (strcmp("aPosition", name) == 0) { aPosition_location_index = index; }
 if (strcmp("aData", name) == 0) { aData_location_index = index; }
 }
-void load_attribs(VertexAttrib *attribs, unsigned short *indices, int start, int instance, int count = 3, int dest = 0) {
-  load_attrib(aPosition, attribs[aPosition_location_index], indices, start, instance, count, dest);
-  load_attrib(aData, attribs[aData_location_index], indices, start, instance, count, dest);
+void load_attribs(VertexAttrib *attribs, unsigned short *indices, int start, int instance, int count) {
+  load_attrib(aPosition, attribs[aPosition_location_index], indices, start, instance, count);
+  load_attrib(aData, attribs[aData_location_index], indices, start, instance, count);
 }
 struct FlatOutputs {
 vec4_scalar vTransformBounds;
@@ -184,35 +120,20 @@ void store_interp_outputs(char* dest_ptr, size_t stride) {
     dest_ptr += stride;
   }
 }
-sampler2DArray_impl sColor0_impl;
-int sColor0_slot;
-sampler2DArray_impl sColor1_impl;
-int sColor1_slot;
-sampler2DArray_impl sColor2_impl;
-int sColor2_slot;
 sampler2D_impl sRenderTasks_impl;
 int sRenderTasks_slot;
 sampler2D_impl sGpuCache_impl;
 int sGpuCache_slot;
 sampler2D_impl sTransformPalette_impl;
 int sTransformPalette_slot;
-sampler2DArray_impl sPrevPassAlpha_impl;
-int sPrevPassAlpha_slot;
-sampler2DArray_impl sPrevPassColor_impl;
-int sPrevPassColor_slot;
 sampler2D_impl sPrimitiveHeadersF_impl;
 int sPrimitiveHeadersF_slot;
 isampler2D_impl sPrimitiveHeadersI_impl;
 int sPrimitiveHeadersI_slot;
 void bind_textures() {
-sColor0 = lookup_sampler_array(&sColor0_impl, sColor0_slot);
-sColor1 = lookup_sampler_array(&sColor1_impl, sColor1_slot);
-sColor2 = lookup_sampler_array(&sColor2_impl, sColor2_slot);
 sRenderTasks = lookup_sampler(&sRenderTasks_impl, sRenderTasks_slot);
 sGpuCache = lookup_sampler(&sGpuCache_impl, sGpuCache_slot);
 sTransformPalette = lookup_sampler(&sTransformPalette_impl, sTransformPalette_slot);
-sPrevPassAlpha = lookup_sampler_array(&sPrevPassAlpha_impl, sPrevPassAlpha_slot);
-sPrevPassColor = lookup_sampler_array(&sPrevPassColor_impl, sPrevPassColor_slot);
 sPrimitiveHeadersF = lookup_sampler(&sPrimitiveHeadersF_impl, sPrimitiveHeadersF_slot);
 sPrimitiveHeadersI = lookup_isampler(&sPrimitiveHeadersI_impl, sPrimitiveHeadersI_slot);
 }
@@ -645,63 +566,27 @@ vec4 oFragColor
 */
 struct brush_solid_frag {
 void set_uniform_int(int index, int value) {
-if (index == 3) {
-sColor0_slot = value;
-}
-if (index == 4) {
-sColor1_slot = value;
-}
-if (index == 5) {
-sColor2_slot = value;
-}
-if (index == 7) {
+if (index == 2) {
 sGpuCache_slot = value;
 }
-if (index == 9) {
+if (index == 7) {
 sPrevPassAlpha_slot = value;
-}
-if (index == 10) {
-sPrevPassColor_slot = value;
 }
 }
 void set_uniform_4f(int index, float *value) {
-if (index == 3) {
-assert(0); // sColor0
-}
-if (index == 4) {
-assert(0); // sColor1
-}
-if (index == 5) {
-assert(0); // sColor2
-}
-if (index == 7) {
+if (index == 2) {
 assert(0); // sGpuCache
 }
-if (index == 9) {
+if (index == 7) {
 assert(0); // sPrevPassAlpha
-}
-if (index == 10) {
-assert(0); // sPrevPassColor
 }
 }
 void set_uniform_matrix4fv(int index, const float *value) {
-if (index == 3) {
-assert(0); // sColor0
-}
-if (index == 4) {
-assert(0); // sColor1
-}
-if (index == 5) {
-assert(0); // sColor2
-}
-if (index == 7) {
+if (index == 2) {
 assert(0); // sGpuCache
 }
-if (index == 9) {
+if (index == 7) {
 assert(0); // sPrevPassAlpha
-}
-if (index == 10) {
-assert(0); // sPrevPassColor
 }
 }
 typedef brush_solid_vert::FlatOutputs FlatInputs;
@@ -722,25 +607,13 @@ void step_interp_inputs(const void* step_ptr) {
   vClipMaskUv += step->vClipMaskUv;
 }
 vec4 get_output() { return oFragColor; }
-sampler2DArray_impl sColor0_impl;
-int sColor0_slot;
-sampler2DArray_impl sColor1_impl;
-int sColor1_slot;
-sampler2DArray_impl sColor2_impl;
-int sColor2_slot;
 sampler2D_impl sGpuCache_impl;
 int sGpuCache_slot;
 sampler2DArray_impl sPrevPassAlpha_impl;
 int sPrevPassAlpha_slot;
-sampler2DArray_impl sPrevPassColor_impl;
-int sPrevPassColor_slot;
 void bind_textures() {
-sColor0 = lookup_sampler_array(&sColor0_impl, sColor0_slot);
-sColor1 = lookup_sampler_array(&sColor1_impl, sColor1_slot);
-sColor2 = lookup_sampler_array(&sColor2_impl, sColor2_slot);
 sGpuCache = lookup_sampler(&sGpuCache_impl, sGpuCache_slot);
 sPrevPassAlpha = lookup_sampler_array(&sPrevPassAlpha_impl, sPrevPassAlpha_slot);
-sPrevPassColor = lookup_sampler_array(&sPrevPassColor_impl, sPrevPassColor_slot);
 }
 Bool isPixelDiscarded = false;
 vec4 oFragColor;
