@@ -1177,8 +1177,8 @@ static inline void commit_output(int span, uint32_t* buf, uint16_t *depth, uint1
     }
 }
 
-static const size_t MAX_FLATS = 4 * 64;
-typedef char Flats[MAX_FLATS];
+static const size_t MAX_FLATS = 64;
+typedef float Flats[MAX_FLATS];
 static const size_t MAX_INTERPOLANTS = 16;
 typedef float Interpolants __attribute__((ext_vector_type(MAX_INTERPOLANTS)));
 
