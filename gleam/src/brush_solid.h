@@ -177,10 +177,11 @@ void store_flat_outputs(void* dest_ptr) {
   dest->vClipMaskUvBounds = vClipMaskUvBounds;
   dest->vColor = vColor;
 }
-void store_interp_outputs(void* dest_ptr) {
-  auto* dest = reinterpret_cast<InterpOutputs*>(dest_ptr);
+void store_interp_outputs(void* dest_ptr, size_t stride) {
   for(int n = 0; n < 4; n++) {
-    dest[n].vClipMaskUv = get_nth(vClipMaskUv, n);
+    auto* dest = reinterpret_cast<InterpOutputs*>(dest_ptr);
+    dest->vClipMaskUv = get_nth(vClipMaskUv, n);
+    dest_ptr = reinterpret_cast<char*>(dest_ptr) + stride;
   }
 }
 sampler2DArray_impl sColor0_impl;

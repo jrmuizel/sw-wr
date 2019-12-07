@@ -1494,7 +1494,7 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
                                 Flats flat_outs;
                                 shader.store_flat_outputs(flat_outs);
                                 Interpolants interp_outs[4];
-                                shader.store_interp_outputs(interp_outs);
+                                shader.store_interp_outputs(interp_outs, sizeof(Interpolants));
                                 Float w = 1.0f / gl_Position.w;
                                 vec3 clip = gl_Position.sel(X, Y, Z) * w;
                                 Point p[4];
@@ -1520,7 +1520,7 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
                                 Flats flat_outs;
                                 shader.store_flat_outputs(flat_outs);
                                 Interpolants interp_outs[4];
-                                shader.store_interp_outputs(interp_outs);
+                                shader.store_interp_outputs(interp_outs, sizeof(Interpolants));
                                 Float w = 1.0f / gl_Position.w;
                                 vec3 clip = gl_Position.sel(X, Y, Z) * w;
                                 Point p[4];
