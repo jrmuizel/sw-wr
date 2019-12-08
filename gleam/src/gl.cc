@@ -1113,7 +1113,7 @@ typedef float Flats[MAX_FLATS];
 static const size_t MAX_INTERPOLANTS = 16;
 typedef float Interpolants __attribute__((ext_vector_type(MAX_INTERPOLANTS)));
 
-void draw_quad(brush_solid_frag &shader, Flats flat_outs, Interpolants interp_outs[4], const Point p[4], int nump, Point zw) {
+void draw_quad(int nump) {
         Framebuffer& fb = get_draw_framebuffer();
         Texture& colortex = textures[fb.color_attachment];
         assert(colortex.internal_format == GL_RGBA8);
@@ -1133,6 +1133,22 @@ void draw_quad(brush_solid_frag &shader, Flats flat_outs, Interpolants interp_ou
             fy1 = std::min(fy1, float(scissor.y + scissor.height));
         }
 
+        shader.main();
+        Flats flat_outs;
+        shader.store_flat_outputs(flat_outs);
+        Interpolants interp_outs[4];
+        shader.store_interp_outputs((char *)interp_outs, sizeof(Interpolants));
+        Float w = 1.0f / gl_Position.w;
+        vec3 clip = gl_Position.sel(X, Y, Z) * w;
+        Point p[4];
+        vec3 screen = (clip + 1)*vec3(viewport.width/2, viewport.height/2, 0.5f) + vec3(viewport.x, viewport.y, 0);
+        for (int k = 0; k < 4; k++)
+        {
+                printf("%f %f %f %f\n", gl_Position.x[k], gl_Position.y[k], gl_Position.z[k], gl_Position.y[k]);
+                p[k] = Point { screen.x[k], screen.y[k] };
+                printf("%f %f\n", p[k].x, p[k].y);
+        }
+
         auto top_left = p[0];
         auto bot_right = p[0];
         for (int i = 1; i < nump; i++) {
@@ -1150,9 +1166,9 @@ void draw_quad(brush_solid_frag &shader, Flats flat_outs, Interpolants interp_ou
 #endif
 
         // SSE2 does not support unsigned comparison, so bias Z to be negative.
-        uint16_t z = uint16_t(0xFFFF * zw.x) - 0x8000;
-        gl_FragCoord.z = zw.x;
-        gl_FragCoord.w = zw.y;
+        uint16_t z = uint16_t(0xFFFF * screen.z.x) - 0x8000;
+        gl_FragCoord.z = screen.z.x;
+        gl_FragCoord.w = w.x;
 
         Point l0, r0, l1, r1;
         int l0i, r0i, l1i, r1i;
@@ -1461,50 +1477,19 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
                         if (mode == GL_QUADS) for (int i = 0; i + 4 <= count; i += 4) {
                                 shader.load_attribs(v.attribs, indices, i, instance, 4);
                                 printf("native quad %d %d %d %d\n", indices[i], indices[i+1], indices[i+2], indices[i+3]);
-                                shader.main();
-                                Flats flat_outs;
-                                shader.store_flat_outputs(flat_outs);
-                                Interpolants interp_outs[4];
-                                shader.store_interp_outputs((char *)interp_outs, sizeof(Interpolants));
-                                Float w = 1.0f / gl_Position.w;
-                                vec3 clip = gl_Position.sel(X, Y, Z) * w;
-                                Point p[4];
-                                vec3 screen = (clip + 1)*vec3(viewport.width/2, viewport.height/2, 0.5f) + vec3(viewport.x, viewport.y, 0);
-                                for (int k = 0; k < 4; k++)
-                                {
-                                        printf("%f %f %f %f\n", gl_Position.x[k], gl_Position.y[k], gl_Position.z[k], gl_Position.y[k]);
-                                        p[k] = Point { screen.x[k], screen.y[k] };
-                                        printf("%f %f\n", p[k].x, p[k].y);
-                                }
-                                draw_quad(frag_shader, flat_outs, interp_outs, p, 4, Point { screen.z.x, w.x });
+                                draw_quad(4);
                         } else for (int i = 0; i + 3 <= count; i += 3) {
-                                int nump = 3;
                                 if (i + 6 <= count && indices[i+3] == indices[i+2] && indices[i+4] == indices[i+1]) {
                                     unsigned short quad_indices[4] = { indices[i], indices[i+1], indices[i+5], indices[i+2] };
                                     shader.load_attribs(v.attribs, quad_indices, 0, instance, 4);
                                     printf("emulate quad %d %d %d %d\n", indices[i], indices[i+1], indices[i+5], indices[i+2]);
-                                    nump = 4;
+                                    draw_quad(4);
                                     i += 3;
                                 } else {
                                     shader.load_attribs(v.attribs, indices, i, instance, 3);
                                     printf("triangle %d %d %d %d\n", indices[i], indices[i+1], indices[i+2]);
+                                    draw_quad(3);
                                 }
-                                shader.main();
-                                Flats flat_outs;
-                                shader.store_flat_outputs(flat_outs);
-                                Interpolants interp_outs[4];
-                                shader.store_interp_outputs((char *)interp_outs, sizeof(Interpolants));
-                                Float w = 1.0f / gl_Position.w;
-                                vec3 clip = gl_Position.sel(X, Y, Z) * w;
-                                Point p[4];
-                                vec3 screen = (clip + 1)*vec3(viewport.width/2, viewport.height/2, 0.5f) + vec3(viewport.x, viewport.y, 0);
-                                for (int k = 0; k < nump; k++)
-                                {
-                                        printf("%f %f %f %f\n", gl_Position.x[k], gl_Position.y[k], gl_Position.z[k], gl_Position.y[k]);
-                                        p[k] = Point { screen.x[k], screen.y[k] };
-                                        printf("%f %f\n", p[k].x, p[k].y);
-                                }
-                                draw_quad(frag_shader, flat_outs, interp_outs, p, nump, Point { screen.z.x, w.x });
                         }
 
                 } else {
