@@ -110,6 +110,7 @@ extern "C" {
     fn EnableVertexAttribArray(index: GLuint);
     fn VertexAttribDivisor(index: GLuint, divisor: GLuint);
     fn LinkProgram(program: GLuint);
+    fn UseProgram(program: GLuint);
     fn SetViewport(x: GLint, y: GLint, width: GLsizei, height: GLsizei);
     fn FramebufferTextureLayer(
         target: GLenum,
@@ -1565,8 +1566,9 @@ impl Gl for GlFns {
     fn use_program(&self, program: GLuint) {
         //panic!();
         unsafe {
-            if SW {}
-            else {
+            if SW {
+                UseProgram(program);
+            } else {
                 self.ffi_gl_.UseProgram(program);
             }
         }

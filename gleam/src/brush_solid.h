@@ -1,23 +1,3 @@
-static int brush_solid_get_uniform_location(char *name) {
-
-if (strcmp("sGpuCache", name) == 0) { return 2; }
-
-if (strcmp("sPrevPassAlpha", name) == 0) { return 7; }
-
-if (strcmp("sPrimitiveHeadersF", name) == 0) { return 4; }
-
-if (strcmp("sPrimitiveHeadersI", name) == 0) { return 5; }
-
-if (strcmp("sRenderTasks", name) == 0) { return 1; }
-
-if (strcmp("sTransformPalette", name) == 0) { return 3; }
-
-if (strcmp("uTransform", name) == 0) { return 6; }
-
-return -1;
-
-}
-
 /* inputs
 vec3 aPosition
 ivec4 aData
@@ -28,8 +8,8 @@ vec4 vClipMaskUvBounds
 vec4 vClipMaskUv
 vec4 vColor
 */
-struct brush_solid_vert {
-void set_uniform_int(int index, int value) {
+struct brush_solid_vert : VertexShaderImpl {
+void set_uniform_1i(int index, int value) {
 if (index == 6) {
 assert(0); // uTransform
 }
@@ -49,7 +29,7 @@ if (index == 5) {
 sPrimitiveHeadersI_slot = value;
 }
 }
-void set_uniform_4f(int index, float *value) {
+void set_uniform_4fv(int index, const float *value) {
 if (index == 6) {
 assert(0); // uTransform
 }
@@ -89,9 +69,19 @@ if (index == 5) {
 assert(0); // sPrimitiveHeadersI
 }
 }
+int get_uniform_location(const char *name) {
+if (strcmp("sGpuCache", name) == 0) { return 2; }
+if (strcmp("sPrevPassAlpha", name) == 0) { return 7; }
+if (strcmp("sPrimitiveHeadersF", name) == 0) { return 4; }
+if (strcmp("sPrimitiveHeadersI", name) == 0) { return 5; }
+if (strcmp("sRenderTasks", name) == 0) { return 1; }
+if (strcmp("sTransformPalette", name) == 0) { return 3; }
+if (strcmp("uTransform", name) == 0) { return 6; }
+return -1;
+}
 static inline int aPosition_location_index;
 static inline int aData_location_index;
-static void bind_attrib_location(char *name, int index) {
+void bind_attrib_location(const char *name, int index) {
 if (strcmp("aPosition", name) == 0) { aPosition_location_index = index; }
 if (strcmp("aData", name) == 0) { aData_location_index = index; }
 }
@@ -554,6 +544,22 @@ void main(void) {
  }
  brush_vs(vi, (ph).specific_prim_address, (ph).local_rect, segment_rect, (ph).user_data, segment_user_data, (transform).m, pic_task, brush_flags, segment_data);
 }
+void run(char* flats, char* interps, size_t interp_stride) {
+ main();
+ store_flat_outputs(flats);
+ store_interp_outputs(interps, interp_stride);
+}
+brush_solid_vert() {
+ typedef brush_solid_vert Self;
+ set_uniform_1i_func = (SetUniform1iFunc)&Self::set_uniform_1i;
+ set_uniform_4fv_func = (SetUniform4fvFunc)&Self::set_uniform_4fv;
+ set_uniform_matrix4fv_func = (SetUniformMatrix4fvFunc)&Self::set_uniform_matrix4fv;
+ get_uniform_func = (GetUniformFunc)&Self::get_uniform_location;
+ bind_attrib_func = (BindAttribFunc)&Self::bind_attrib_location;
+ init_batch_func = (InitBatchFunc)&Self::bind_textures;
+ load_attribs_func = (LoadAttribsFunc)&Self::load_attribs;
+ run_func = (RunFunc)&Self::run;
+}
 };
 /* inputs
 vec4 vTransformBounds
@@ -564,8 +570,8 @@ vec4 vColor
 /* outputs
 vec4 oFragColor
 */
-struct brush_solid_frag {
-void set_uniform_int(int index, int value) {
+struct brush_solid_frag : FragmentShaderImpl {
+void set_uniform_1i(int index, int value) {
 if (index == 2) {
 sGpuCache_slot = value;
 }
@@ -573,7 +579,7 @@ if (index == 7) {
 sPrevPassAlpha_slot = value;
 }
 }
-void set_uniform_4f(int index, float *value) {
+void set_uniform_4fv(int index, const float *value) {
 if (index == 2) {
 assert(0); // sGpuCache
 }
@@ -606,7 +612,6 @@ void step_interp_inputs(const void* step_ptr) {
   auto* step = reinterpret_cast<const InterpInputs*>(step_ptr);
   vClipMaskUv += step->vClipMaskUv;
 }
-vec4 get_output() { return oFragColor; }
 sampler2D_impl sGpuCache_impl;
 int sGpuCache_slot;
 sampler2DArray_impl sPrevPassAlpha_impl;
@@ -615,8 +620,8 @@ void bind_textures() {
 sGpuCache = lookup_sampler(&sGpuCache_impl, sGpuCache_slot);
 sPrevPassAlpha = lookup_sampler_array(&sPrevPassAlpha_impl, sPrevPassAlpha_slot);
 }
-Bool isPixelDiscarded = false;
-vec4 oFragColor;
+#define oFragColor gl_FragColor
+// vec4 oFragColor;
 sampler2DArray sColor0;
 sampler2DArray sColor1;
 sampler2DArray sColor2;
@@ -690,6 +695,21 @@ void main(void) {
  Fragment frag = brush_fs();
  write_output((frag).color);
 }
-bool uses_discard() { return false; }
-Bool discard_mask() { return false; }
+bool use_discard() { return false; }
+void run(const void* step_ptr) {
+ main();
+ step_interp_inputs(step_ptr);
+}
+brush_solid_frag() {
+ typedef brush_solid_frag Self;
+ set_uniform_1i_func = (SetUniform1iFunc)&Self::set_uniform_1i;
+ set_uniform_4fv_func = (SetUniform4fvFunc)&Self::set_uniform_4fv;
+ set_uniform_matrix4fv_func = (SetUniformMatrix4fvFunc)&Self::set_uniform_matrix4fv;
+ init_batch_func = (InitBatchFunc)&Self::bind_textures;
+ init_primitive_func = (InitPrimitiveFunc)&Self::read_flat_inputs;
+ init_span_func = (InitSpanFunc)&Self::read_interp_inputs;
+ run_func = (RunFunc)&Self::run;
+ skip_func = (SkipFunc)&Self::step_interp_inputs;
+ use_discard_func = (UseDiscardFunc)&Self::use_discard;
+}
 };

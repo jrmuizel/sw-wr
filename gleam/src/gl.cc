@@ -10,7 +10,10 @@
 #include "minpng.h"
 #include "glsl.h"
 #include <cmath>
+
 using namespace std;
+using namespace glsl;
+
 #define GL_ARRAY_BUFFER                   0x8892
 #define GL_ELEMENT_ARRAY_BUFFER           0x8893
 
@@ -132,6 +135,117 @@ struct VertexArray {
 struct Shader {
 };
 
+struct ShaderImpl {
+    typedef int (ShaderImpl::*GetUniformFunc)(const char *name);
+    typedef void (ShaderImpl::*SetUniform1iFunc)(int index, int value);
+    typedef void (ShaderImpl::*SetUniform4fvFunc)(int index, const float *value);
+    typedef void (ShaderImpl::*SetUniformMatrix4fvFunc)(int index, const float *value);
+
+    GetUniformFunc get_uniform_func = nullptr;
+    SetUniform1iFunc set_uniform_1i_func = nullptr;
+    SetUniform4fvFunc set_uniform_4fv_func = nullptr;
+    SetUniformMatrix4fvFunc set_uniform_matrix4fv_func = nullptr;
+};
+
+template<typename T>
+struct ShaderCommon : T {
+    char impl_data[1024];
+
+    int get_uniform(const char *name) {
+        return (this->*ShaderImpl::get_uniform_func)(name);
+    }
+
+    void set_uniform_1i(int index, int value) {
+       (this->*ShaderImpl::set_uniform_1i_func)(index, value);
+    }
+
+    void set_uniform_4fv(int index, const float *value) {
+       (this->*ShaderImpl::set_uniform_4fv_func)(index, value);
+    }
+
+    void set_uniform_matrix4fv(int index, const float *value) {
+       (this->*ShaderImpl::set_uniform_matrix4fv_func)(index, value);
+    }
+};
+
+struct VertexShaderImpl : ShaderImpl {
+    typedef void (VertexShaderImpl::*BindAttribFunc)(const char *name, int index);
+    typedef void (VertexShaderImpl::*InitBatchFunc)();
+    typedef void (VertexShaderImpl::*LoadAttribsFunc)(VertexAttrib *attribs, unsigned short *indices, int start, int instance, int count);
+    typedef void (VertexShaderImpl::*RunFunc)(char* flats, char* interps, size_t interp_stride);
+
+    BindAttribFunc bind_attrib_func = nullptr;
+    InitBatchFunc init_batch_func = nullptr;
+    LoadAttribsFunc load_attribs_func = nullptr;
+    RunFunc run_func = nullptr;
+
+    vec4 gl_Position;
+};
+
+struct VertexShader : ShaderCommon<VertexShaderImpl> {
+    void bind_attrib(const char *name, int index) {
+        (this->*bind_attrib_func)(name, index);
+    }
+
+    void init_batch() {
+        (this->*init_batch_func)();
+    }
+
+    void load_attribs(VertexAttrib *attribs, unsigned short *indices, int start, int instance, int count) {
+        (this->*load_attribs_func)(attribs, indices, start, instance, count);
+    }
+
+    void run(char* flats, char* interps, size_t interp_stride) {
+        (this->*run_func)(flats, interps, interp_stride);
+    }
+} vertex_shader;
+
+struct FragmentShaderImpl : ShaderImpl {
+    typedef void (FragmentShaderImpl::*InitBatchFunc)();
+    typedef void (FragmentShaderImpl::*InitPrimitiveFunc)(const void* flats);
+    typedef void (FragmentShaderImpl::*InitSpanFunc)(const void* interps, const void* step);
+    typedef void (FragmentShaderImpl::*RunFunc)(const void* step);
+    typedef void (FragmentShaderImpl::*SkipFunc)(const void* step);
+    typedef bool (FragmentShaderImpl::*UseDiscardFunc)();
+
+    InitBatchFunc init_batch_func = nullptr;
+    InitPrimitiveFunc init_primitive_func = nullptr;
+    InitSpanFunc init_span_func = nullptr;
+    RunFunc run_func = nullptr;
+    SkipFunc skip_func = nullptr;
+    UseDiscardFunc use_discard_func = nullptr;
+
+    vec4 gl_FragCoord;
+    Bool isPixelDiscarded;
+    vec4 gl_FragColor;
+};
+
+struct FragmentShader : ShaderCommon<FragmentShaderImpl> {
+    void init_batch() {
+        (this->*init_batch_func)();
+    }
+
+    void init_primitive(const void* flats) {
+        (this->*init_primitive_func)(flats);
+    }
+
+    void init_span(const void* interps, const void* step) {
+        (this->*init_span_func)(interps, step);
+    }
+
+    void run(const void* step) {
+        (this->*run_func)(step);
+    }
+
+    void skip(const void* step) {
+        (this->*skip_func)(step);
+    }
+
+    bool use_discard() {
+        return (this->*use_discard_func)();
+    }
+} fragment_shader;
+
 map<GLuint, Buffer> buffers;
 map<GLuint, Texture> textures;
 map<GLuint, VertexArray> vertex_arrays;
@@ -248,8 +362,6 @@ Scissor scissor;
 GLfloat clearcolor[4] = { 0, 0, 0, 0 };
 GLdouble cleardepth = 1;
 
-using namespace glsl;
-
 #define GL_TEXTURE0                       0x84C0
 #define GL_TEXTURE1                       0x84C1
 #define GL_TEXTURE2                       0x84C2
@@ -351,10 +463,13 @@ void load_attrib(T& attrib, VertexAttrib &va, unsigned short *indices, int start
     }
 }
 
-vec4 gl_Position;
-vec4 gl_FragCoord;
 #include "brush_solid.h"
 extern "C" {
+
+void UseProgram(GLuint program) {
+    new (&vertex_shader) brush_solid_vert;
+    new (&fragment_shader) brush_solid_frag;
+}
 
 void SetViewport(GLint x, GLint y, GLsizei width, GLsizei height) {
 	viewport.x = x;
@@ -498,12 +613,12 @@ GLuint CreateProgram() {
 }
 
 void BindAttribLocation(GLuint program, GLuint index, char *name) {
-        brush_solid_vert::bind_attrib_location(name, index);
+        vertex_shader.bind_attrib(name, index);
 }
 
 GLint GetUniformLocation(GLuint program, char* name) {
         Program &p = programs[program];
-        GLint loc = brush_solid_get_uniform_location(name);
+        GLint loc = vertex_shader.get_uniform(name);
         printf("location: %d\n", loc);
         return loc;
 }
@@ -767,23 +882,21 @@ void BufferData(GLenum target,
     b.size = size;
 }
 
-brush_solid_vert shader;
-brush_solid_frag frag_shader;
 void Uniform1i(GLint location, GLint V0) {
         printf("tex: %d\n", texture_count);
-        shader.set_uniform_int(location, V0);
-        frag_shader.set_uniform_int(location, V0);
+        vertex_shader.set_uniform_1i(location, V0);
+        fragment_shader.set_uniform_1i(location, V0);
 }
-void Uniform4fv(GLint location, GLsizei count, float *v) {
-        shader.set_uniform_4f(location, v);
-        frag_shader.set_uniform_4f(location, v);
+void Uniform4fv(GLint location, GLsizei count, const GLfloat *v) {
+        vertex_shader.set_uniform_4fv(location, v);
+        fragment_shader.set_uniform_4fv(location, v);
 }
 void UniformMatrix4fv(GLint location,
  	GLsizei count,
  	GLboolean transpose,
  	const GLfloat *value) {
-        shader.set_uniform_matrix4fv(location, value);
-        frag_shader.set_uniform_matrix4fv(location, value);
+        vertex_shader.set_uniform_matrix4fv(location, value);
+        fragment_shader.set_uniform_matrix4fv(location, value);
 }
 
 
@@ -1087,52 +1200,46 @@ static const size_t MAX_INTERPOLANTS = 16;
 typedef float Interpolants __attribute__((ext_vector_type(MAX_INTERPOLANTS)));
 
 template<bool DISCARD>
-static inline void commit_output(uint32_t* buf, __m128i mask) {
-    frag_shader.main();
-    __m128i r = pack_pixels(frag_shader.get_output());
+static inline void commit_output(uint32_t* buf, const Interpolants& step, __m128i mask = _mm_setzero_si128()) {
+    fragment_shader.run(&step);
+    __m128i r = pack_pixels(fragment_shader.gl_FragColor);
     __m128i dst = _mm_loadu_si128((__m128i*)buf);
     if (blend) r = blend_pixels(r, dst);
-    if (DISCARD) mask = _mm_or_si128(mask, frag_shader.discard_mask());
+    if (DISCARD) mask = _mm_or_si128(mask, fragment_shader.isPixelDiscarded);
     _mm_storeu_si128((__m128i*)buf,
         _mm_or_si128(_mm_and_si128(mask, dst),
                      _mm_andnot_si128(mask, r)));
 }
 
-template<bool DISCARD>
-static inline void commit_output(uint32_t* buf, const Interpolants &stepo, __m128i mask = _mm_setzero_si128()) {
-    commit_output<DISCARD>(buf, mask);
-    frag_shader.step_interp_inputs(&stepo);
-}
-
 template<>
-static inline void commit_output<false>(uint32_t* buf, const Interpolants& stepo, __m128i mask) {
-    frag_shader.main();
-    __m128i r = pack_pixels(frag_shader.get_output());
+static inline void commit_output<false>(uint32_t* buf, const Interpolants& step, __m128i mask) {
+    fragment_shader.run(&step);
+    __m128i r = pack_pixels(fragment_shader.gl_FragColor);
     if (blend) r = blend_pixels(r, _mm_loadu_si128((__m128i*)buf));
     _mm_storeu_si128((__m128i*)buf, r);
-    frag_shader.step_interp_inputs(&stepo);
 }
 
 template<bool DISCARD>
-static inline void commit_output(uint32_t* buf, uint16_t z, uint16_t* zbuf, const Interpolants& stepo) {
+static inline void commit_output(uint32_t* buf, uint16_t z, uint16_t* zbuf, const Interpolants& step) {
     __m128i mask;
     if (check_depth<1>(z, zbuf, mask)) {
-        commit_output<DISCARD>(buf, mask);
+        commit_output<DISCARD>(buf, step, mask);
+    } else {
+        fragment_shader.skip(&step);
     }
-    frag_shader.step_interp_inputs(&stepo);
 }
 
 template<bool DISCARD>
-static inline void commit_output(uint32_t* buf, uint16_t z, uint16_t* zbuf, int span) {
+static inline void commit_output(uint32_t* buf, uint16_t z, uint16_t* zbuf, const Interpolants& step, int span) {
     __m128i mask;
     if (check_depth<0>(z, zbuf, mask, span)) {
-        commit_output<DISCARD>(buf, mask);
+        commit_output<DISCARD>(buf, step, mask);
     }
 }
 
 template<bool DISCARD>
-static inline void commit_output(uint32_t* buf, int span) {
-    commit_output<DISCARD>(buf, _mm_cmplt_epi32(_mm_set1_epi32(span), _mm_set_epi32(4, 3, 2, 1)));
+static inline void commit_output(uint32_t* buf, const Interpolants& step, int span) {
+    commit_output<DISCARD>(buf, step, _mm_cmplt_epi32(_mm_set1_epi32(span), _mm_set_epi32(4, 3, 2, 1)));
 }
 
 void draw_quad(int nump) {
@@ -1155,18 +1262,17 @@ void draw_quad(int nump) {
             fy1 = std::min(fy1, float(scissor.y + scissor.height));
         }
 
-        shader.main();
         Flats flat_outs;
-        shader.store_flat_outputs(flat_outs);
         Interpolants interp_outs[4];
-        shader.store_interp_outputs((char *)interp_outs, sizeof(Interpolants));
-        Float w = 1.0f / gl_Position.w;
-        vec3 clip = gl_Position.sel(X, Y, Z) * w;
+        vertex_shader.run((char *)flat_outs, (char *)interp_outs, sizeof(Interpolants));
+        Float w = 1.0f / vertex_shader.gl_Position.w;
+        vec3 clip = vertex_shader.gl_Position.sel(X, Y, Z) * w;
         Point p[4];
         vec3 screen = (clip + 1)*vec3(viewport.width/2, viewport.height/2, 0.5f) + vec3(viewport.x, viewport.y, 0);
         for (int k = 0; k < 4; k++)
         {
-                printf("%f %f %f %f\n", gl_Position.x[k], gl_Position.y[k], gl_Position.z[k], gl_Position.y[k]);
+                vec4 pos = vertex_shader.gl_Position;
+                printf("%f %f %f %f\n", pos.x[k], pos.y[k], pos.z[k], pos.y[k]);
                 p[k] = Point { screen.x[k], screen.y[k] };
                 printf("%f %f\n", p[k].x, p[k].y);
         }
@@ -1189,8 +1295,10 @@ void draw_quad(int nump) {
 
         // SSE2 does not support unsigned comparison, so bias Z to be negative.
         uint16_t z = uint16_t(0xFFFF * screen.z.x) - 0x8000;
-        gl_FragCoord.z = screen.z.x;
-        gl_FragCoord.w = w.x;
+        fragment_shader.gl_FragCoord.z = screen.z.x;
+        fragment_shader.gl_FragCoord.w = w.x;
+
+        fragment_shader.init_primitive(flat_outs);
 
         Point l0, r0, l1, r1;
         int l0i, r0i, l1i, r1i;
@@ -1242,7 +1350,6 @@ void draw_quad(int nump) {
         ro = ro + rom * (y - r0.y);
         int shaded_pixels = 0;
         int shaded_lines = 0;
-        frag_shader.read_flat_inputs(flat_outs);
         fbuf += int(y) * colortex.width;
         fdepth += int(y) * depthtex.width;
         while (y < fy1) {
@@ -1276,24 +1383,24 @@ void draw_quad(int nump) {
             if (span > 0) {
                 shaded_lines++;
                 shaded_pixels += span;
-                gl_FragCoord.x = init_interp(startx + 0.5f, 1);
-                gl_FragCoord.y = y;
+                fragment_shader.gl_FragCoord.x = init_interp(startx + 0.5f, 1);
+                fragment_shader.gl_FragCoord.y = y;
                 Interpolants stepo = (ro - lo) * (1.0f / (rx - lx));
                 {
                     Interpolants o = lo + stepo * (startx + 0.5f - lx);
-                    frag_shader.read_interp_inputs(&o, &stepo);
+                    fragment_shader.init_span(&o, &stepo);
                 }
                 stepo *= 4;
                 uint32_t* buf = fbuf + startx;
                 uint16_t* depth = fdepth + startx;
-                if (!frag_shader.uses_discard()) {
+                if (!fragment_shader.use_discard()) {
                     if (depthtest) {
                         for (; span >= 8; span -= 8, buf += 8, depth += 8) {
                             __m128i zmask;
                             switch (check_depth<2>(z, depth, zmask)) {
                             case 0:
-                                frag_shader.step_interp_inputs(&stepo);
-                                frag_shader.step_interp_inputs(&stepo);
+                                fragment_shader.skip(&stepo);
+                                fragment_shader.skip(&stepo);
                                 break;
                             case -1:
                                 commit_output<false>(buf, stepo);
@@ -1309,14 +1416,14 @@ void draw_quad(int nump) {
                             commit_output<false>(buf, z, depth, stepo);
                         }
                         if (span > 0) {
-                            commit_output<false>(buf, z, depth, span);
+                            commit_output<false>(buf, z, depth, stepo, span);
                         }
                     } else {
                         for (; span >= 4; span -= 4, buf += 4) {
                             commit_output<false>(buf, stepo);
                         }
                         if (span > 0) {
-                            commit_output<false>(buf, span);
+                            commit_output<false>(buf, stepo, span);
                         }
                     }
                 } else {
@@ -1325,14 +1432,14 @@ void draw_quad(int nump) {
                             commit_output<true>(buf, z, depth, stepo);
                         }
                         if (span > 0) {
-                            commit_output<true>(buf, z, depth, span);
+                            commit_output<true>(buf, z, depth, stepo, span);
                         }
                     } else {
                         for (; span >= 4; span -= 4, buf += 4, depth += 4) {
                             commit_output<true>(buf, stepo);
                         }
                         if (span > 0) {
-                            commit_output<true>(buf, span);
+                            commit_output<true>(buf, stepo, span);
                         }
                     }
                 }
@@ -1350,8 +1457,8 @@ void draw_quad(int nump) {
 #else
         double end = ({ struct timespec tp; clock_gettime(CLOCK_MONOTONIC, &tp); tp.tv_sec * 1e9 + tp.tv_nsec; });
 #endif
-        auto output = get_nth(frag_shader.get_output(), 0);
-        auto pixels = pack_pixels(frag_shader.get_output());
+        auto output = get_nth(fragment_shader.gl_FragColor, 0);
+        auto pixels = pack_pixels(fragment_shader.gl_FragColor);
         int pixel0 = _mm_cvtsi128_si32(_mm_shuffle_epi32(pixels, 0));
         int pixel1 = _mm_cvtsi128_si32(_mm_shuffle_epi32(pixels, 0x55));
         int pixel2 = _mm_cvtsi128_si32(_mm_shuffle_epi32(pixels, 0xAA));
@@ -1451,8 +1558,8 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
         assert(type == GL_UNSIGNED_SHORT);
         assert(count == 6);
         assert(indices == 0);
-        shader.bind_textures();
-        frag_shader.bind_textures();
+        vertex_shader.init_batch();
+        fragment_shader.init_batch();
         for (int instance = 0; instance < instancecount; instance++) {
         if (indices == 0) {
                 Buffer &indices_buf = buffers[current_buffer[GL_ELEMENT_ARRAY_BUFFER]];
@@ -1473,18 +1580,18 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
                         assert(indices_buf.size == count * 2);
                         unsigned short *indices = (unsigned short*)indices_buf.buf;
                         if (mode == GL_QUADS) for (int i = 0; i + 4 <= count; i += 4) {
-                                shader.load_attribs(v.attribs, indices, i, instance, 4);
+                                vertex_shader.load_attribs(v.attribs, indices, i, instance, 4);
                                 printf("native quad %d %d %d %d\n", indices[i], indices[i+1], indices[i+2], indices[i+3]);
                                 draw_quad(4);
                         } else for (int i = 0; i + 3 <= count; i += 3) {
                                 if (i + 6 <= count && indices[i+3] == indices[i+2] && indices[i+4] == indices[i+1]) {
                                     unsigned short quad_indices[4] = { indices[i], indices[i+1], indices[i+5], indices[i+2] };
-                                    shader.load_attribs(v.attribs, quad_indices, 0, instance, 4);
+                                    vertex_shader.load_attribs(v.attribs, quad_indices, 0, instance, 4);
                                     printf("emulate quad %d %d %d %d\n", indices[i], indices[i+1], indices[i+5], indices[i+2]);
                                     draw_quad(4);
                                     i += 3;
                                 } else {
-                                    shader.load_attribs(v.attribs, indices, i, instance, 3);
+                                    vertex_shader.load_attribs(v.attribs, indices, i, instance, 3);
                                     printf("triangle %d %d %d %d\n", indices[i], indices[i+1], indices[i+2]);
                                     draw_quad(3);
                                 }
