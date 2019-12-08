@@ -10,21 +10,26 @@
 #include "minpng.h"
 #include "glsl.h"
 #include <cmath>
-#include <limits>
 using namespace std;
 #define GL_ARRAY_BUFFER                   0x8892
 #define GL_ELEMENT_ARRAY_BUFFER           0x8893
 
 
+typedef int8_t GLbyte;
+typedef uint8_t GLubyte;
+typedef int16_t GLshort;
+typedef uint16_t GLushort;
+typedef int32_t GLint;
 typedef uint32_t GLuint;
-typedef int32_t GLboolean;
+
 typedef float GLfloat;
 typedef double GLdouble;
+
+typedef uint32_t GLenum;
+typedef int32_t GLboolean;
 typedef uint32_t GLbitfield;
 
-typedef int32_t GLint;
 typedef int32_t GLsizei;
-typedef uint32_t GLenum;
 typedef size_t GLsizeiptr;
 
 struct VertexAttrib {
@@ -563,6 +568,21 @@ void TexStorage2D(
 #define GL_RED                            0x1903
 #define GL_RGBA                           0x1908
 #define GL_RGBA_INTEGER                   0x8D99
+GLenum internal_format_for_data(GLenum format, GLenum ty) {
+    if (format == GL_RED && ty == GL_UNSIGNED_BYTE) {
+        return GL_R8;
+    } else if (format == GL_RGBA && ty == GL_UNSIGNED_BYTE) {
+        return GL_RGBA8;
+    } else if (format == GL_RGBA && ty == GL_FLOAT) {
+        return GL_RGBA32F;
+    } else if (format == GL_RGBA_INTEGER && ty == GL_INT) {
+        return GL_RGBA32I;
+    } else {
+        assert(false);
+        return 0;
+    }
+}
+
 void TexSubImage2D(
         GLenum target,
         GLint level,
@@ -576,44 +596,17 @@ void TexSubImage2D(
         Texture &t = textures[current_texture[target]];
         assert(xoffset + width <= t.width);
         assert(yoffset + height <= t.height);
-        if (format == GL_RED) {
-                assert(ty == GL_UNSIGNED_BYTE);
-                char *dest = t.buf;
-                char *src = (char*)data;
-                for (int y = yoffset; y < yoffset + height; y++) {
-                        for (int x = xoffset; x < xoffset + width; x++) {
-                                dest[y * t.width + x] = *src++;
-                        }
-                }
-        } else if (format == GL_RGBA) {
-                assert(ty == GL_FLOAT);
-                float *dest = (float*)t.buf;
-                float *src = (float*)data;
-                for (int y = yoffset; y < yoffset + height; y++) {
-                        for (int x = xoffset; x < xoffset + width; x++) {
-                                dest[y * t.width * 4 + x * 4] = *src++;
-                                dest[y * t.width * 4 + x * 4 + 1] = *src++;
-                                dest[y * t.width * 4 + x * 4 + 2] = *src++;
-                                dest[y * t.width * 4 + x * 4 + 3] = *src++;
-                        }
-                }
-        } else {
-                assert(format == GL_RGBA_INTEGER);
-                assert(ty == GL_INT);
-                int *dest = (int*)t.buf;
-                int *src = (int*)data;
-                for (int y = yoffset; y < yoffset + height; y++) {
-                        for (int x = xoffset; x < xoffset + width; x++) {
-                                dest[y * t.width * 4 + x * 4] = *src++;
-                                dest[y * t.width * 4 + x * 4 + 1] = *src++;
-                                dest[y * t.width * 4 + x * 4 + 2] = *src++;
-                                dest[y * t.width * 4 + x * 4 + 3] = *src++;
-                        }
-                }
+        assert(t.internal_format == internal_format_for_data(format, ty));
+        int bpp = bytes_for_internal_format(t.internal_format);
+        if (!bpp) return;
+        char *dest = t.buf + (yoffset * t.width + xoffset) * bpp;
+        char *src = (char*)data;
+        for (int y = 0; y < height; y++) {
+                memcpy(dest, src, width * bpp);
+                dest += t.width * bpp;
+                src += width * bpp;
         }
 }
-
-
 
 void TexSubImage3D(
         GLenum target,
@@ -628,22 +621,21 @@ void TexSubImage3D(
         GLenum ty,
         void *data) {
         Texture &t = textures[current_texture[target]];
-        assert(format == GL_RGBA);
-        assert(ty == GL_UNSIGNED_BYTE);
-        char *dest = t.buf;
+        assert(t.internal_format == internal_format_for_data(format, ty));
+        int bpp = bytes_for_internal_format(t.internal_format);
+        if (!bpp) return;
+        char *dest = t.buf + (zoffset * t.width * t.height + yoffset * t.width + xoffset) * bpp;
         char *src = (char*)data;
         assert(xoffset + width <= t.width);
         assert(yoffset + height <= t.height);
         assert(zoffset + depth <= t.depth);
-        for (int z = zoffset; z < zoffset + depth; z++) {
-                for (int y = yoffset; y < yoffset + height; y++) {
-                        for (int x = xoffset; x < xoffset + width; x++) {
-                                dest[y * t.width * 4 + z * t.width * t.height * 4 + x * 4] = *src++;
-                                dest[y * t.width * 4 + z * t.width * t.height * 4 + x * 4 + 1] = *src++;
-                                dest[y * t.width * 4 + z * t.width * t.height * 4 + x * 4 + 2] = *src++;
-                                dest[y * t.width * 4 + z * t.width * t.height * 4 + x * 4 + 3] = *src++;
-                        }
+        for (int z = 0; z < depth; z++) {
+                for (int y = 0; y < height; y++) {
+                        memcpy(dest, src, width * bpp);
+                        dest += t.width * bpp;
+                        src += width * bpp;
                 }
+                dest += t.width * (t.height - 1) * bpp;
         }
 
 }
