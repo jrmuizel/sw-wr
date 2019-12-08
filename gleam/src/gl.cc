@@ -1081,14 +1081,12 @@ static inline __m128i blend_pixels(__m128i r, __m128i dst) {
     return r;
 }
 
-static inline void commit_output(uint32_t* buf) {
-    frag_shader.main();
-    __m128i r = pack_pixels(frag_shader.get_output());
-    if (blend) r = blend_pixels(r, _mm_loadu_si128((__m128i*)buf));
-    _mm_storeu_si128((__m128i*)buf, r);
-}
+static const size_t MAX_FLATS = 64;
+typedef float Flats[MAX_FLATS];
+static const size_t MAX_INTERPOLANTS = 16;
+typedef float Interpolants __attribute__((ext_vector_type(MAX_INTERPOLANTS)));
 
-template<bool DISCARD = false>
+template<bool DISCARD>
 static inline void commit_output(uint32_t* buf, __m128i mask) {
     frag_shader.main();
     __m128i r = pack_pixels(frag_shader.get_output());
@@ -1100,18 +1098,42 @@ static inline void commit_output(uint32_t* buf, __m128i mask) {
                      _mm_andnot_si128(mask, r)));
 }
 
-static inline void commit_output_discard(uint32_t* buf, __m128i mask = _mm_setzero_si128()) {
-    commit_output<true>(buf, mask);
+template<bool DISCARD>
+static inline void commit_output(uint32_t* buf, const Interpolants &stepo, __m128i mask = _mm_setzero_si128()) {
+    commit_output<DISCARD>(buf, mask);
+    frag_shader.step_interp_inputs(&stepo);
 }
 
-static inline __m128i span_mask(int span) {
-    return _mm_cmplt_epi32(_mm_set1_epi32(span), _mm_set_epi32(4, 3, 2, 1));
+template<>
+static inline void commit_output<false>(uint32_t* buf, const Interpolants& stepo, __m128i mask) {
+    frag_shader.main();
+    __m128i r = pack_pixels(frag_shader.get_output());
+    if (blend) r = blend_pixels(r, _mm_loadu_si128((__m128i*)buf));
+    _mm_storeu_si128((__m128i*)buf, r);
+    frag_shader.step_interp_inputs(&stepo);
 }
 
-static const size_t MAX_FLATS = 64;
-typedef float Flats[MAX_FLATS];
-static const size_t MAX_INTERPOLANTS = 16;
-typedef float Interpolants __attribute__((ext_vector_type(MAX_INTERPOLANTS)));
+template<bool DISCARD>
+static inline void commit_output(uint32_t* buf, uint16_t z, uint16_t* zbuf, const Interpolants& stepo) {
+    __m128i mask;
+    if (check_depth<1>(z, zbuf, mask)) {
+        commit_output<DISCARD>(buf, mask);
+    }
+    frag_shader.step_interp_inputs(&stepo);
+}
+
+template<bool DISCARD>
+static inline void commit_output(uint32_t* buf, uint16_t z, uint16_t* zbuf, int span) {
+    __m128i mask;
+    if (check_depth<0>(z, zbuf, mask, span)) {
+        commit_output<DISCARD>(buf, mask);
+    }
+}
+
+template<bool DISCARD>
+static inline void commit_output(uint32_t* buf, int span) {
+    commit_output<DISCARD>(buf, _mm_cmplt_epi32(_mm_set1_epi32(span), _mm_set_epi32(4, 3, 2, 1)));
+}
 
 void draw_quad(int nump) {
         Framebuffer& fb = get_draw_framebuffer();
@@ -1274,67 +1296,43 @@ void draw_quad(int nump) {
                                 frag_shader.step_interp_inputs(&stepo);
                                 break;
                             case -1:
-                                commit_output(buf);
-                                frag_shader.step_interp_inputs(&stepo);
-                                commit_output(buf + 4);
-                                frag_shader.step_interp_inputs(&stepo);
+                                commit_output<false>(buf, stepo);
+                                commit_output<false>(buf + 4, stepo);
                                 break;
                             default:
-                                commit_output(buf, _mm_unpacklo_epi16(zmask, zmask));
-                                frag_shader.step_interp_inputs(&stepo);
-                                commit_output(buf + 4, _mm_unpackhi_epi16(zmask, zmask));
-                                frag_shader.step_interp_inputs(&stepo);
+                                commit_output<false>(buf, stepo, _mm_unpacklo_epi16(zmask, zmask));
+                                commit_output<false>(buf + 4, stepo, _mm_unpackhi_epi16(zmask, zmask));
                                 break;
                             }
                         }
                         for (; span >= 4; span -= 4, buf += 4, depth += 4) {
-                            __m128i mask;
-                            if (check_depth<1>(z, depth, mask)) {
-                                commit_output(buf, mask);
-                            }
-                            frag_shader.step_interp_inputs(&stepo);
+                            commit_output<false>(buf, z, depth, stepo);
                         }
                         if (span > 0) {
-                            __m128i mask;
-                            if (check_depth<0>(z, depth, mask, span)) {
-                                commit_output(buf, mask);
-                            } else {
-                                frag_shader.step_interp_inputs(&stepo);
-                            }
+                            commit_output<false>(buf, z, depth, span);
                         }
                     } else {
                         for (; span >= 4; span -= 4, buf += 4) {
-                            commit_output(buf);
-                            frag_shader.step_interp_inputs(&stepo);
+                            commit_output<false>(buf, stepo);
                         }
                         if (span > 0) {
-                            commit_output(buf, span_mask(span));
+                            commit_output<false>(buf, span);
                         }
                     }
                 } else {
                     if (depthtest) {
                         for (; span >= 4; span -= 4, buf += 4, depth += 4) {
-                            __m128i mask;
-                            if (check_depth<1>(z, depth, mask)) {
-                                commit_output_discard(buf, mask);
-                            }
-                            frag_shader.step_interp_inputs(&stepo);
+                            commit_output<true>(buf, z, depth, stepo);
                         }
                         if (span > 0) {
-                            __m128i mask;
-                            if (check_depth<0>(z, depth, mask, span)) {
-                                commit_output_discard(buf, mask);
-                            } else {
-                                frag_shader.step_interp_inputs(&stepo);
-                            }
+                            commit_output<true>(buf, z, depth, span);
                         }
                     } else {
                         for (; span >= 4; span -= 4, buf += 4, depth += 4) {
-                            commit_output_discard(buf);
-                            frag_shader.step_interp_inputs(&stepo);
+                            commit_output<true>(buf, stepo);
                         }
                         if (span > 0) {
-                            commit_output(buf, span_mask(span));
+                            commit_output<true>(buf, span);
                         }
                     }
                 }
