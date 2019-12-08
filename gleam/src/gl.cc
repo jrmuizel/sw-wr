@@ -1088,18 +1088,20 @@ static inline void commit_output(uint32_t* buf) {
     _mm_storeu_si128((__m128i*)buf, r);
 }
 
+template<bool DISCARD = false>
 static inline void commit_output(uint32_t* buf, __m128i mask) {
     frag_shader.main();
     __m128i r = pack_pixels(frag_shader.get_output());
     __m128i dst = _mm_loadu_si128((__m128i*)buf);
     if (blend) r = blend_pixels(r, dst);
+    if (DISCARD) mask = _mm_or_si128(mask, frag_shader.discard_mask());
     _mm_storeu_si128((__m128i*)buf,
         _mm_or_si128(_mm_and_si128(mask, dst),
                      _mm_andnot_si128(mask, r)));
 }
 
 static inline void commit_output_discard(uint32_t* buf, __m128i mask = _mm_setzero_si128()) {
-    commit_output(buf, _mm_or_si128(mask, frag_shader.discard_mask()));
+    commit_output<true>(buf, mask);
 }
 
 static inline __m128i span_mask(int span) {
