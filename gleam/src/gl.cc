@@ -873,6 +873,29 @@ Framebuffer& get_draw_framebuffer() {
     return fb;
 }
 
+template<typename T>
+static void clear_buffer(Texture& t, __m128i chunk, T value, int layer = 0) {
+    int x0 = 0, y0 = 0, x1 = t.width, y1 = t.height;
+    if (scissortest) {
+        x0 = std::max(x0, scissor.x);
+        y0 = std::max(y0, scissor.y);
+        x1 = std::min(x1, scissor.x + scissor.width);
+        y1 = std::min(y1, scissor.y + scissor.height);
+    }
+    const int chunk_size = sizeof(chunk) / sizeof(T);
+    T* buf = (T*)t.buf + t.width * t.height * layer + t.width * y0 + x0;
+    for (int y = y0; y < y1; y++) {
+        int x = x0;
+        for (; x + chunk_size <= x1; x += chunk_size, buf += chunk_size) {
+            _mm_storeu_si128((__m128i*)buf, chunk);
+        }
+        for (; x < x1; x++, buf++) {
+            *buf = value;
+        }
+        buf += t.width - (x1 - x0);
+    }
+}
+
 extern "C" {
 
 #define GL_COLOR_BUFFER_BIT         0x00004000
@@ -883,30 +906,13 @@ void Clear(GLbitfield mask) {
     Framebuffer& fb = get_draw_framebuffer();
     if ((mask & GL_COLOR_BUFFER_BIT) && fb.color_attachment) {
         Texture& t = textures[fb.color_attachment];
-        int x0 = 0, y0 = 0, x1 = t.width, y1 = t.height;
-        if (scissortest) {
-            x0 = std::max(x0, scissor.x);
-            y0 = std::max(y0, scissor.y);
-            x1 = std::min(x1, scissor.x + scissor.width);
-            y1 = std::min(y1, scissor.y + scissor.height);
-        }
         if (t.internal_format == GL_RGBA8) {
             __m128 colorf = _mm_loadu_ps(clearcolor);
             __m128i colori = _mm_cvtps_epi32(_mm_mul_ps(colorf, _mm_set1_ps(255.5f)));
             colori = _mm_packs_epi32(colori, colori);
             colori = _mm_packus_epi16(colori, colori);
             uint32_t color = _mm_cvtsi128_si32(colori);
-            uint32_t* buf = (uint32_t*)t.buf + t.width * t.height * fb.layer + t.width * y0 + x0;
-            for (int y = y0; y < y1; y++) {
-                int x = x0;
-                for (; x + 4 <= x1; x += 4, buf += 4) {
-                    _mm_storeu_si128((__m128i*)buf, colori);
-                }
-                for (; x < x1; x++, buf++) {
-                    *buf = color;
-                }
-                buf += t.width - (x1 - x0);
-            }
+            clear_buffer<uint32_t>(t, colori, color, fb.layer);
         } else {
             assert(false);
         }
@@ -914,26 +920,9 @@ void Clear(GLbitfield mask) {
     if ((mask & GL_DEPTH_BUFFER_BIT) && fb.depth_attachment) {
         Texture& t = textures[fb.depth_attachment];
         assert(t.internal_format == GL_DEPTH_COMPONENT16);
-        int x0 = 0, y0 = 0, x1 = t.width, y1 = t.height;
-        if (scissortest) {
-            x0 = std::max(x0, scissor.x);
-            y0 = std::max(y0, scissor.y);
-            x1 = std::min(x1, scissor.x + scissor.width);
-            y1 = std::min(y1, scissor.y + scissor.height);
-        }
         uint16_t depth = uint16_t(0xFFFF * cleardepth) - 0x8000;
         __m128i depthi = _mm_set1_epi16(depth);
-        uint16_t* buf = (uint16_t*)t.buf + t.width * y0 + x0;
-        for (int y = y0; y < y1; y++) {
-            int x = x0;
-            for (; x + 8 <= x1; x += 8, buf += 8) {
-                _mm_storeu_si128((__m128i*)buf, depthi);
-            }
-            for (; x < x1; x++, buf++) {
-                *buf = depth;
-            }
-            buf += (t.width - x1) + x0;
-        }
+        clear_buffer<uint16_t>(t, depthi, depth);
     }
 }
 
