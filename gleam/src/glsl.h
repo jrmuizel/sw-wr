@@ -1846,7 +1846,7 @@ uint32_t fetchPixel(sampler2DArray sampler, int x, int y, int z) {
         if (x > sampler->width || y > sampler->height || z > sampler->depth) {
                 return 0;
         }
-        return sampler->buf[x*4  + y * sampler->stride/4 + z * sampler->height_stride/4];
+        return sampler->buf[x  + y * sampler->stride/4 + z * sampler->height_stride/4];
 }
 
 
