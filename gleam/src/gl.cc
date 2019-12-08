@@ -541,7 +541,7 @@ void TexStorage3D(
     t.height = height;
     t.depth = depth;
     size_t size = bytes_for_internal_format(internal_format) * width * height * depth * levels;
-    t.buf = (char*)malloc(size);
+    t.buf = (char*)malloc(size + sizeof(__m128i));
 }
 
 void TexStorage2D(
@@ -557,7 +557,7 @@ void TexStorage2D(
     t.width = width;
     t.height = height;
     size_t size = bytes_for_internal_format(internal_format) * width * height * levels;
-    t.buf = (char*)malloc(size);
+    t.buf = (char*)malloc(size + sizeof(__m128i));
 }
 
 #define GL_RED                            0x1903
@@ -965,17 +965,12 @@ struct Point {
 };
 
 template<int FULL_SPANS>
-static inline int check_depth(uint16_t z, int span, uint16_t* zbuf, int discarded = 0) {
+static inline int check_depth(uint16_t z, uint16_t* zbuf, __m128i& outmask, int span = 0) {
     __m128i dest;
     if (FULL_SPANS > 1) {
         dest = _mm_loadu_si128((__m128i*)zbuf);
-    } else if (FULL_SPANS) {
-        dest = _mm_loadl_epi64((__m128i*)zbuf);
-    } else if (span & 2) {
-        dest = _mm_cvtsi32_si128(*(int32_t*)zbuf);
-        if (span & 1) dest = _mm_unpacklo_epi32(dest, _mm_cvtsi32_si128(zbuf[2]));
     } else {
-        dest = _mm_cvtsi32_si128(*(int32_t*)zbuf);
+        dest = _mm_loadl_epi64((__m128i*)zbuf);
     }
     __m128i src = _mm_set1_epi16(z);
     // Invert the depth test to check which pixels failed and should be discarded.
@@ -985,40 +980,41 @@ static inline int check_depth(uint16_t z, int span, uint16_t* zbuf, int discarde
         // GL_LESS: Not(Less) = GreaterEqual
         // No GreaterEqual in SSE2, so use Not(Less) directly.
         _mm_xor_si128(_mm_cmplt_epi16(src, dest), _mm_set1_epi16(0xFFFF));
-    uint32_t failed = _mm_movemask_epi8(_mm_packus_epi16(mask, mask));
     if (FULL_SPANS > 1) {
-        failed &= 0xFF;
-    } else if (FULL_SPANS) {
-        failed &= 0xF;
+        switch (_mm_movemask_epi8(mask)) {
+        case 0xFFFF:
+            return 0;
+        case 0:
+            if (depthmask) _mm_storeu_si128((__m128i*)zbuf, src);
+            return -1;
+        }
+        if (depthmask) {
+            _mm_storeu_si128((__m128i*)zbuf,
+                _mm_or_si128(_mm_and_si128(mask, dest),
+                             _mm_andnot_si128(mask, src)));
+        }
+        outmask = mask;
     } else {
-        failed |= (0xF << span) & 0xF;
-    }
-    discarded |= failed;
-    if (depthmask && discarded != (FULL_SPANS > 1 ? 0xFF : 0xF)) {
-        if (FULL_SPANS > 1) {
-            if (!discarded) {
-                _mm_storeu_si128((__m128i*)zbuf, src);
-            } else {
-                _mm_storeu_si128((__m128i*)zbuf,
-                    _mm_or_si128(_mm_and_si128(mask, dest),
-                                 _mm_andnot_si128(mask, src)));
-            }
-        } else if (FULL_SPANS) {
-            if (!discarded) {
-                _mm_storel_epi64((__m128i*)zbuf, src);
-            } else {
-                _mm_storel_epi64((__m128i*)zbuf,
-                    _mm_or_si128(_mm_and_si128(mask, dest),
-                                 _mm_andnot_si128(mask, src)));
+        if (FULL_SPANS) {
+            mask = _mm_move_epi64(mask);
+            if (_mm_movemask_epi8(mask) == 0xFF) {
+                return 0;
             }
         } else {
-            if (!(discarded & 1)) zbuf[0] = z;
-            if (!(discarded & 2)) zbuf[1] = z;
-            if (!(discarded & 4)) zbuf[2] = z;
-            if (!(discarded & 8)) zbuf[3] = z;
+            mask = _mm_or_si128(mask,
+                                _mm_cmplt_epi16(_mm_set1_epi16(span), _mm_set_epi16(8, 7, 6, 5, 4, 3, 2, 1)));
+            if (_mm_movemask_epi8(mask) == 0xFFFF) {
+                return 0;
+            }
         }
+        if (depthmask) {
+            _mm_storel_epi64((__m128i*)zbuf,
+                _mm_or_si128(_mm_and_si128(mask, dest),
+                             _mm_andnot_si128(mask, src)));
+        }
+        outmask = _mm_unpacklo_epi16(mask, mask);
     }
-    return discarded;
+    return 1;
 }
 
 static inline __m128i pack_pixels(vec4 output) {
@@ -1032,25 +1028,12 @@ static inline __m128i pack_pixels(vec4 output) {
     return _mm_packus_epi16(rlo, rhi);
 }
 
-template<bool FULL_SPAN>
-static inline __m128i blend_pixels(__m128i r, int span, const uint32_t* buf) {
+static inline __m128i blend_pixels(__m128i r, __m128i dst) {
     const __m128i zero = _mm_setzero_si128();
     __m128i slo = _mm_unpacklo_epi8(r, zero);
     __m128i shi = _mm_unpackhi_epi8(r, zero);
-    __m128i dlo, dhi;
-    if (FULL_SPAN) {
-        __m128i dst = _mm_loadu_si128((__m128i*)buf);
-        dlo = _mm_unpacklo_epi8(dst, zero);
-        dhi = _mm_unpackhi_epi8(dst, zero);
-    } else {
-        dhi = zero;
-        if (span & 2) {
-            dlo = _mm_unpacklo_epi8(_mm_loadl_epi64((__m128i*)buf), zero);
-            if (span & 1) dhi = _mm_unpacklo_epi8(_mm_cvtsi32_si128(buf[2]), zero);
-        } else {
-            dlo = _mm_unpacklo_epi8(_mm_cvtsi32_si128(buf[0]), zero);
-        }
-    }
+    __m128i dlo = _mm_unpacklo_epi8(dst, zero);
+    __m128i dhi = _mm_unpackhi_epi8(dst, zero);
     // (x*y + x) >> 8, cheap approximation of (x*y) / 255
     #define muldiv255(x, y) ({ __m128i b = x; _mm_srli_epi16(_mm_add_epi16(_mm_mullo_epi16(b, y), b), 8); })
     #define alphas(c) _mm_shufflehi_epi16(_mm_shufflelo_epi16(c, 0xFF), 0xFF)
@@ -1117,64 +1100,29 @@ static inline __m128i blend_pixels(__m128i r, int span, const uint32_t* buf) {
     return r;
 }
 
-template<bool FULL_SPAN>
-static inline void write_pixels(__m128i r, int span, uint32_t* buf) {
-    if (FULL_SPAN) {
-        _mm_storeu_si128((__m128i*)buf, r);
-    } else if (span & 2) {
-        _mm_storel_epi64((__m128i*)buf, r);
-        if (span & 1) buf[2] = _mm_cvtsi128_si32(_mm_shuffle_epi32(r, 0xAA));
-    } else {
-        buf[0] = _mm_cvtsi128_si32(r);
-    }
-}
-
-template<bool FULL_SPAN>
-static inline void discard_pixels(__m128i r, int span, uint32_t* buf, int discarded) {
-    if (!FULL_SPAN) discarded |= 0xF << span;
-    if (!(discarded & 1)) {
-        if (!(discarded & 2)) {
-            _mm_storel_epi64((__m128i*)buf, r);
-        } else {
-            buf[0] = _mm_cvtsi128_si32(r);
-        }
-    } else if (!(discarded & 2)) {
-        buf[1] = _mm_cvtsi128_si32(_mm_shuffle_epi32(r, 0x55));
-    }
-    if (!(discarded & 4)) {
-        if (!(discarded & 8)) {
-            _mm_storeh_pd((double*)&buf[2], _mm_castsi128_pd(r));
-        } else {
-            buf[2] = _mm_cvtsi128_si32(_mm_shuffle_epi32(r, 0xAA));
-        }
-    } else if (!(discarded & 8)) {
-        buf[3] = _mm_cvtsi128_si32(_mm_shuffle_epi32(r, 0xFF));
-    }
-}
-
-static inline void commit_output_no_depth_test(int span, uint32_t* buf, int discarded = 0) {
+static inline void commit_output(uint32_t* buf) {
+    frag_shader.main();
     __m128i r = pack_pixels(frag_shader.get_output());
-    if (blend) r = blend_pixels<true>(r, span, buf);
-    if (!discarded) {
-        write_pixels<true>(r, span, buf);
-    } else if (discarded != 0xF) {
-        discard_pixels<true>(r, span, buf, discarded);
-    }
+    if (blend) r = blend_pixels(r, _mm_loadu_si128((__m128i*)buf));
+    _mm_storeu_si128((__m128i*)buf, r);
 }
 
-template<bool FULL_SPAN>
-static inline void commit_output(int span, uint32_t* buf, uint16_t *depth, uint16_t z) {
-    int discarded = _mm_movemask_ps(frag_shader.discard_mask());
-    if (depthtest) discarded = check_depth<FULL_SPAN ? 1 : 0>(z, span, depth, discarded);
-    if (discarded != 0xF) {
-        __m128i r = pack_pixels(frag_shader.get_output());
-        if (blend) r = blend_pixels<FULL_SPAN>(r, span, buf);
-        if (!discarded) {
-            write_pixels<FULL_SPAN>(r, span, buf);
-        } else {
-            discard_pixels<FULL_SPAN>(r, span, buf, discarded);
-        }
-    }
+static inline void commit_output(uint32_t* buf, __m128i mask) {
+    frag_shader.main();
+    __m128i r = pack_pixels(frag_shader.get_output());
+    __m128i dst = _mm_loadu_si128((__m128i*)buf);
+    if (blend) r = blend_pixels(r, dst);
+    _mm_storeu_si128((__m128i*)buf,
+        _mm_or_si128(_mm_and_si128(mask, dst),
+                     _mm_andnot_si128(mask, r)));
+}
+
+static inline void commit_output_discard(uint32_t* buf, __m128i mask = _mm_setzero_si128()) {
+    commit_output(buf, _mm_or_si128(mask, frag_shader.discard_mask()));
+}
+
+static inline __m128i span_mask(int span) {
+    return _mm_cmplt_epi32(_mm_set1_epi32(span), _mm_set_epi32(4, 3, 2, 1));
 }
 
 static const size_t MAX_FLATS = 64;
@@ -1202,14 +1150,14 @@ void draw_quad(brush_solid_frag &shader, Flats flat_outs, Interpolants interp_ou
             fy1 = std::min(fy1, float(scissor.y + scissor.height));
         }
 
-        auto top_left = Point{std::numeric_limits<float>::max(), std::numeric_limits<float>::max()};
-        auto bot_right = Point{std::numeric_limits<float>::lowest(), std::numeric_limits<float>::lowest()};
-
-        top_left.x = std::min(std::min(p[0].x, p[1].x), std::min(p[2].x, p[3].x));
-        top_left.y = std::min(std::min(p[0].y, p[1].y), std::min(p[2].y, p[3].y));
-        bot_right.x = std::max(std::max(p[0].x, p[1].x), std::max(p[2].x, p[3].x));
-        bot_right.y = std::max(std::max(p[0].y, p[1].y), std::max(p[2].y, p[3].y));
-
+        auto top_left = p[0];
+        auto bot_right = p[0];
+        for (int i = 1; i < nump; i++) {
+            top_left.x = std::min(top_left.x, p[i].x);
+            top_left.y = std::min(top_left.y, p[i].y);
+            bot_right.x = std::max(bot_right.x, p[i].x);
+            bot_right.y = std::max(bot_right.y, p[i].y);
+        }
         printf("bbox: %f %f %f %f\n", top_left.x, top_left.y, bot_right.x, bot_right.y);
 
 #ifdef  __MACH__
@@ -1227,7 +1175,7 @@ void draw_quad(brush_solid_frag &shader, Flats flat_outs, Interpolants interp_ou
         int l0i, r0i, l1i, r1i;
         {
             int top = 0;
-            for (int k = 1; k < 4; k++) {
+            for (int k = 1; k < nump; k++) {
                 if (p[k].y < p[top].y) {
                     top = k;
                     break;
@@ -1320,35 +1268,76 @@ void draw_quad(brush_solid_frag &shader, Flats flat_outs, Interpolants interp_ou
                 if (!frag_shader.uses_discard()) {
                     if (depthtest) {
                         for (; span >= 8; span -= 8, buf += 8, depth += 8) {
-                            int discarded = check_depth<2>(z, span, depth);
-                            if (discarded == 0xFF) {
+                            __m128i zmask;
+                            switch (check_depth<2>(z, depth, zmask)) {
+                            case 0:
                                 frag_shader.step_interp_inputs(&stepo);
                                 frag_shader.step_interp_inputs(&stepo);
-                                continue;
+                                break;
+                            case -1:
+                                commit_output(buf);
+                                frag_shader.step_interp_inputs(&stepo);
+                                commit_output(buf + 4);
+                                frag_shader.step_interp_inputs(&stepo);
+                                break;
+                            default:
+                                commit_output(buf, _mm_unpacklo_epi16(zmask, zmask));
+                                frag_shader.step_interp_inputs(&stepo);
+                                commit_output(buf + 4, _mm_unpackhi_epi16(zmask, zmask));
+                                frag_shader.step_interp_inputs(&stepo);
+                                break;
                             }
-                            frag_shader.main();
+                        }
+                        for (; span >= 4; span -= 4, buf += 4, depth += 4) {
+                            __m128i mask;
+                            if (check_depth<1>(z, depth, mask)) {
+                                commit_output(buf, mask);
+                            }
                             frag_shader.step_interp_inputs(&stepo);
-                            commit_output_no_depth_test(span, buf, discarded&0xF);
-                            frag_shader.main();
-                            frag_shader.step_interp_inputs(&stepo);
-                            commit_output_no_depth_test(span, buf + 4, discarded>>4);
+                        }
+                        if (span > 0) {
+                            __m128i mask;
+                            if (check_depth<0>(z, depth, mask, span)) {
+                                commit_output(buf, mask);
+                            } else {
+                                frag_shader.step_interp_inputs(&stepo);
+                            }
                         }
                     } else {
                         for (; span >= 4; span -= 4, buf += 4) {
-                            frag_shader.main();
+                            commit_output(buf);
                             frag_shader.step_interp_inputs(&stepo);
-                            commit_output_no_depth_test(span, buf);
+                        }
+                        if (span > 0) {
+                            commit_output(buf, span_mask(span));
                         }
                     }
-                }
-                for (; span >= 4; span -= 4, buf += 4, depth += 4) {
-                    frag_shader.main();
-                    frag_shader.step_interp_inputs(&stepo);
-                    commit_output<true>(span, buf, depth, z);
-                }
-                if (span > 0) {
-                    frag_shader.main();
-                    commit_output<false>(span, buf, depth, z);
+                } else {
+                    if (depthtest) {
+                        for (; span >= 4; span -= 4, buf += 4, depth += 4) {
+                            __m128i mask;
+                            if (check_depth<1>(z, depth, mask)) {
+                                commit_output_discard(buf, mask);
+                            }
+                            frag_shader.step_interp_inputs(&stepo);
+                        }
+                        if (span > 0) {
+                            __m128i mask;
+                            if (check_depth<0>(z, depth, mask, span)) {
+                                commit_output_discard(buf, mask);
+                            } else {
+                                frag_shader.step_interp_inputs(&stepo);
+                            }
+                        }
+                    } else {
+                        for (; span >= 4; span -= 4, buf += 4, depth += 4) {
+                            commit_output_discard(buf);
+                            frag_shader.step_interp_inputs(&stepo);
+                        }
+                        if (span > 0) {
+                            commit_output(buf, span_mask(span));
+                        }
+                    }
                 }
             }
             lx += lm;
