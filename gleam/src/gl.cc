@@ -885,11 +885,11 @@ static void clear_buffer(Texture& t, __m128i chunk, T value, int layer = 0) {
     const int chunk_size = sizeof(chunk) / sizeof(T);
     T* buf = (T*)t.buf + t.width * t.height * layer + t.width * y0 + x0;
     for (int y = y0; y < y1; y++) {
-        int x = x0;
-        for (; x + chunk_size <= x1; x += chunk_size, buf += chunk_size) {
+        T* end = buf + (x1 - x0);
+        for (; buf + chunk_size <= end; buf += chunk_size) {
             _mm_storeu_si128((__m128i*)buf, chunk);
         }
-        for (; x < x1; x++, buf++) {
+        for (; buf < end; buf++) {
             *buf = value;
         }
         buf += t.width - (x1 - x0);
