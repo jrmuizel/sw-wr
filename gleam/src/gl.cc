@@ -10,6 +10,7 @@
 #include "minpng.h"
 #include "glsl.h"
 #include <cmath>
+#include <string>
 
 using namespace std;
 using namespace glsl;
@@ -114,7 +115,16 @@ struct Renderbuffer {
         Renderbuffer() : texture(0) {}
 };
 
+enum ProgramKind {
+    BrushSolid,
+    BrushImage,
+    None,
+};
+
 struct Program {
+    std::string vs_name;
+    std::string fs_name;
+    ProgramKind kind = ProgramKind::None;
 };
 
 struct Texture {
@@ -132,7 +142,12 @@ struct VertexArray {
     VertexAttrib attribs[MAX_ATTRS];
 };
 
+
+#define GL_VERTEX_SHADER                  0x8B31
+#define GL_FRAGMENT_SHADER                0x8B30
 struct Shader {
+    GLenum type;
+    std::string name;
 };
 
 struct ShaderImpl {
@@ -468,11 +483,25 @@ void load_attrib(T& attrib, VertexAttrib &va, unsigned short *indices, int start
 }
 
 #include "brush_solid.h"
+#include "brush_image.h"
 extern "C" {
 
 void UseProgram(GLuint program) {
-    new (&vertex_shader) brush_solid_vert;
-    new (&fragment_shader) brush_solid_frag;
+    if (!program)
+        return;
+    Program &p = programs[program];
+    switch (p.kind) {
+        case ProgramKind::BrushSolid:
+            new (&vertex_shader) brush_solid_vert;
+            new (&fragment_shader) brush_solid_frag;
+            break;
+        case ProgramKind::BrushImage:
+            new (&vertex_shader) brush_image_vert;
+            new (&fragment_shader) brush_image_frag;
+            break;
+        default:
+            assert(0);
+    }
 }
 
 void SetViewport(GLint x, GLint y, GLsizei width, GLsizei height) {
@@ -606,8 +635,26 @@ void GenVertexArrays(int n, int *result) {
 
 GLuint CreateShader(GLenum type) {
         Shader s;
+        s.type = type;
         shaders.insert(pair<GLuint, Shader>(shader_count, s));
         return shader_count++;
+}
+
+void ShaderSourceByName(GLuint shader, char* name) {
+    Shader &s = shaders[shader];
+    s.name = name;
+}
+
+void AttachShader(GLuint program, GLuint shader) {
+    Program &p = programs[program];
+    Shader &s = shaders[shader];
+    if (s.type == GL_VERTEX_SHADER) {
+        p.vs_name = s.name;
+    } else if (s.type == GL_FRAGMENT_SHADER) {
+        p.fs_name = s.name;
+    } else {
+        assert(0);
+    }
 }
 
 GLuint CreateProgram() {
@@ -616,12 +663,30 @@ GLuint CreateProgram() {
         return program_count++;
 }
 
+void LinkProgram(GLuint program) {
+    Program &p = programs[program];
+    assert(p.vs_name == p.fs_name);
+    if (p.vs_name == "brush_solid") {
+        p.kind = ProgramKind::BrushSolid;
+    } else if (p.vs_name == "brush_image") {
+        p.kind = ProgramKind::BrushImage;
+    } else {
+        assert(0);
+    }
+}
+
 void BindAttribLocation(GLuint program, GLuint index, char *name) {
-        vertex_shader.bind_attrib(name, index);
+    //XXX: HACK
+    LinkProgram(program);
+    UseProgram(program);
+    vertex_shader.bind_attrib(name, index);
 }
 
 GLint GetUniformLocation(GLuint program, char* name) {
         Program &p = programs[program];
+        //XXX: HACK
+        LinkProgram(program);
+        UseProgram(program);
         GLint loc = vertex_shader.get_uniform(name);
         printf("location: %d\n", loc);
         return loc;
@@ -755,6 +820,9 @@ void TexSubImage3D(
                         src += width * bpp;
                 }
                 dest += t.width * (t.height - 1) * bpp;
+        }
+        if (t.internal_format == GL_RGBA8) {
+            write_png("texupload.png", t.buf, t.width, t.height);
         }
 
 }
@@ -1051,9 +1119,6 @@ void Clear(GLbitfield mask) {
 #define GL_TRIANGLE_STRIP                 0x0005
 #define GL_TRIANGLE_FAN                   0x0006
 #define GL_QUADS                          0x0007
-
-void LinkProgram(GLuint program) {
-}
 
 } // extern "C"
 

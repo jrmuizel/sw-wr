@@ -91,6 +91,11 @@ impl Gl for GlesFns {
         drop(pointers);
     }
 
+    fn shader_source_with_name(&self, shader: GLuint, strings: &[&[u8]], name: &str) {
+        panic!();
+    }
+
+
     #[allow(unused_variables)]
     fn read_buffer(&self, mode: GLenum) {
         panic!("not supported")

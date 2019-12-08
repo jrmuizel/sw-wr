@@ -137,6 +137,7 @@ declare_gl_apis! {
     fn unmap_buffer(&self, target: GLenum) -> GLboolean;
     fn tex_buffer(&self, target: GLenum, internal_format: GLenum, buffer: GLuint);
     fn shader_source(&self, shader: GLuint, strings: &[&[u8]]);
+    fn shader_source_with_name(&self, shader: GLuint, strings: &[&[u8]], name: &str);
     fn read_buffer(&self, mode: GLenum);
     fn read_pixels_into_buffer(&self,
                                 x: GLint,

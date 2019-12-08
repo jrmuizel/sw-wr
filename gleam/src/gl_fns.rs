@@ -101,6 +101,7 @@ extern "C" {
         offset: *const GLvoid,
     );
     fn CreateShader(shader_type: GLenum) -> GLuint;
+    fn AttachShader(program: GLuint, shader: GLuint);
     fn CreateProgram() -> GLuint;
     fn Uniform1i(location: GLint, v0: GLint);
     fn Uniform4fv(location: GLint, count: GLsizei, value: *const GLfloat);
@@ -138,6 +139,7 @@ extern "C" {
     fn ClearDepth(depth: GLdouble);
     fn Clear(mask: GLbitfield);
     fn Finish();
+    fn ShaderSourceByName(shader: GLuint, name: *const GLchar);
 }
 
 impl GlFns {
@@ -239,6 +241,34 @@ impl Gl for GlFns {
         drop(lengths);
         drop(pointers);
     }
+
+    fn shader_source_with_name(&self, shader: GLuint, strings: &[&[u8]], name: &str) {
+        //panic!();
+        println!("shader_source {}", shader);
+        for s in strings {
+            println!("{}", str::from_utf8(s).unwrap());
+        }
+        //panic!();
+        let pointers: Vec<*const u8> = strings.iter().map(|string| (*string).as_ptr()).collect();
+        let lengths: Vec<GLint> = strings.iter().map(|string| string.len() as GLint).collect();
+        assert!(lengths.len() == 1);
+        unsafe {
+            if SW {
+                let c_string = CString::new(name).unwrap();
+                ShaderSourceByName(shader, c_string.as_ptr());
+            } else {
+            self.ffi_gl_.ShaderSource(
+                shader,
+                pointers.len() as GLsizei,
+                pointers.as_ptr() as *const *const GLchar,
+                lengths.as_ptr(),
+            );
+            }
+        }
+        drop(lengths);
+        drop(pointers);
+    }
+
 
     fn tex_buffer(&self, target: GLenum, internal_format: GLenum, buffer: GLuint) {
         panic!();
@@ -605,7 +635,7 @@ impl Gl for GlFns {
         //panic!();
         unsafe {
             if SW {
-                //AttachShader(program, shader);
+                AttachShader(program, shader);
             } else {
             self.ffi_gl_.AttachShader(program, shader);
             }

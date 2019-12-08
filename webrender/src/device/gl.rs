@@ -1558,7 +1558,7 @@ impl Device {
     ) -> Result<gl::GLuint, ShaderError> {
         println!("compile {}", name);
         let id = gl.create_shader(shader_type);
-        gl.shader_source(id, &[source.as_bytes()]);
+        gl.shader_source_with_name(id, &[source.as_bytes()], name);
         gl.compile_shader(id);
         let log = gl.get_shader_info_log(id);
         let mut status = [0];
