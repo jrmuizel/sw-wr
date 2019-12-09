@@ -1863,6 +1863,7 @@ impl Device {
 
         // If not, we need to do a normal compile + link pass.
         if build_program {
+            println!("program {} {:?}", info.base_filename, info.features);
             // Compile the vertex shader
             let vs_source = info.compute_source(self, SHADER_KIND_VERTEX);
             let vs_id = match Device::compile_shader(&*self.gl, &info.base_filename, gl::VERTEX_SHADER, &vs_source) {

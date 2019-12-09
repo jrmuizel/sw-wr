@@ -479,6 +479,7 @@ void load_attrib(T& attrib, VertexAttrib &va, unsigned short *indices, int start
 
 #include "brush_solid.h"
 #include "brush_image.h"
+#include "ps_text_run.h"
 extern "C" {
 
 void UseProgram(GLuint program) {
@@ -658,7 +659,11 @@ void LinkProgram(GLuint program) {
     } else if (p.vs_name == "brush_image") {
         static brush_image_program impl;
         p.impl = &impl;
+    } else if (p.vs_name == "ps_text_run") {
+        static ps_text_run_program impl;
+        p.impl = &impl;
     }
+
     assert(p.impl);
     for (auto i : p.attribs) {
         p.impl->bind_attrib(i.first.c_str(), i.second);
@@ -1654,7 +1659,7 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
                                     printf("triangle %d %d %d %d\n", indices[i], indices[i+1], indices[i+2]);
                                     draw_quad(3);
                                 }
-                        }
+                         }
 
                 } else {
                         assert(0);
