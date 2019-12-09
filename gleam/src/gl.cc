@@ -149,6 +149,7 @@ struct ProgramImpl {
 struct Program {
     std::string vs_name;
     std::string fs_name;
+    std::map<std::string, int> attribs;
     ProgramImpl* impl = nullptr;
 };
 
@@ -630,15 +631,6 @@ void AttachShader(GLuint program, GLuint shader) {
     Shader &s = shaders[shader];
     if (s.type == GL_VERTEX_SHADER) {
         p.vs_name = s.name;
-        if (p.vs_name == "brush_solid") {
-            static brush_solid_program impl;
-            p.impl = &impl;
-        } else if (p.vs_name == "brush_image") {
-            static brush_image_program impl;
-            p.impl = &impl;
-        } else {
-            assert(0);
-        }
     } else if (s.type == GL_FRAGMENT_SHADER) {
         p.fs_name = s.name;
     } else {
@@ -655,13 +647,22 @@ GLuint CreateProgram() {
 void LinkProgram(GLuint program) {
     Program &p = programs[program];
     assert(p.vs_name == p.fs_name);
+    if (p.vs_name == "brush_solid") {
+        static brush_solid_program impl;
+        p.impl = &impl;
+    } else if (p.vs_name == "brush_image") {
+        static brush_image_program impl;
+        p.impl = &impl;
+    }
     assert(p.impl);
+    for (auto i : p.attribs) {
+        p.impl->bind_attrib(i.first.c_str(), i.second);
+    }
 }
 
 void BindAttribLocation(GLuint program, GLuint index, char *name) {
     Program &p = programs[program];
-    assert(p.impl);
-    p.impl->bind_attrib(name, index);
+    p.attribs[name] = index;
 }
 
 GLint GetUniformLocation(GLuint program, char* name) {
