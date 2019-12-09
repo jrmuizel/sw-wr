@@ -549,6 +549,7 @@ void BlendFunc(GLenum srgb, GLenum drgb, GLenum sa, GLenum da) {
             break;
     FOR_EACH_BLEND_KEY(MAP_BLEND_KEY)
     default:
+        printf("blendfunc: %x, %x, separate: %x, %x\n", srgb, drgb, sa, da);
         assert(false);
         break;
     }
