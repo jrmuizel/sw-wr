@@ -2104,17 +2104,17 @@ SI vec2 if_then_else(bvec2 c, vec2 t, vec2 e) {
 
 template <typename T, typename R = typename T::vector_type>
 SI R mix(T x, T y, bvec4 a) {
-        return if_then_else(a, x, y);
+        return if_then_else(a, y, x);
 }
 
 template <typename T, typename R = typename T::vector_type>
 SI R mix(T x, T y, bvec3 a) {
-        return if_then_else(a, x, y);
+        return if_then_else(a, y, x);
 }
 
 template <typename T, typename R = typename T::vector_type>
 SI R mix(T x, T y, bvec2 a) {
-        return if_then_else(a, x, y);
+        return if_then_else(a, y, x);
 }
 
 template <typename T, typename U, typename R = typename T::vector_type>
