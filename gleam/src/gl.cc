@@ -155,9 +155,9 @@ struct Program {
 };
 
 struct ShaderImpl {
-    typedef void (ShaderImpl::*SetUniform1iFunc)(int index, int value);
-    typedef void (ShaderImpl::*SetUniform4fvFunc)(int index, const float *value);
-    typedef void (ShaderImpl::*SetUniformMatrix4fvFunc)(int index, const float *value);
+    typedef void (*SetUniform1iFunc)(ShaderImpl*, int index, int value);
+    typedef void (*SetUniform4fvFunc)(ShaderImpl*, int index, const float *value);
+    typedef void (*SetUniformMatrix4fvFunc)(ShaderImpl*, int index, const float *value);
 
     SetUniform1iFunc set_uniform_1i_func = nullptr;
     SetUniform4fvFunc set_uniform_4fv_func = nullptr;
@@ -169,22 +169,22 @@ struct ShaderCommon : T {
     char impl_data[1024];
 
     void set_uniform_1i(int index, int value) {
-       (this->*ShaderImpl::set_uniform_1i_func)(index, value);
+       (*ShaderImpl::set_uniform_1i_func)(this, index, value);
     }
 
     void set_uniform_4fv(int index, const float *value) {
-       (this->*ShaderImpl::set_uniform_4fv_func)(index, value);
+       (*ShaderImpl::set_uniform_4fv_func)(this, index, value);
     }
 
     void set_uniform_matrix4fv(int index, const float *value) {
-       (this->*ShaderImpl::set_uniform_matrix4fv_func)(index, value);
+       (*ShaderImpl::set_uniform_matrix4fv_func)(this, index, value);
     }
 };
 
 struct VertexShaderImpl : ShaderImpl {
-    typedef void (VertexShaderImpl::*InitBatchFunc)();
-    typedef void (VertexShaderImpl::*LoadAttribsFunc)(const void *locs, VertexAttrib *attribs, unsigned short *indices, int start, int instance, int count);
-    typedef void (VertexShaderImpl::*RunFunc)(char* flats, char* interps, size_t interp_stride);
+    typedef void (*InitBatchFunc)(VertexShaderImpl*);
+    typedef void (*LoadAttribsFunc)(VertexShaderImpl*, const void *locs, VertexAttrib *attribs, unsigned short *indices, int start, int instance, int count);
+    typedef void (*RunFunc)(VertexShaderImpl*, char* flats, char* interps, size_t interp_stride);
 
     InitBatchFunc init_batch_func = nullptr;
     LoadAttribsFunc load_attribs_func = nullptr;
@@ -195,27 +195,27 @@ struct VertexShaderImpl : ShaderImpl {
 
 struct VertexShader : ShaderCommon<VertexShaderImpl> {
     void init_batch() {
-        (this->*init_batch_func)();
+        (*init_batch_func)(this);
     }
 
     void load_attribs(const void *locs, VertexAttrib *attribs, unsigned short *indices, int start, int instance, int count) {
-        (this->*load_attribs_func)(locs, attribs, indices, start, instance, count);
+        (*load_attribs_func)(this, locs, attribs, indices, start, instance, count);
     }
 
     void run(char* flats, char* interps, size_t interp_stride) {
-        (this->*run_func)(flats, interps, interp_stride);
+        (*run_func)(this, flats, interps, interp_stride);
     }
 } vertex_shader;
 
 GLuint current_program = 0;
 
 struct FragmentShaderImpl : ShaderImpl {
-    typedef void (FragmentShaderImpl::*InitBatchFunc)();
-    typedef void (FragmentShaderImpl::*InitPrimitiveFunc)(const void* flats);
-    typedef void (FragmentShaderImpl::*InitSpanFunc)(const void* interps, const void* step);
-    typedef void (FragmentShaderImpl::*RunFunc)(const void* step);
-    typedef void (FragmentShaderImpl::*SkipFunc)(const void* step);
-    typedef bool (FragmentShaderImpl::*UseDiscardFunc)();
+    typedef void (*InitBatchFunc)(FragmentShaderImpl*);
+    typedef void (*InitPrimitiveFunc)(FragmentShaderImpl*, const void* flats);
+    typedef void (*InitSpanFunc)(FragmentShaderImpl*, const void* interps, const void* step);
+    typedef void (*RunFunc)(FragmentShaderImpl*, const void* step);
+    typedef void (*SkipFunc)(FragmentShaderImpl*, const void* step);
+    typedef bool (*UseDiscardFunc)(FragmentShaderImpl*);
 
     InitBatchFunc init_batch_func = nullptr;
     InitPrimitiveFunc init_primitive_func = nullptr;
@@ -235,27 +235,27 @@ struct FragmentShaderImpl : ShaderImpl {
 
 struct FragmentShader : ShaderCommon<FragmentShaderImpl> {
     void init_batch() {
-        (this->*init_batch_func)();
+        (*init_batch_func)(this);
     }
 
     void init_primitive(const void* flats) {
-        (this->*init_primitive_func)(flats);
+        (*init_primitive_func)(this, flats);
     }
 
     ALWAYS_INLINE void init_span(const void* interps, const void* step) {
-        (this->*init_span_func)(interps, step);
+        (*init_span_func)(this, interps, step);
     }
 
     ALWAYS_INLINE void run(const void* step) {
-        (this->*run_func)(step);
+        (*run_func)(this, step);
     }
 
     ALWAYS_INLINE void skip(const void* step) {
-        (this->*skip_func)(step);
+        (*skip_func)(this, step);
     }
 
     ALWAYS_INLINE bool use_discard() {
-        return (this->*use_discard_func)();
+        return (*use_discard_func)(this);
     }
 } fragment_shader;
 

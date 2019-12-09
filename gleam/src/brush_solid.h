@@ -9,77 +9,84 @@ vec4 vClipMaskUv
 vec4 vColor
 */
 struct brush_solid_vert : VertexShaderImpl {
-void set_uniform_1i(int index, int value) {
-if (index == 6) {
-assert(0); // uTransform
+typedef brush_solid_vert Self;
+static void set_uniform_1i(Self *self, int index, int value) {
+ switch (index) {
+ case 6:
+  assert(0); // uTransform
+  break;
+ case 1:
+  self->sRenderTasks_slot = value;
+  break;
+ case 2:
+  self->sGpuCache_slot = value;
+  break;
+ case 3:
+  self->sTransformPalette_slot = value;
+  break;
+ case 4:
+  self->sPrimitiveHeadersF_slot = value;
+  break;
+ case 5:
+  self->sPrimitiveHeadersI_slot = value;
+  break;
+ }
 }
-if (index == 1) {
-sRenderTasks_slot = value;
+static void set_uniform_4fv(Self *self, int index, const float *value) {
+ switch (index) {
+ case 6:
+  assert(0); // uTransform
+  break;
+ case 1:
+  assert(0); // sRenderTasks
+  break;
+ case 2:
+  assert(0); // sGpuCache
+  break;
+ case 3:
+  assert(0); // sTransformPalette
+  break;
+ case 4:
+  assert(0); // sPrimitiveHeadersF
+  break;
+ case 5:
+  assert(0); // sPrimitiveHeadersI
+  break;
+ }
 }
-if (index == 2) {
-sGpuCache_slot = value;
-}
-if (index == 3) {
-sTransformPalette_slot = value;
-}
-if (index == 4) {
-sPrimitiveHeadersF_slot = value;
-}
-if (index == 5) {
-sPrimitiveHeadersI_slot = value;
-}
-}
-void set_uniform_4fv(int index, const float *value) {
-if (index == 6) {
-assert(0); // uTransform
-}
-if (index == 1) {
-assert(0); // sRenderTasks
-}
-if (index == 2) {
-assert(0); // sGpuCache
-}
-if (index == 3) {
-assert(0); // sTransformPalette
-}
-if (index == 4) {
-assert(0); // sPrimitiveHeadersF
-}
-if (index == 5) {
-assert(0); // sPrimitiveHeadersI
-}
-}
-void set_uniform_matrix4fv(int index, const float *value) {
-if (index == 6) {
-uTransform = mat4_scalar::load_from_ptr(value);
-}
-if (index == 1) {
-assert(0); // sRenderTasks
-}
-if (index == 2) {
-assert(0); // sGpuCache
-}
-if (index == 3) {
-assert(0); // sTransformPalette
-}
-if (index == 4) {
-assert(0); // sPrimitiveHeadersF
-}
-if (index == 5) {
-assert(0); // sPrimitiveHeadersI
-}
+static void set_uniform_matrix4fv(Self *self, int index, const float *value) {
+ switch (index) {
+ case 6:
+  self->uTransform = mat4_scalar::load_from_ptr(value);
+  break;
+ case 1:
+  assert(0); // sRenderTasks
+  break;
+ case 2:
+  assert(0); // sGpuCache
+  break;
+ case 3:
+  assert(0); // sTransformPalette
+  break;
+ case 4:
+  assert(0); // sPrimitiveHeadersF
+  break;
+ case 5:
+  assert(0); // sPrimitiveHeadersI
+  break;
+ }
 }
 struct AttribLocations {
  int aPosition;
  int aData;
 };
 static void bind_attrib_location(AttribLocations* locs, const char *name, int index) {
-if (strcmp("aPosition", name) == 0) { locs->aPosition = index; }
-if (strcmp("aData", name) == 0) { locs->aData = index; }
+ if (strcmp("aPosition", name) == 0) { locs->aPosition = index; return; }
+ if (strcmp("aData", name) == 0) { locs->aData = index; return; }
 }
-void load_attribs(const AttribLocations *locs, VertexAttrib *attribs, unsigned short *indices, int start, int instance, int count) {
-  load_attrib(aPosition, attribs[locs->aPosition], indices, start, instance, count);
-  load_attrib(aData, attribs[locs->aData], indices, start, instance, count);
+static void load_attribs(Self *self, const AttribLocations *locs, VertexAttrib *attribs, unsigned short *indices, int start, int instance, int count) {
+ load_attrib(self->aPosition, attribs[locs->aPosition], indices, start, instance, count);
+ load_attrib(self->aData, attribs[locs->aData], indices, start, instance, count);
 }
 struct FlatOutputs {
 vec4_scalar vTransformBounds;
@@ -89,7 +96,7 @@ vec4_scalar vColor;
 struct InterpOutputs {
 vec4_scalar vClipMaskUv;
 };
-ALWAYS_INLINE void store_flat_outputs(void* dest_ptr) {
+ALWAYS_INLINE void store_flat_outputs(char* dest_ptr) {
   auto* dest = reinterpret_cast<FlatOutputs*>(dest_ptr);
   dest->vTransformBounds = vTransformBounds;
   dest->vClipMaskUvBounds = vClipMaskUvBounds;
@@ -112,12 +119,12 @@ sampler2D_impl sPrimitiveHeadersF_impl;
 int sPrimitiveHeadersF_slot;
 isampler2D_impl sPrimitiveHeadersI_impl;
 int sPrimitiveHeadersI_slot;
-void bind_textures() {
-sRenderTasks = lookup_sampler(&sRenderTasks_impl, sRenderTasks_slot);
-sGpuCache = lookup_sampler(&sGpuCache_impl, sGpuCache_slot);
-sTransformPalette = lookup_sampler(&sTransformPalette_impl, sTransformPalette_slot);
-sPrimitiveHeadersF = lookup_sampler(&sPrimitiveHeadersF_impl, sPrimitiveHeadersF_slot);
-sPrimitiveHeadersI = lookup_isampler(&sPrimitiveHeadersI_impl, sPrimitiveHeadersI_slot);
+static void bind_textures(Self *self) {
+self->sRenderTasks = lookup_sampler(&self->sRenderTasks_impl, self->sRenderTasks_slot);
+self->sGpuCache = lookup_sampler(&self->sGpuCache_impl, self->sGpuCache_slot);
+self->sTransformPalette = lookup_sampler(&self->sTransformPalette_impl, self->sTransformPalette_slot);
+self->sPrimitiveHeadersF = lookup_sampler(&self->sPrimitiveHeadersF_impl, self->sPrimitiveHeadersF_slot);
+self->sPrimitiveHeadersI = lookup_isampler(&self->sPrimitiveHeadersI_impl, self->sPrimitiveHeadersI_slot);
 }
 int32_t uMode;
 mat4_scalar uTransform;
@@ -536,19 +543,18 @@ ALWAYS_INLINE void main(void) {
  }
  brush_vs(vi, (ph).specific_prim_address, (ph).local_rect, segment_rect, (ph).user_data, segment_user_data, (transform).m, pic_task, brush_flags, segment_data);
 }
-void run(char* flats, char* interps, size_t interp_stride) {
- main();
- store_flat_outputs(flats);
- store_interp_outputs(interps, interp_stride);
+static void run(Self *self, char* flats, char* interps, size_t interp_stride) {
+ self->main();
+ self->store_flat_outputs(flats);
+ self->store_interp_outputs(interps, interp_stride);
 }
 brush_solid_vert() {
- typedef brush_solid_vert Self;
- set_uniform_1i_func = (SetUniform1iFunc)&Self::set_uniform_1i;
- set_uniform_4fv_func = (SetUniform4fvFunc)&Self::set_uniform_4fv;
- set_uniform_matrix4fv_func = (SetUniformMatrix4fvFunc)&Self::set_uniform_matrix4fv;
- init_batch_func = (InitBatchFunc)&Self::bind_textures;
- load_attribs_func = (LoadAttribsFunc)&Self::load_attribs;
- run_func = (RunFunc)&Self::run;
+ set_uniform_1i_func = (SetUniform1iFunc)&set_uniform_1i;
+ set_uniform_4fv_func = (SetUniform4fvFunc)&set_uniform_4fv;
+ set_uniform_matrix4fv_func = (SetUniformMatrix4fvFunc)&set_uniform_matrix4fv;
+ init_batch_func = (InitBatchFunc)&bind_textures;
+ load_attribs_func = (LoadAttribsFunc)&load_attribs;
+ run_func = (RunFunc)&run;
 }
 };
 
@@ -562,54 +568,57 @@ vec4 vColor
 vec4 oFragColor
 */
 struct brush_solid_frag : FragmentShaderImpl {
-void set_uniform_1i(int index, int value) {
-if (index == 2) {
-sGpuCache_slot = value;
+typedef brush_solid_frag Self;
+static void set_uniform_1i(Self *self, int index, int value) {
+ switch (index) {
+ case 2:
+  self->sGpuCache_slot = value;
+  break;
+ case 7:
+  self->sPrevPassAlpha_slot = value;
+  break;
+ }
 }
-if (index == 7) {
-sPrevPassAlpha_slot = value;
+static void set_uniform_4fv(Self *self, int index, const float *value) {
+ switch (index) {
+ case 2:
+  assert(0); // sGpuCache
+  break;
+ case 7:
+  assert(0); // sPrevPassAlpha
+  break;
+ }
 }
-}
-void set_uniform_4fv(int index, const float *value) {
-if (index == 2) {
-assert(0); // sGpuCache
-}
-if (index == 7) {
-assert(0); // sPrevPassAlpha
-}
-}
-void set_uniform_matrix4fv(int index, const float *value) {
-if (index == 2) {
-assert(0); // sGpuCache
-}
-if (index == 7) {
-assert(0); // sPrevPassAlpha
-}
+static void set_uniform_matrix4fv(Self *self, int index, const float *value) {
+ switch (index) {
+ case 2:
+  assert(0); // sGpuCache
+  break;
+ case 7:
+  assert(0); // sPrevPassAlpha
+  break;
+ }
 }
 typedef brush_solid_vert::FlatOutputs FlatInputs;
 typedef brush_solid_vert::InterpOutputs InterpInputs;
-void read_flat_inputs(const void* src_ptr) {
-  auto* src = reinterpret_cast<const FlatInputs*>(src_ptr);
-  vTransformBounds = src->vTransformBounds;
-  vClipMaskUvBounds = src->vClipMaskUvBounds;
-  vColor = src->vColor;
+static void read_flat_inputs(Self *self, const FlatInputs *src) {
+  self->vTransformBounds = src->vTransformBounds;
+  self->vClipMaskUvBounds = src->vClipMaskUvBounds;
+  self->vColor = src->vColor;
 }
-void read_interp_inputs(const void* init_ptr, const void* step_ptr) {
-  auto* init = reinterpret_cast<const InterpInputs*>(init_ptr);
-  auto* step = reinterpret_cast<const InterpInputs*>(step_ptr);
-  vClipMaskUv = init_interp(init->vClipMaskUv, step->vClipMaskUv);
+static void read_interp_inputs(Self *self, const InterpInputs *init, const InterpInputs *step) {
+  self->vClipMaskUv = init_interp(init->vClipMaskUv, step->vClipMaskUv);
 }
-ALWAYS_INLINE void step_interp_inputs(const void* step_ptr) {
-  auto* step = reinterpret_cast<const InterpInputs*>(step_ptr);
+ALWAYS_INLINE void step_interp_inputs(const InterpInputs* step) {
   vClipMaskUv += step->vClipMaskUv;
 }
 sampler2D_impl sGpuCache_impl;
 int sGpuCache_slot;
 sampler2DArray_impl sPrevPassAlpha_impl;
 int sPrevPassAlpha_slot;
-void bind_textures() {
-sGpuCache = lookup_sampler(&sGpuCache_impl, sGpuCache_slot);
-sPrevPassAlpha = lookup_sampler_array(&sPrevPassAlpha_impl, sPrevPassAlpha_slot);
+static void bind_textures(Self *self) {
+self->sGpuCache = lookup_sampler(&self->sGpuCache_impl, self->sGpuCache_slot);
+self->sPrevPassAlpha = lookup_sampler_array(&self->sPrevPassAlpha_impl, self->sPrevPassAlpha_slot);
 }
 #define oFragColor gl_FragColor
 // vec4 oFragColor;
@@ -686,25 +695,24 @@ ALWAYS_INLINE void main(void) {
  Fragment frag = brush_fs();
  write_output((frag).color);
 }
-bool use_discard() { return false; }
-void run(const void* step_ptr) {
- main();
- step_interp_inputs(step_ptr);
+static bool use_discard(Self*) { return false; }
+static void run(Self *self, const InterpInputs* step) {
+ self->main();
+ self->step_interp_inputs(step);
 }
-void skip(const void* step_ptr) {
- step_interp_inputs(step_ptr);
+static void skip(Self *self, const InterpInputs* step) {
+ self->step_interp_inputs(step);
 }
 brush_solid_frag() {
- typedef brush_solid_frag Self;
- set_uniform_1i_func = (SetUniform1iFunc)&Self::set_uniform_1i;
- set_uniform_4fv_func = (SetUniform4fvFunc)&Self::set_uniform_4fv;
- set_uniform_matrix4fv_func = (SetUniformMatrix4fvFunc)&Self::set_uniform_matrix4fv;
- init_batch_func = (InitBatchFunc)&Self::bind_textures;
- init_primitive_func = (InitPrimitiveFunc)&Self::read_flat_inputs;
- init_span_func = (InitSpanFunc)&Self::read_interp_inputs;
- run_func = (RunFunc)&Self::run;
- skip_func = (SkipFunc)&Self::skip;
- use_discard_func = (UseDiscardFunc)&Self::use_discard;
+ set_uniform_1i_func = (SetUniform1iFunc)&set_uniform_1i;
+ set_uniform_4fv_func = (SetUniform4fvFunc)&set_uniform_4fv;
+ set_uniform_matrix4fv_func = (SetUniformMatrix4fvFunc)&set_uniform_matrix4fv;
+ init_batch_func = (InitBatchFunc)&bind_textures;
+ init_primitive_func = (InitPrimitiveFunc)&read_flat_inputs;
+ init_span_func = (InitSpanFunc)&read_interp_inputs;
+ run_func = (RunFunc)&run;
+ skip_func = (SkipFunc)&skip;
+ use_discard_func = (UseDiscardFunc)&use_discard;
 }
 };
 struct brush_solid_program : ProgramImpl {
