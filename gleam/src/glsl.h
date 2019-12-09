@@ -2022,7 +2022,7 @@ vec4 texture(sampler2DArray sampler, vec3 P, Float layer) {
 }
 vec4 texture(sampler2DArray sampler, vec3 P) {
         // just do nearest for now
-        ivec3 coord(round(P.x, sampler->width), round(P.y, sampler->height), round(P.z, sampler->depth));
+        ivec3 coord(round(P.x, sampler->width), round(P.y, sampler->height), round(P.z, 1.));
         return texelFetch(sampler, coord, 0);
 }
 
