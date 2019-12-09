@@ -662,6 +662,8 @@ void LinkProgram(GLuint program) {
     } else if (p.vs_name == "ps_text_run") {
         static ps_text_run_program impl;
         p.impl = &impl;
+    } else {
+        printf("unknown program %s\n", p.vs_name.c_str());
     }
 
     assert(p.impl);
@@ -1337,9 +1339,9 @@ void draw_quad(int nump) {
         Framebuffer& fb = get_draw_framebuffer();
         Texture& colortex = textures[fb.color_attachment];
         assert(colortex.internal_format == GL_RGBA8);
-        static Texture dummy = { 0 };
-        Texture& depthtex = fb.depth_attachment ? textures[fb.depth_attachment] : dummy;
-        if (fb.depth_attachment) {
+        static Texture nodepthtex;
+        Texture& depthtex = depthtest && fb.depth_attachment ? textures[fb.depth_attachment] : nodepthtex;
+        if (&depthtex != &nodepthtex) {
             assert(depthtex.internal_format == GL_DEPTH_COMPONENT16);
             assert(colortex.width == depthtex.width && colortex.height == depthtex.height);
         }
@@ -1488,7 +1490,7 @@ void draw_quad(int nump) {
                 uint32_t* buf = fbuf + startx;
                 uint16_t* depth = fdepth + startx;
                 if (!fragment_shader.use_discard()) {
-                    if (depthtest) {
+                    if (fdepth) {
                         for (; span >= 8; span -= 8, buf += 8, depth += 8) {
                             __m128i zmask;
                             switch (check_depth<2>(z, depth, zmask)) {
@@ -1521,7 +1523,7 @@ void draw_quad(int nump) {
                         }
                     }
                 } else {
-                    if (depthtest) {
+                    if (fdepth) {
                         for (; span >= 4; span -= 4, buf += 4, depth += 4) {
                             commit_output<true>(buf, z, depth, stepo);
                         }
