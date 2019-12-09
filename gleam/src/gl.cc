@@ -242,19 +242,19 @@ struct FragmentShader : ShaderCommon<FragmentShaderImpl> {
         (this->*init_primitive_func)(flats);
     }
 
-    void init_span(const void* interps, const void* step) {
+    ALWAYS_INLINE void init_span(const void* interps, const void* step) {
         (this->*init_span_func)(interps, step);
     }
 
-    void run(const void* step) {
+    ALWAYS_INLINE void run(const void* step) {
         (this->*run_func)(step);
     }
 
-    void skip(const void* step) {
+    ALWAYS_INLINE void skip(const void* step) {
         (this->*skip_func)(step);
     }
 
-    bool use_discard() {
+    ALWAYS_INLINE bool use_discard() {
         return (this->*use_discard_func)();
     }
 } fragment_shader;
