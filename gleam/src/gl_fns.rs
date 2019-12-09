@@ -2497,9 +2497,11 @@ impl Gl for GlFns {
     }
 
     fn delete_program(&self, program: GLuint) {
-        panic!();
         unsafe {
-            self.ffi_gl_.DeleteProgram(program);
+            if SW {
+            } else {
+                self.ffi_gl_.DeleteProgram(program);
+            }
         }
     }
 
