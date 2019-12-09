@@ -1126,7 +1126,7 @@ void ReadPixels(GLint x, GLint y, GLsizei width, GLsizei height, GLenum format, 
     char *dest = (char *)data;
     char *src = t.buf + (t.width * t.height * fb->layer + t.width * y + + x) * bpp;
     for (; height > 0; height--) {
-        memcpy(dest, src, t.width * bpp);
+        memcpy(dest, src, width * bpp);
         dest += width * bpp;
         src += t.width * bpp;
     }
