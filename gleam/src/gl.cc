@@ -1046,7 +1046,7 @@ Framebuffer &get_draw_framebuffer() {
     }
     // allocate a default framebuffer
     Framebuffer& fb = framebuffers[0];
-    const size_t width = 2048;
+    const size_t width = 3072;
     const size_t height = 2048;
     GenTextures(1, &fb.color_attachment);
     fb.layer = 0;
@@ -1116,6 +1116,7 @@ void ReadPixels(GLint x, GLint y, GLsizei width, GLsizei height, GLenum format, 
     if (!fb) return;
     assert(format == GL_RED || GL_RGBA || GL_RGBA_INTEGER);
     Texture &t = textures[fb->color_attachment];
+    printf("read pixels %d, %d, %d, %d from fb %d with format %x\n", x, y, width, height, current_framebuffer[GL_READ_FRAMEBUFFER], t.internal_format);
     assert(x + width <= t.width);
     assert(y + height <= t.height);
     if (internal_format_for_data(format, type) != t.internal_format) {
@@ -1336,9 +1337,12 @@ void draw_quad(int nump) {
         Framebuffer& fb = get_draw_framebuffer();
         Texture& colortex = textures[fb.color_attachment];
         assert(colortex.internal_format == GL_RGBA8);
-        Texture& depthtex = textures[fb.depth_attachment];
-        assert(depthtex.internal_format == GL_DEPTH_COMPONENT16);
-        assert(colortex.width == depthtex.width && colortex.height == depthtex.height);
+        static Texture dummy = { 0 };
+        Texture& depthtex = fb.depth_attachment ? textures[fb.depth_attachment] : dummy;
+        if (fb.depth_attachment) {
+            assert(depthtex.internal_format == GL_DEPTH_COMPONENT16);
+            assert(colortex.width == depthtex.width && colortex.height == depthtex.height);
+        }
         float fx0 = 0;
         float fy0 = 0;
         float fx1 = colortex.width;

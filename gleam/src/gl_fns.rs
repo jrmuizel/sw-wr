@@ -544,42 +544,53 @@ impl Gl for GlFns {
     }
 
     fn delete_vertex_arrays(&self, vertex_arrays: &[GLuint]) {
-        panic!();
         unsafe {
+            if SW {
+            } else {
             self.ffi_gl_
                 .DeleteVertexArrays(vertex_arrays.len() as GLsizei, vertex_arrays.as_ptr());
+            }
         }
     }
 
     fn delete_buffers(&self, buffers: &[GLuint]) {
-        panic!();
         unsafe {
+            if SW {
+            } else {
             self.ffi_gl_
                 .DeleteBuffers(buffers.len() as GLsizei, buffers.as_ptr());
+            }
         }
     }
 
     fn delete_renderbuffers(&self, renderbuffers: &[GLuint]) {
         panic!();
         unsafe {
+            if SW {
+            } else {
             self.ffi_gl_
                 .DeleteRenderbuffers(renderbuffers.len() as GLsizei, renderbuffers.as_ptr());
+            }
         }
     }
 
     fn delete_framebuffers(&self, framebuffers: &[GLuint]) {
-        panic!();
         unsafe {
+            if SW {
+            } else {
             self.ffi_gl_
                 .DeleteFramebuffers(framebuffers.len() as GLsizei, framebuffers.as_ptr());
+            }
         }
     }
 
     fn delete_textures(&self, textures: &[GLuint]) {
-        panic!();
         unsafe {
+            if SW {
+            } else {
             self.ffi_gl_
                 .DeleteTextures(textures.len() as GLsizei, textures.as_ptr());
+            }
         }
     }
 
@@ -2578,9 +2589,11 @@ impl Gl for GlFns {
     }
 
     fn flush(&self) {
-        panic!();
         unsafe {
-            self.ffi_gl_.Flush();
+            if SW {
+            } else {
+                self.ffi_gl_.Flush();
+            }
         }
     }
 
