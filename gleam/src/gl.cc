@@ -218,6 +218,10 @@ struct FragmentShaderImpl : ShaderImpl {
     vec4 gl_FragCoord;
     Bool isPixelDiscarded;
     vec4 gl_FragColor;
+
+    ALWAYS_INLINE void step_fragcoord() {
+        gl_FragCoord.x += 4;
+    }
 };
 
 struct FragmentShader : ShaderCommon<FragmentShaderImpl> {
