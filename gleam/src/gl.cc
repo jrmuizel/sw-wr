@@ -142,6 +142,7 @@ struct ProgramImpl {
     virtual ~ProgramImpl() {}
     virtual const char *get_name() const = 0;
     virtual int get_uniform(const char *name) const = 0;
+    virtual void *get_samplers() = 0;
     virtual void bind_attrib(const char *name, int index) = 0;
     virtual const void* get_attrib_locations() const = 0;
     virtual void init_shaders(void *vertex_shader, void *fragment_shader) = 0;
@@ -155,7 +156,7 @@ struct Program {
 };
 
 struct ShaderImpl {
-    typedef void (*SetUniform1iFunc)(ShaderImpl*, int index, int value);
+    typedef void (*SetUniform1iFunc)(ShaderImpl*, void *samplers, int index, int value);
     typedef void (*SetUniform4fvFunc)(ShaderImpl*, int index, const float *value);
     typedef void (*SetUniformMatrix4fvFunc)(ShaderImpl*, int index, const float *value);
 
@@ -168,8 +169,8 @@ template<typename T>
 struct ShaderCommon : T {
     char impl_data[1024];
 
-    void set_uniform_1i(int index, int value) {
-       (*ShaderImpl::set_uniform_1i_func)(this, index, value);
+    void set_uniform_1i(void *samplers, int index, int value) {
+       (*ShaderImpl::set_uniform_1i_func)(this, samplers, index, value);
     }
 
     void set_uniform_4fv(int index, const float *value) {
@@ -182,7 +183,7 @@ struct ShaderCommon : T {
 };
 
 struct VertexShaderImpl : ShaderImpl {
-    typedef void (*InitBatchFunc)(VertexShaderImpl*);
+    typedef void (*InitBatchFunc)(VertexShaderImpl*, void *samplers);
     typedef void (*LoadAttribsFunc)(VertexShaderImpl*, const void *locs, VertexAttrib *attribs, unsigned short *indices, int start, int instance, int count);
     typedef void (*RunFunc)(VertexShaderImpl*, char* flats, char* interps, size_t interp_stride);
 
@@ -194,8 +195,8 @@ struct VertexShaderImpl : ShaderImpl {
 };
 
 struct VertexShader : ShaderCommon<VertexShaderImpl> {
-    void init_batch() {
-        (*init_batch_func)(this);
+    void init_batch(void *samplers) {
+        (*init_batch_func)(this, samplers);
     }
 
     ALWAYS_INLINE void load_attribs(const void *locs, VertexAttrib *attribs, unsigned short *indices, int start, int instance, int count) {
@@ -210,7 +211,7 @@ struct VertexShader : ShaderCommon<VertexShaderImpl> {
 GLuint current_program = 0;
 
 struct FragmentShaderImpl : ShaderImpl {
-    typedef void (*InitBatchFunc)(FragmentShaderImpl*);
+    typedef void (*InitBatchFunc)(FragmentShaderImpl*, void *samplers);
     typedef void (*InitPrimitiveFunc)(FragmentShaderImpl*, const void* flats);
     typedef void (*InitSpanFunc)(FragmentShaderImpl*, const void* interps, const void* step);
     typedef void (*RunFunc)(FragmentShaderImpl*, const void* step);
@@ -234,8 +235,8 @@ struct FragmentShaderImpl : ShaderImpl {
 };
 
 struct FragmentShader : ShaderCommon<FragmentShaderImpl> {
-    void init_batch() {
-        (*init_batch_func)(this);
+    void init_batch(void *samplers) {
+        (*init_batch_func)(this, samplers);
     }
 
     void init_primitive(const void* flats) {
@@ -938,8 +939,11 @@ void BufferData(GLenum target,
 
 void Uniform1i(GLint location, GLint V0) {
         printf("tex: %d\n", texture_count);
-        vertex_shader.set_uniform_1i(location, V0);
-        fragment_shader.set_uniform_1i(location, V0);
+        Program &p = programs[current_program];
+        assert(p.impl);
+        void *samplers = p.impl->get_samplers();
+        vertex_shader.set_uniform_1i(samplers, location, V0);
+        fragment_shader.set_uniform_1i(samplers, location, V0);
 }
 void Uniform4fv(GLint location, GLsizei count, const GLfloat *v) {
         vertex_shader.set_uniform_4fv(location, v);
@@ -1609,10 +1613,11 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
         assert(type == GL_UNSIGNED_SHORT);
         assert(count == 6);
         assert(indices == 0);
-        vertex_shader.init_batch();
-        fragment_shader.init_batch();
         Program &p = programs[current_program];
         assert(p.impl);
+        void *samplers = p.impl->get_samplers();
+        vertex_shader.init_batch(samplers);
+        fragment_shader.init_batch(samplers);
         const void *locs = p.impl->get_attrib_locations();
         for (int instance = 0; instance < instancecount; instance++) {
         if (indices == 0) {

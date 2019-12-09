@@ -8,27 +8,42 @@ vec4 vClipMaskUvBounds
 vec4 vClipMaskUv
 vec4 vColor
 */
+struct brush_solid_samplers {
+ sampler2D_impl sGpuCache_impl;
+ int sGpuCache_slot;
+ sampler2DArray_impl sPrevPassAlpha_impl;
+ int sPrevPassAlpha_slot;
+ sampler2D_impl sPrimitiveHeadersF_impl;
+ int sPrimitiveHeadersF_slot;
+ isampler2D_impl sPrimitiveHeadersI_impl;
+ int sPrimitiveHeadersI_slot;
+ sampler2D_impl sRenderTasks_impl;
+ int sRenderTasks_slot;
+ sampler2D_impl sTransformPalette_impl;
+ int sTransformPalette_slot;
+};
 struct brush_solid_vert : VertexShaderImpl {
 typedef brush_solid_vert Self;
-static void set_uniform_1i(Self *self, int index, int value) {
+typedef brush_solid_samplers Samplers;
+static void set_uniform_1i(Self *self, Samplers *samplers, int index, int value) {
  switch (index) {
  case 6:
   assert(0); // uTransform
   break;
  case 1:
-  self->sRenderTasks_slot = value;
+  samplers->sRenderTasks_slot = value;
   break;
  case 2:
-  self->sGpuCache_slot = value;
+  samplers->sGpuCache_slot = value;
   break;
  case 3:
-  self->sTransformPalette_slot = value;
+  samplers->sTransformPalette_slot = value;
   break;
  case 4:
-  self->sPrimitiveHeadersF_slot = value;
+  samplers->sPrimitiveHeadersF_slot = value;
   break;
  case 5:
-  self->sPrimitiveHeadersI_slot = value;
+  samplers->sPrimitiveHeadersI_slot = value;
   break;
  }
 }
@@ -109,22 +124,12 @@ ALWAYS_INLINE void store_interp_outputs(char* dest_ptr, size_t stride) {
     dest_ptr += stride;
   }
 }
-sampler2D_impl sRenderTasks_impl;
-int sRenderTasks_slot;
-sampler2D_impl sGpuCache_impl;
-int sGpuCache_slot;
-sampler2D_impl sTransformPalette_impl;
-int sTransformPalette_slot;
-sampler2D_impl sPrimitiveHeadersF_impl;
-int sPrimitiveHeadersF_slot;
-isampler2D_impl sPrimitiveHeadersI_impl;
-int sPrimitiveHeadersI_slot;
-static void bind_textures(Self *self) {
-self->sRenderTasks = lookup_sampler(&self->sRenderTasks_impl, self->sRenderTasks_slot);
-self->sGpuCache = lookup_sampler(&self->sGpuCache_impl, self->sGpuCache_slot);
-self->sTransformPalette = lookup_sampler(&self->sTransformPalette_impl, self->sTransformPalette_slot);
-self->sPrimitiveHeadersF = lookup_sampler(&self->sPrimitiveHeadersF_impl, self->sPrimitiveHeadersF_slot);
-self->sPrimitiveHeadersI = lookup_isampler(&self->sPrimitiveHeadersI_impl, self->sPrimitiveHeadersI_slot);
+static void bind_textures(Self *self, Samplers *samplers) {
+self->sRenderTasks = lookup_sampler(&samplers->sRenderTasks_impl, samplers->sRenderTasks_slot);
+self->sGpuCache = lookup_sampler(&samplers->sGpuCache_impl, samplers->sGpuCache_slot);
+self->sTransformPalette = lookup_sampler(&samplers->sTransformPalette_impl, samplers->sTransformPalette_slot);
+self->sPrimitiveHeadersF = lookup_sampler(&samplers->sPrimitiveHeadersF_impl, samplers->sPrimitiveHeadersF_slot);
+self->sPrimitiveHeadersI = lookup_isampler(&samplers->sPrimitiveHeadersI_impl, samplers->sPrimitiveHeadersI_slot);
 }
 int32_t uMode;
 mat4_scalar uTransform;
@@ -548,7 +553,7 @@ static void run(Self *self, char* flats, char* interps, size_t interp_stride) {
  self->store_flat_outputs(flats);
  self->store_interp_outputs(interps, interp_stride);
 }
-brush_solid_vert() {
+void init_shader() {
  set_uniform_1i_func = (SetUniform1iFunc)&set_uniform_1i;
  set_uniform_4fv_func = (SetUniform4fvFunc)&set_uniform_4fv;
  set_uniform_matrix4fv_func = (SetUniformMatrix4fvFunc)&set_uniform_matrix4fv;
@@ -569,13 +574,14 @@ vec4 oFragColor
 */
 struct brush_solid_frag : FragmentShaderImpl {
 typedef brush_solid_frag Self;
-static void set_uniform_1i(Self *self, int index, int value) {
+typedef brush_solid_samplers Samplers;
+static void set_uniform_1i(Self *self, Samplers *samplers, int index, int value) {
  switch (index) {
  case 2:
-  self->sGpuCache_slot = value;
+  samplers->sGpuCache_slot = value;
   break;
  case 7:
-  self->sPrevPassAlpha_slot = value;
+  samplers->sPrevPassAlpha_slot = value;
   break;
  }
 }
@@ -612,13 +618,9 @@ static void read_interp_inputs(Self *self, const InterpInputs *init, const Inter
 ALWAYS_INLINE void step_interp_inputs(const InterpInputs* step) {
   vClipMaskUv += step->vClipMaskUv;
 }
-sampler2D_impl sGpuCache_impl;
-int sGpuCache_slot;
-sampler2DArray_impl sPrevPassAlpha_impl;
-int sPrevPassAlpha_slot;
-static void bind_textures(Self *self) {
-self->sGpuCache = lookup_sampler(&self->sGpuCache_impl, self->sGpuCache_slot);
-self->sPrevPassAlpha = lookup_sampler_array(&self->sPrevPassAlpha_impl, self->sPrevPassAlpha_slot);
+static void bind_textures(Self *self, Samplers *samplers) {
+self->sGpuCache = lookup_sampler(&samplers->sGpuCache_impl, samplers->sGpuCache_slot);
+self->sPrevPassAlpha = lookup_sampler_array(&samplers->sPrevPassAlpha_impl, samplers->sPrevPassAlpha_slot);
 }
 #define oFragColor gl_FragColor
 // vec4 oFragColor;
@@ -703,7 +705,7 @@ static void run(Self *self, const InterpInputs* step) {
 static void skip(Self *self, const InterpInputs* step) {
  self->step_interp_inputs(step);
 }
-brush_solid_frag() {
+void init_shader() {
  set_uniform_1i_func = (SetUniform1iFunc)&set_uniform_1i;
  set_uniform_4fv_func = (SetUniform4fvFunc)&set_uniform_4fv;
  set_uniform_matrix4fv_func = (SetUniformMatrix4fvFunc)&set_uniform_matrix4fv;
@@ -727,14 +729,16 @@ int get_uniform(const char *name) const override {
  if (strcmp("uTransform", name) == 0) { return 6; }
  return -1;
 }
+brush_solid_samplers samplers;
+virtual void *get_samplers() override { return &samplers; }
 brush_solid_vert::AttribLocations attrib_locations;
 void bind_attrib(const char *name, int index) override {
  brush_solid_vert::bind_attrib_location(&attrib_locations, name, index);
 }
 const void* get_attrib_locations() const override { return &attrib_locations; }
 void init_shaders(void *vertex_shader, void *fragment_shader) override {
- new (vertex_shader) brush_solid_vert;
- new (fragment_shader) brush_solid_frag;
+ reinterpret_cast<brush_solid_vert*>(vertex_shader)->init_shader();
+ reinterpret_cast<brush_solid_frag*>(fragment_shader)->init_shader();
 }
 };
 
