@@ -161,9 +161,9 @@ struct buf buf_cat_str_argb(struct buf b, void *abstract_src, int len)
 		/* we probably need to unpremultiply here */
 		unsigned char alpha = (*src >> 24) & 0xff;
 		if (alpha) {
-		unsigned char red   = 255*((*src >> 16) & 0xff)/alpha;
+		unsigned char blue   = 255*((*src >> 16) & 0xff)/alpha;
 		unsigned char green = 255*((*src >> 8) & 0xff)/alpha;
-		unsigned char blue  = 255*((*src >> 0) & 0xff)/alpha;
+		unsigned char red  = 255*((*src >> 0) & 0xff)/alpha;
 		*dest++ = red;
 		*dest++ = green;
 		*dest++ = blue;
@@ -349,6 +349,7 @@ struct buf make_png(void *d, int width, int height, int stride, data_cat_fn buf_
 	idat = buf_cat_str(idat, zlib_prefix, sizeof(zlib_prefix));
 
 	struct adler chksum = adler32_init();
+	d = (unsigned char*)d + (height - 1) * stride;
 	for (i=0; i<height; i++) {
 		struct buf row_data = {};
 		if (i == height - 1)
@@ -364,7 +365,7 @@ struct buf make_png(void *d, int width, int height, int stride, data_cat_fn buf_
 		chksum = adler32_buf(chksum, row_data);
 		idat = buf_cat_str_data(idat, d, width*4);
 		free(row_data.data);
-		d = (unsigned char*)d + stride;
+		d = (unsigned char*)d - stride;
 	}
 	// be32 leaks
 	idat = buf_cat(idat, be32(adler32_fin(chksum)));

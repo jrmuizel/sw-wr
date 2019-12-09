@@ -821,9 +821,6 @@ void TexSubImage3D(
                 }
                 dest += t.width * (t.height - 1) * bpp;
         }
-        if (t.internal_format == GL_RGBA8) {
-            write_png("texupload.png", t.buf, t.width, t.height);
-        }
 
 }
 
