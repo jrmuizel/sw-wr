@@ -69,19 +69,9 @@ if (index == 5) {
 assert(0); // sPrimitiveHeadersI
 }
 }
-int get_uniform_location(const char *name) {
-if (strcmp("sGpuCache", name) == 0) { return 2; }
-if (strcmp("sPrevPassAlpha", name) == 0) { return 7; }
-if (strcmp("sPrimitiveHeadersF", name) == 0) { return 4; }
-if (strcmp("sPrimitiveHeadersI", name) == 0) { return 5; }
-if (strcmp("sRenderTasks", name) == 0) { return 1; }
-if (strcmp("sTransformPalette", name) == 0) { return 3; }
-if (strcmp("uTransform", name) == 0) { return 6; }
-return -1;
-}
 static inline int aPosition_location_index;
 static inline int aData_location_index;
-void bind_attrib_location(const char *name, int index) {
+static void bind_attrib_location(const char *name, int index) {
 if (strcmp("aPosition", name) == 0) { aPosition_location_index = index; }
 if (strcmp("aData", name) == 0) { aData_location_index = index; }
 }
@@ -554,13 +544,12 @@ brush_solid_vert() {
  set_uniform_1i_func = (SetUniform1iFunc)&Self::set_uniform_1i;
  set_uniform_4fv_func = (SetUniform4fvFunc)&Self::set_uniform_4fv;
  set_uniform_matrix4fv_func = (SetUniformMatrix4fvFunc)&Self::set_uniform_matrix4fv;
- get_uniform_func = (GetUniformFunc)&Self::get_uniform_location;
- bind_attrib_func = (BindAttribFunc)&Self::bind_attrib_location;
  init_batch_func = (InitBatchFunc)&Self::bind_textures;
  load_attribs_func = (LoadAttribsFunc)&Self::load_attribs;
  run_func = (RunFunc)&Self::run;
 }
 };
+
 /* inputs
 vec4 vTransformBounds
 vec4 vClipMaskUvBounds
@@ -716,3 +705,24 @@ brush_solid_frag() {
  use_discard_func = (UseDiscardFunc)&Self::use_discard;
 }
 };
+struct brush_solid_program : ProgramImpl {
+const char *get_name() const override { return "brush_solid"; }
+int get_uniform(const char *name) const override {
+ if (strcmp("sGpuCache", name) == 0) { return 2; }
+ if (strcmp("sPrevPassAlpha", name) == 0) { return 7; }
+ if (strcmp("sPrimitiveHeadersF", name) == 0) { return 4; }
+ if (strcmp("sPrimitiveHeadersI", name) == 0) { return 5; }
+ if (strcmp("sRenderTasks", name) == 0) { return 1; }
+ if (strcmp("sTransformPalette", name) == 0) { return 3; }
+ if (strcmp("uTransform", name) == 0) { return 6; }
+ return -1;
+}
+void bind_attrib(const char *name, int index) override {
+ brush_solid_vert::bind_attrib_location(name, index);
+}
+void init_shaders(void *vertex_shader, void *fragment_shader) override {
+ new (vertex_shader) brush_solid_vert;
+ new (fragment_shader) brush_solid_frag;
+}
+};
+

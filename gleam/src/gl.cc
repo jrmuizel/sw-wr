@@ -115,18 +115,6 @@ struct Renderbuffer {
         Renderbuffer() : texture(0) {}
 };
 
-enum ProgramKind {
-    BrushSolid,
-    BrushImage,
-    None,
-};
-
-struct Program {
-    std::string vs_name;
-    std::string fs_name;
-    ProgramKind kind = ProgramKind::None;
-};
-
 struct Texture {
     GLenum target;
     int levels;
@@ -150,13 +138,25 @@ struct Shader {
     std::string name;
 };
 
+struct ProgramImpl {
+    virtual ~ProgramImpl() {}
+    virtual const char *get_name() const = 0;
+    virtual int get_uniform(const char *name) const = 0;
+    virtual void bind_attrib(const char *name, int index) = 0;
+    virtual void init_shaders(void *vertex_shader, void *fragment_shader) = 0;
+};
+
+struct Program {
+    std::string vs_name;
+    std::string fs_name;
+    ProgramImpl* impl = nullptr;
+};
+
 struct ShaderImpl {
-    typedef int (ShaderImpl::*GetUniformFunc)(const char *name);
     typedef void (ShaderImpl::*SetUniform1iFunc)(int index, int value);
     typedef void (ShaderImpl::*SetUniform4fvFunc)(int index, const float *value);
     typedef void (ShaderImpl::*SetUniformMatrix4fvFunc)(int index, const float *value);
 
-    GetUniformFunc get_uniform_func = nullptr;
     SetUniform1iFunc set_uniform_1i_func = nullptr;
     SetUniform4fvFunc set_uniform_4fv_func = nullptr;
     SetUniformMatrix4fvFunc set_uniform_matrix4fv_func = nullptr;
@@ -165,10 +165,6 @@ struct ShaderImpl {
 template<typename T>
 struct ShaderCommon : T {
     char impl_data[1024];
-
-    int get_uniform(const char *name) {
-        return (this->*ShaderImpl::get_uniform_func)(name);
-    }
 
     void set_uniform_1i(int index, int value) {
        (this->*ShaderImpl::set_uniform_1i_func)(index, value);
@@ -184,12 +180,10 @@ struct ShaderCommon : T {
 };
 
 struct VertexShaderImpl : ShaderImpl {
-    typedef void (VertexShaderImpl::*BindAttribFunc)(const char *name, int index);
     typedef void (VertexShaderImpl::*InitBatchFunc)();
     typedef void (VertexShaderImpl::*LoadAttribsFunc)(VertexAttrib *attribs, unsigned short *indices, int start, int instance, int count);
     typedef void (VertexShaderImpl::*RunFunc)(char* flats, char* interps, size_t interp_stride);
 
-    BindAttribFunc bind_attrib_func = nullptr;
     InitBatchFunc init_batch_func = nullptr;
     LoadAttribsFunc load_attribs_func = nullptr;
     RunFunc run_func = nullptr;
@@ -198,10 +192,6 @@ struct VertexShaderImpl : ShaderImpl {
 };
 
 struct VertexShader : ShaderCommon<VertexShaderImpl> {
-    void bind_attrib(const char *name, int index) {
-        (this->*bind_attrib_func)(name, index);
-    }
-
     void init_batch() {
         (this->*init_batch_func)();
     }
@@ -490,18 +480,8 @@ void UseProgram(GLuint program) {
     if (!program)
         return;
     Program &p = programs[program];
-    switch (p.kind) {
-        case ProgramKind::BrushSolid:
-            new (&vertex_shader) brush_solid_vert;
-            new (&fragment_shader) brush_solid_frag;
-            break;
-        case ProgramKind::BrushImage:
-            new (&vertex_shader) brush_image_vert;
-            new (&fragment_shader) brush_image_frag;
-            break;
-        default:
-            assert(0);
-    }
+    assert(p.impl);
+    p.impl->init_shaders(&vertex_shader, &fragment_shader);
 }
 
 void SetViewport(GLint x, GLint y, GLsizei width, GLsizei height) {
@@ -650,6 +630,15 @@ void AttachShader(GLuint program, GLuint shader) {
     Shader &s = shaders[shader];
     if (s.type == GL_VERTEX_SHADER) {
         p.vs_name = s.name;
+        if (p.vs_name == "brush_solid") {
+            static brush_solid_program impl;
+            p.impl = &impl;
+        } else if (p.vs_name == "brush_image") {
+            static brush_image_program impl;
+            p.impl = &impl;
+        } else {
+            assert(0);
+        }
     } else if (s.type == GL_FRAGMENT_SHADER) {
         p.fs_name = s.name;
     } else {
@@ -666,30 +655,21 @@ GLuint CreateProgram() {
 void LinkProgram(GLuint program) {
     Program &p = programs[program];
     assert(p.vs_name == p.fs_name);
-    if (p.vs_name == "brush_solid") {
-        p.kind = ProgramKind::BrushSolid;
-    } else if (p.vs_name == "brush_image") {
-        p.kind = ProgramKind::BrushImage;
-    } else {
-        assert(0);
-    }
+    assert(p.impl);
 }
 
 void BindAttribLocation(GLuint program, GLuint index, char *name) {
-    //XXX: HACK
-    LinkProgram(program);
-    UseProgram(program);
-    vertex_shader.bind_attrib(name, index);
+    Program &p = programs[program];
+    assert(p.impl);
+    p.impl->bind_attrib(name, index);
 }
 
 GLint GetUniformLocation(GLuint program, char* name) {
-        Program &p = programs[program];
-        //XXX: HACK
-        LinkProgram(program);
-        UseProgram(program);
-        GLint loc = vertex_shader.get_uniform(name);
-        printf("location: %d\n", loc);
-        return loc;
+    Program &p = programs[program];
+    assert(p.impl);
+    GLint loc = p.impl->get_uniform(name);
+    printf("location: %d\n", loc);
+    return loc;
 }
 
 void BindVertexArray(GLuint vertex_array) {
