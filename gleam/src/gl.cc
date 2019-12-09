@@ -1117,7 +1117,7 @@ void ReadPixels(GLint x, GLint y, GLsizei width, GLsizei height, GLenum format, 
     assert(format == GL_RED || GL_RGBA || GL_RGBA_INTEGER);
     Texture &t = textures[fb->color_attachment];
     assert(x + width <= t.width);
-    assert(y + width <= t.height);
+    assert(y + height <= t.height);
     if (internal_format_for_data(format, type) != t.internal_format) {
         printf("mismatched format for read pixels: %x vs %x\n", t.internal_format, internal_format_for_data(format, type));
         assert(false);
