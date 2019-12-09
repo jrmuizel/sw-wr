@@ -97,13 +97,13 @@ vec4_scalar vColor;
 struct InterpOutputs {
 vec4_scalar vClipMaskUv;
 };
-void store_flat_outputs(void* dest_ptr) {
+ALWAYS_INLINE void store_flat_outputs(void* dest_ptr) {
   auto* dest = reinterpret_cast<FlatOutputs*>(dest_ptr);
   dest->vTransformBounds = vTransformBounds;
   dest->vClipMaskUvBounds = vClipMaskUvBounds;
   dest->vColor = vColor;
 }
-void store_interp_outputs(char* dest_ptr, size_t stride) {
+ALWAYS_INLINE void store_interp_outputs(char* dest_ptr, size_t stride) {
   for(int n = 0; n < 4; n++) {
     auto* dest = reinterpret_cast<InterpOutputs*>(dest_ptr);
     dest->vClipMaskUv = get_nth(vClipMaskUv, n);
@@ -507,7 +507,7 @@ void brush_vs(VertexInfo vi, I32 prim_address, RectWithSize local_rect, RectWith
  Float opacity = (make_float((prim_user_data).sel(X)))/(65535.);
  vColor = force_scalar(((prim).color)*(opacity));
 }
-void main(void) {
+ALWAYS_INLINE void main(void) {
  I32 prim_header_address = (aData).sel(X);
  I32 render_task_index = ((aData).sel(Y))>>(16);
  I32 clip_address = ((aData).sel(Y))&(65535);
@@ -608,7 +608,7 @@ void read_interp_inputs(const void* init_ptr, const void* step_ptr) {
   auto* step = reinterpret_cast<const InterpInputs*>(step_ptr);
   vClipMaskUv = init_interp(init->vClipMaskUv, step->vClipMaskUv);
 }
-void step_interp_inputs(const void* step_ptr) {
+ALWAYS_INLINE void step_interp_inputs(const void* step_ptr) {
   auto* step = reinterpret_cast<const InterpInputs*>(step_ptr);
   vClipMaskUv += step->vClipMaskUv;
 }
@@ -691,13 +691,16 @@ Fragment_scalar brush_fs() {
 void write_output(vec4 color) {
  oFragColor = color;
 }
-void main(void) {
+ALWAYS_INLINE void main(void) {
  Fragment frag = brush_fs();
  write_output((frag).color);
 }
 bool use_discard() { return false; }
 void run(const void* step_ptr) {
  main();
+ step_interp_inputs(step_ptr);
+}
+void skip(const void* step_ptr) {
  step_interp_inputs(step_ptr);
 }
 brush_solid_frag() {
@@ -709,7 +712,7 @@ brush_solid_frag() {
  init_primitive_func = (InitPrimitiveFunc)&Self::read_flat_inputs;
  init_span_func = (InitSpanFunc)&Self::read_interp_inputs;
  run_func = (RunFunc)&Self::run;
- skip_func = (SkipFunc)&Self::step_interp_inputs;
+ skip_func = (SkipFunc)&Self::skip;
  use_discard_func = (UseDiscardFunc)&Self::use_discard;
 }
 };

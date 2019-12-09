@@ -8,11 +8,12 @@
 
 // Some of this is copied from Skia and is governed by a BSD-style license
 // Every function in this file should be marked static and inline using SI.
-#if defined(__clang__)
-    #define SI __attribute__((always_inline)) static inline
+#ifdef _WIN32
+    #define ALWAYS_INLINE __forceinline
 #else
-    #define SI static inline
+    #define ALWAYS_INLINE __attribute__((always_inline)) inline
 #endif
+#define SI ALWAYS_INLINE static
 
 #define UNREACHABLE __builtin_unreachable()
 
