@@ -198,11 +198,11 @@ struct VertexShader : ShaderCommon<VertexShaderImpl> {
         (*init_batch_func)(this);
     }
 
-    void load_attribs(const void *locs, VertexAttrib *attribs, unsigned short *indices, int start, int instance, int count) {
+    ALWAYS_INLINE void load_attribs(const void *locs, VertexAttrib *attribs, unsigned short *indices, int start, int instance, int count) {
         (*load_attribs_func)(this, locs, attribs, indices, start, instance, count);
     }
 
-    void run(char* flats, char* interps, size_t interp_stride) {
+    ALWAYS_INLINE void run(char* flats, char* interps, size_t interp_stride) {
         (*run_func)(this, flats, interps, interp_stride);
     }
 } vertex_shader;
