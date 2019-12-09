@@ -1546,6 +1546,7 @@ void draw_quad(int nump) {
             lo += lom;
             ro += rom;
             fbuf += colortex.width;
+            fdepth += depthtex.width;
         }
 
 #ifdef  __MACH__
