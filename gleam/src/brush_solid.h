@@ -69,15 +69,17 @@ if (index == 5) {
 assert(0); // sPrimitiveHeadersI
 }
 }
-static inline int aPosition_location_index;
-static inline int aData_location_index;
-static void bind_attrib_location(const char *name, int index) {
-if (strcmp("aPosition", name) == 0) { aPosition_location_index = index; }
-if (strcmp("aData", name) == 0) { aData_location_index = index; }
+struct AttribLocations {
+ int aPosition;
+ int aData;
+};
+static void bind_attrib_location(AttribLocations* locs, const char *name, int index) {
+if (strcmp("aPosition", name) == 0) { locs->aPosition = index; }
+if (strcmp("aData", name) == 0) { locs->aData = index; }
 }
-void load_attribs(VertexAttrib *attribs, unsigned short *indices, int start, int instance, int count) {
-  load_attrib(aPosition, attribs[aPosition_location_index], indices, start, instance, count);
-  load_attrib(aData, attribs[aData_location_index], indices, start, instance, count);
+void load_attribs(const AttribLocations *locs, VertexAttrib *attribs, unsigned short *indices, int start, int instance, int count) {
+  load_attrib(aPosition, attribs[locs->aPosition], indices, start, instance, count);
+  load_attrib(aData, attribs[locs->aData], indices, start, instance, count);
 }
 struct FlatOutputs {
 vec4_scalar vTransformBounds;
@@ -717,9 +719,11 @@ int get_uniform(const char *name) const override {
  if (strcmp("uTransform", name) == 0) { return 6; }
  return -1;
 }
+brush_solid_vert::AttribLocations attrib_locations;
 void bind_attrib(const char *name, int index) override {
- brush_solid_vert::bind_attrib_location(name, index);
+ brush_solid_vert::bind_attrib_location(&attrib_locations, name, index);
 }
+const void* get_attrib_locations() const override { return &attrib_locations; }
 void init_shaders(void *vertex_shader, void *fragment_shader) override {
  new (vertex_shader) brush_solid_vert;
  new (fragment_shader) brush_solid_frag;

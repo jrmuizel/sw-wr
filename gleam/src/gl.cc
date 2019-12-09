@@ -143,6 +143,7 @@ struct ProgramImpl {
     virtual const char *get_name() const = 0;
     virtual int get_uniform(const char *name) const = 0;
     virtual void bind_attrib(const char *name, int index) = 0;
+    virtual const void* get_attrib_locations() const = 0;
     virtual void init_shaders(void *vertex_shader, void *fragment_shader) = 0;
 };
 
@@ -182,7 +183,7 @@ struct ShaderCommon : T {
 
 struct VertexShaderImpl : ShaderImpl {
     typedef void (VertexShaderImpl::*InitBatchFunc)();
-    typedef void (VertexShaderImpl::*LoadAttribsFunc)(VertexAttrib *attribs, unsigned short *indices, int start, int instance, int count);
+    typedef void (VertexShaderImpl::*LoadAttribsFunc)(const void *locs, VertexAttrib *attribs, unsigned short *indices, int start, int instance, int count);
     typedef void (VertexShaderImpl::*RunFunc)(char* flats, char* interps, size_t interp_stride);
 
     InitBatchFunc init_batch_func = nullptr;
@@ -197,14 +198,16 @@ struct VertexShader : ShaderCommon<VertexShaderImpl> {
         (this->*init_batch_func)();
     }
 
-    void load_attribs(VertexAttrib *attribs, unsigned short *indices, int start, int instance, int count) {
-        (this->*load_attribs_func)(attribs, indices, start, instance, count);
+    void load_attribs(const void *locs, VertexAttrib *attribs, unsigned short *indices, int start, int instance, int count) {
+        (this->*load_attribs_func)(locs, attribs, indices, start, instance, count);
     }
 
     void run(char* flats, char* interps, size_t interp_stride) {
         (this->*run_func)(flats, interps, interp_stride);
     }
 } vertex_shader;
+
+GLuint current_program = 0;
 
 struct FragmentShaderImpl : ShaderImpl {
     typedef void (FragmentShaderImpl::*InitBatchFunc)();
@@ -478,6 +481,7 @@ void load_attrib(T& attrib, VertexAttrib &va, unsigned short *indices, int start
 extern "C" {
 
 void UseProgram(GLuint program) {
+    current_program = program;
     if (!program)
         return;
     Program &p = programs[program];
@@ -1607,6 +1611,9 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
         assert(indices == 0);
         vertex_shader.init_batch();
         fragment_shader.init_batch();
+        Program &p = programs[current_program];
+        assert(p.impl);
+        const void *locs = p.impl->get_attrib_locations();
         for (int instance = 0; instance < instancecount; instance++) {
         if (indices == 0) {
                 Buffer &indices_buf = buffers[current_buffer[GL_ELEMENT_ARRAY_BUFFER]];
@@ -1627,18 +1634,18 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
                         assert(indices_buf.size == count * 2);
                         unsigned short *indices = (unsigned short*)indices_buf.buf;
                         if (mode == GL_QUADS) for (int i = 0; i + 4 <= count; i += 4) {
-                                vertex_shader.load_attribs(v.attribs, indices, i, instance, 4);
+                                vertex_shader.load_attribs(locs, v.attribs, indices, i, instance, 4);
                                 printf("native quad %d %d %d %d\n", indices[i], indices[i+1], indices[i+2], indices[i+3]);
                                 draw_quad(4);
                         } else for (int i = 0; i + 3 <= count; i += 3) {
                                 if (i + 6 <= count && indices[i+3] == indices[i+2] && indices[i+4] == indices[i+1]) {
                                     unsigned short quad_indices[4] = { indices[i], indices[i+1], indices[i+5], indices[i+2] };
-                                    vertex_shader.load_attribs(v.attribs, quad_indices, 0, instance, 4);
+                                    vertex_shader.load_attribs(locs, v.attribs, quad_indices, 0, instance, 4);
                                     printf("emulate quad %d %d %d %d\n", indices[i], indices[i+1], indices[i+5], indices[i+2]);
                                     draw_quad(4);
                                     i += 3;
                                 } else {
-                                    vertex_shader.load_attribs(v.attribs, indices, i, instance, 3);
+                                    vertex_shader.load_attribs(locs, v.attribs, indices, i, instance, 3);
                                     printf("triangle %d %d %d %d\n", indices[i], indices[i+1], indices[i+2]);
                                     draw_quad(3);
                                 }
