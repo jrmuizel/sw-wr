@@ -8,7 +8,19 @@ vec4 vClipMaskUvBounds
 vec4 vClipMaskUv
 vec4 vColor
 */
-struct brush_solid_samplers {
+struct brush_solid_program : ProgramImpl {
+const char *get_name() const override { return "brush_solid"; }
+int get_uniform(const char *name) const override {
+ if (strcmp("sGpuCache", name) == 0) { return 2; }
+ if (strcmp("sPrevPassAlpha", name) == 0) { return 7; }
+ if (strcmp("sPrimitiveHeadersF", name) == 0) { return 4; }
+ if (strcmp("sPrimitiveHeadersI", name) == 0) { return 5; }
+ if (strcmp("sRenderTasks", name) == 0) { return 1; }
+ if (strcmp("sTransformPalette", name) == 0) { return 3; }
+ if (strcmp("uTransform", name) == 0) { return 6; }
+ return -1;
+}
+struct Samplers {
  sampler2D_impl sGpuCache_impl;
  int sGpuCache_slot;
  sampler2DArray_impl sPrevPassAlpha_impl;
@@ -21,29 +33,61 @@ struct brush_solid_samplers {
  int sRenderTasks_slot;
  sampler2D_impl sTransformPalette_impl;
  int sTransformPalette_slot;
+} samplers;
+bool set_sampler(int index, int value) override {
+ switch (index) {
+ case 2:
+  samplers.sGpuCache_slot = value;
+  return true;
+ case 7:
+  samplers.sPrevPassAlpha_slot = value;
+  return true;
+ case 4:
+  samplers.sPrimitiveHeadersF_slot = value;
+  return true;
+ case 5:
+  samplers.sPrimitiveHeadersI_slot = value;
+  return true;
+ case 1:
+  samplers.sRenderTasks_slot = value;
+  return true;
+ case 3:
+  samplers.sTransformPalette_slot = value;
+  return true;
+ }
+ return false;
+}
+struct AttribLocations {
+ int aPosition;
+ int aData;
+} attrib_locations;
+void bind_attrib(const char *name, int index) override {
+ if (strcmp("aPosition", name) == 0) { attrib_locations.aPosition = index; return; }
+ if (strcmp("aData", name) == 0) { attrib_locations.aData = index; return; }
+}
+void init_shaders(void *vertex_shader, void *fragment_shader) override;
 };
 struct brush_solid_vert : VertexShaderImpl {
 typedef brush_solid_vert Self;
-typedef brush_solid_samplers Samplers;
-static void set_uniform_1i(Self *self, Samplers *samplers, int index, int value) {
+static void set_uniform_1i(Self *self, int index, int value) {
  switch (index) {
  case 6:
   assert(0); // uTransform
   break;
  case 1:
-  samplers->sRenderTasks_slot = value;
+  assert(0); // sRenderTasks
   break;
  case 2:
-  samplers->sGpuCache_slot = value;
+  assert(0); // sGpuCache
   break;
  case 3:
-  samplers->sTransformPalette_slot = value;
+  assert(0); // sTransformPalette
   break;
  case 4:
-  samplers->sPrimitiveHeadersF_slot = value;
+  assert(0); // sPrimitiveHeadersF
   break;
  case 5:
-  samplers->sPrimitiveHeadersI_slot = value;
+  assert(0); // sPrimitiveHeadersI
   break;
  }
 }
@@ -91,17 +135,9 @@ static void set_uniform_matrix4fv(Self *self, int index, const float *value) {
   break;
  }
 }
-struct AttribLocations {
- int aPosition;
- int aData;
-};
-static void bind_attrib_location(AttribLocations* locs, const char *name, int index) {
- if (strcmp("aPosition", name) == 0) { locs->aPosition = index; return; }
- if (strcmp("aData", name) == 0) { locs->aData = index; return; }
-}
-static void load_attribs(Self *self, const AttribLocations *locs, VertexAttrib *attribs, unsigned short *indices, int start, int instance, int count) {
- load_attrib(self->aPosition, attribs[locs->aPosition], indices, start, instance, count);
- load_attrib(self->aData, attribs[locs->aData], indices, start, instance, count);
+static void load_attribs(Self *self, brush_solid_program *prog, VertexAttrib *attribs, unsigned short *indices, int start, int instance, int count) {
+ load_attrib(self->aPosition, attribs[prog->attrib_locations.aPosition], indices, start, instance, count);
+ load_attrib(self->aData, attribs[prog->attrib_locations.aData], indices, start, instance, count);
 }
 struct FlatOutputs {
 vec4_scalar vTransformBounds;
@@ -124,12 +160,12 @@ ALWAYS_INLINE void store_interp_outputs(char* dest_ptr, size_t stride) {
     dest_ptr += stride;
   }
 }
-static void bind_textures(Self *self, Samplers *samplers) {
-self->sRenderTasks = lookup_sampler(&samplers->sRenderTasks_impl, samplers->sRenderTasks_slot);
-self->sGpuCache = lookup_sampler(&samplers->sGpuCache_impl, samplers->sGpuCache_slot);
-self->sTransformPalette = lookup_sampler(&samplers->sTransformPalette_impl, samplers->sTransformPalette_slot);
-self->sPrimitiveHeadersF = lookup_sampler(&samplers->sPrimitiveHeadersF_impl, samplers->sPrimitiveHeadersF_slot);
-self->sPrimitiveHeadersI = lookup_isampler(&samplers->sPrimitiveHeadersI_impl, samplers->sPrimitiveHeadersI_slot);
+static void bind_textures(Self *self, brush_solid_program *prog) {
+ self->sRenderTasks = lookup_sampler(&prog->samplers.sRenderTasks_impl, prog->samplers.sRenderTasks_slot);
+ self->sGpuCache = lookup_sampler(&prog->samplers.sGpuCache_impl, prog->samplers.sGpuCache_slot);
+ self->sTransformPalette = lookup_sampler(&prog->samplers.sTransformPalette_impl, prog->samplers.sTransformPalette_slot);
+ self->sPrimitiveHeadersF = lookup_sampler(&prog->samplers.sPrimitiveHeadersF_impl, prog->samplers.sPrimitiveHeadersF_slot);
+ self->sPrimitiveHeadersI = lookup_isampler(&prog->samplers.sPrimitiveHeadersI_impl, prog->samplers.sPrimitiveHeadersI_slot);
 }
 int32_t uMode;
 mat4_scalar uTransform;
@@ -574,14 +610,13 @@ vec4 oFragColor
 */
 struct brush_solid_frag : FragmentShaderImpl {
 typedef brush_solid_frag Self;
-typedef brush_solid_samplers Samplers;
-static void set_uniform_1i(Self *self, Samplers *samplers, int index, int value) {
+static void set_uniform_1i(Self *self, int index, int value) {
  switch (index) {
  case 2:
-  samplers->sGpuCache_slot = value;
+  assert(0); // sGpuCache
   break;
  case 7:
-  samplers->sPrevPassAlpha_slot = value;
+  assert(0); // sPrevPassAlpha
   break;
  }
 }
@@ -618,9 +653,9 @@ static void read_interp_inputs(Self *self, const InterpInputs *init, const Inter
 ALWAYS_INLINE void step_interp_inputs(const InterpInputs* step) {
   vClipMaskUv += step->vClipMaskUv;
 }
-static void bind_textures(Self *self, Samplers *samplers) {
-self->sGpuCache = lookup_sampler(&samplers->sGpuCache_impl, samplers->sGpuCache_slot);
-self->sPrevPassAlpha = lookup_sampler_array(&samplers->sPrevPassAlpha_impl, samplers->sPrevPassAlpha_slot);
+static void bind_textures(Self *self, brush_solid_program *prog) {
+ self->sGpuCache = lookup_sampler(&prog->samplers.sGpuCache_impl, prog->samplers.sGpuCache_slot);
+ self->sPrevPassAlpha = lookup_sampler_array(&prog->samplers.sPrevPassAlpha_impl, prog->samplers.sPrevPassAlpha_slot);
 }
 #define oFragColor gl_FragColor
 // vec4 oFragColor;
@@ -717,28 +752,8 @@ void init_shader() {
  use_discard_func = (UseDiscardFunc)&use_discard;
 }
 };
-struct brush_solid_program : ProgramImpl {
-const char *get_name() const override { return "brush_solid"; }
-int get_uniform(const char *name) const override {
- if (strcmp("sGpuCache", name) == 0) { return 2; }
- if (strcmp("sPrevPassAlpha", name) == 0) { return 7; }
- if (strcmp("sPrimitiveHeadersF", name) == 0) { return 4; }
- if (strcmp("sPrimitiveHeadersI", name) == 0) { return 5; }
- if (strcmp("sRenderTasks", name) == 0) { return 1; }
- if (strcmp("sTransformPalette", name) == 0) { return 3; }
- if (strcmp("uTransform", name) == 0) { return 6; }
- return -1;
-}
-brush_solid_samplers samplers;
-virtual void *get_samplers() override { return &samplers; }
-brush_solid_vert::AttribLocations attrib_locations;
-void bind_attrib(const char *name, int index) override {
- brush_solid_vert::bind_attrib_location(&attrib_locations, name, index);
-}
-const void* get_attrib_locations() const override { return &attrib_locations; }
-void init_shaders(void *vertex_shader, void *fragment_shader) override {
+void brush_solid_program::init_shaders(void *vertex_shader, void *fragment_shader) {
  reinterpret_cast<brush_solid_vert*>(vertex_shader)->init_shader();
  reinterpret_cast<brush_solid_frag*>(fragment_shader)->init_shader();
 }
-};
 

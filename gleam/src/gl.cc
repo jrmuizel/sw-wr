@@ -142,9 +142,8 @@ struct ProgramImpl {
     virtual ~ProgramImpl() {}
     virtual const char *get_name() const = 0;
     virtual int get_uniform(const char *name) const = 0;
-    virtual void *get_samplers() = 0;
+    virtual bool set_sampler(int index, int value) = 0;
     virtual void bind_attrib(const char *name, int index) = 0;
-    virtual const void* get_attrib_locations() const = 0;
     virtual void init_shaders(void *vertex_shader, void *fragment_shader) = 0;
 };
 
@@ -156,7 +155,7 @@ struct Program {
 };
 
 struct ShaderImpl {
-    typedef void (*SetUniform1iFunc)(ShaderImpl*, void *samplers, int index, int value);
+    typedef void (*SetUniform1iFunc)(ShaderImpl*, int index, int value);
     typedef void (*SetUniform4fvFunc)(ShaderImpl*, int index, const float *value);
     typedef void (*SetUniformMatrix4fvFunc)(ShaderImpl*, int index, const float *value);
 
@@ -169,8 +168,8 @@ template<typename T>
 struct ShaderCommon : T {
     char impl_data[1024];
 
-    void set_uniform_1i(void *samplers, int index, int value) {
-       (*ShaderImpl::set_uniform_1i_func)(this, samplers, index, value);
+    void set_uniform_1i(int index, int value) {
+       (*ShaderImpl::set_uniform_1i_func)(this, index, value);
     }
 
     void set_uniform_4fv(int index, const float *value) {
@@ -183,8 +182,8 @@ struct ShaderCommon : T {
 };
 
 struct VertexShaderImpl : ShaderImpl {
-    typedef void (*InitBatchFunc)(VertexShaderImpl*, void *samplers);
-    typedef void (*LoadAttribsFunc)(VertexShaderImpl*, const void *locs, VertexAttrib *attribs, unsigned short *indices, int start, int instance, int count);
+    typedef void (*InitBatchFunc)(VertexShaderImpl*, ProgramImpl *prog);
+    typedef void (*LoadAttribsFunc)(VertexShaderImpl*, ProgramImpl *prog, VertexAttrib *attribs, unsigned short *indices, int start, int instance, int count);
     typedef void (*RunFunc)(VertexShaderImpl*, char* flats, char* interps, size_t interp_stride);
 
     InitBatchFunc init_batch_func = nullptr;
@@ -195,12 +194,12 @@ struct VertexShaderImpl : ShaderImpl {
 };
 
 struct VertexShader : ShaderCommon<VertexShaderImpl> {
-    void init_batch(void *samplers) {
-        (*init_batch_func)(this, samplers);
+    void init_batch(ProgramImpl *prog) {
+        (*init_batch_func)(this, prog);
     }
 
-    ALWAYS_INLINE void load_attribs(const void *locs, VertexAttrib *attribs, unsigned short *indices, int start, int instance, int count) {
-        (*load_attribs_func)(this, locs, attribs, indices, start, instance, count);
+    ALWAYS_INLINE void load_attribs(ProgramImpl *prog, VertexAttrib *attribs, unsigned short *indices, int start, int instance, int count) {
+        (*load_attribs_func)(this, prog, attribs, indices, start, instance, count);
     }
 
     ALWAYS_INLINE void run(char* flats, char* interps, size_t interp_stride) {
@@ -211,7 +210,7 @@ struct VertexShader : ShaderCommon<VertexShaderImpl> {
 GLuint current_program = 0;
 
 struct FragmentShaderImpl : ShaderImpl {
-    typedef void (*InitBatchFunc)(FragmentShaderImpl*, void *samplers);
+    typedef void (*InitBatchFunc)(FragmentShaderImpl*, ProgramImpl *prog);
     typedef void (*InitPrimitiveFunc)(FragmentShaderImpl*, const void* flats);
     typedef void (*InitSpanFunc)(FragmentShaderImpl*, const void* interps, const void* step);
     typedef void (*RunFunc)(FragmentShaderImpl*, const void* step);
@@ -235,8 +234,8 @@ struct FragmentShaderImpl : ShaderImpl {
 };
 
 struct FragmentShader : ShaderCommon<FragmentShaderImpl> {
-    void init_batch(void *samplers) {
-        (*init_batch_func)(this, samplers);
+    void init_batch(ProgramImpl *prog) {
+        (*init_batch_func)(this, prog);
     }
 
     void init_primitive(const void* flats) {
@@ -943,12 +942,13 @@ void BufferData(GLenum target,
 }
 
 void Uniform1i(GLint location, GLint V0) {
-        printf("tex: %d\n", texture_count);
-        Program &p = programs[current_program];
-        assert(p.impl);
-        void *samplers = p.impl->get_samplers();
-        vertex_shader.set_uniform_1i(samplers, location, V0);
-        fragment_shader.set_uniform_1i(samplers, location, V0);
+    printf("tex: %d\n", texture_count);
+    Program &p = programs[current_program];
+    assert(p.impl);
+    if (!p.impl->set_sampler(location, V0)) {
+        vertex_shader.set_uniform_1i(location, V0);
+        fragment_shader.set_uniform_1i(location, V0);
+    }
 }
 void Uniform4fv(GLint location, GLsizei count, const GLfloat *v) {
         vertex_shader.set_uniform_4fv(location, v);
@@ -1620,10 +1620,8 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
         assert(indices == 0);
         Program &p = programs[current_program];
         assert(p.impl);
-        void *samplers = p.impl->get_samplers();
-        vertex_shader.init_batch(samplers);
-        fragment_shader.init_batch(samplers);
-        const void *locs = p.impl->get_attrib_locations();
+        vertex_shader.init_batch(p.impl);
+        fragment_shader.init_batch(p.impl);
         for (int instance = 0; instance < instancecount; instance++) {
         if (indices == 0) {
                 Buffer &indices_buf = buffers[current_buffer[GL_ELEMENT_ARRAY_BUFFER]];
@@ -1644,18 +1642,18 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
                         assert(indices_buf.size == count * 2);
                         unsigned short *indices = (unsigned short*)indices_buf.buf;
                         if (mode == GL_QUADS) for (int i = 0; i + 4 <= count; i += 4) {
-                                vertex_shader.load_attribs(locs, v.attribs, indices, i, instance, 4);
+                                vertex_shader.load_attribs(p.impl, v.attribs, indices, i, instance, 4);
                                 printf("native quad %d %d %d %d\n", indices[i], indices[i+1], indices[i+2], indices[i+3]);
                                 draw_quad(4);
                         } else for (int i = 0; i + 3 <= count; i += 3) {
                                 if (i + 6 <= count && indices[i+3] == indices[i+2] && indices[i+4] == indices[i+1]) {
                                     unsigned short quad_indices[4] = { indices[i], indices[i+1], indices[i+5], indices[i+2] };
-                                    vertex_shader.load_attribs(locs, v.attribs, quad_indices, 0, instance, 4);
+                                    vertex_shader.load_attribs(p.impl, v.attribs, quad_indices, 0, instance, 4);
                                     printf("emulate quad %d %d %d %d\n", indices[i], indices[i+1], indices[i+5], indices[i+2]);
                                     draw_quad(4);
                                     i += 3;
                                 } else {
-                                    vertex_shader.load_attribs(locs, v.attribs, indices, i, instance, 3);
+                                    vertex_shader.load_attribs(p.impl, v.attribs, indices, i, instance, 3);
                                     printf("triangle %d %d %d %d\n", indices[i], indices[i+1], indices[i+2]);
                                     draw_quad(3);
                                 }
