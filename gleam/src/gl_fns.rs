@@ -138,6 +138,15 @@ extern "C" {
     fn ClearColor(r: GLfloat, g: GLfloat, b: GLfloat, a: GLfloat);
     fn ClearDepth(depth: GLdouble);
     fn Clear(mask: GLbitfield);
+    fn ReadPixels(
+        x: GLint,
+        y: GLint,
+        width: GLsizei,
+        height: GLsizei,
+        format: GLenum,
+        ty: GLenum,
+        data: *mut c_void,
+    );
     fn Finish();
     fn ShaderSourceByName(shader: GLuint, name: *const GLchar);
 }
@@ -294,22 +303,33 @@ impl Gl for GlFns {
         pixel_type: GLenum,
         dst_buffer: &mut [u8],
     ) {
-        panic!();
         // Assumes that the user properly allocated the size for dst_buffer.
         assert!(calculate_length(width, height, format, pixel_type) == dst_buffer.len());
 
         unsafe {
             // We don't want any alignment padding on pixel rows.
-            self.ffi_gl_.PixelStorei(ffi::PACK_ALIGNMENT, 1);
-            self.ffi_gl_.ReadPixels(
-                x,
-                y,
-                width,
-                height,
-                format,
-                pixel_type,
-                dst_buffer.as_mut_ptr() as *mut c_void,
-            );
+            if SW {
+                ReadPixels(
+                    x,
+                    y,
+                    width,
+                    height,
+                    format,
+                    pixel_type,
+                    dst_buffer.as_mut_ptr() as *mut c_void,
+                );
+            } else {
+                self.ffi_gl_.PixelStorei(ffi::PACK_ALIGNMENT, 1);
+                self.ffi_gl_.ReadPixels(
+                    x,
+                    y,
+                    width,
+                    height,
+                    format,
+                    pixel_type,
+                    dst_buffer.as_mut_ptr() as *mut c_void,
+                );
+            }
         }
     }
 

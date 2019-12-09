@@ -984,6 +984,7 @@ void FramebufferTexture2D(
         }
 }
 
+#define GL_READ_FRAMEBUFFER               0x8CA8
 #define GL_DRAW_FRAMEBUFFER               0x8CA9
 
 void FramebufferTextureLayer(
@@ -994,7 +995,7 @@ void FramebufferTextureLayer(
         GLint layer)
 {
         assert(level == 0);
-        assert(target == GL_DRAW_FRAMEBUFFER);
+        assert(target == GL_READ_FRAMEBUFFER || target == GL_DRAW_FRAMEBUFFER);
         if (attachment == GL_COLOR_ATTACHMENT0) {
                Framebuffer &fb = framebuffers[current_framebuffer[target]];
                fb.color_attachment = texture;
@@ -1012,7 +1013,7 @@ void FramebufferRenderbuffer(
     GLenum renderbuffertarget,
     GLuint renderbuffer)
 {
-    assert(target == GL_DRAW_FRAMEBUFFER);
+    assert(target == GL_READ_FRAMEBUFFER || target == GL_DRAW_FRAMEBUFFER);
     assert(renderbuffertarget == GL_RENDERBUFFER);
     Framebuffer &fb = framebuffers[current_framebuffer[target]];
     Renderbuffer &rb = renderbuffers[renderbuffer];
@@ -1026,15 +1027,22 @@ void FramebufferRenderbuffer(
 
 } // extern "C"
 
-Framebuffer& get_draw_framebuffer() {
+Framebuffer *get_framebuffer(GLenum target) {
     GLuint id = 0;
     {
-        auto i = current_framebuffer.find(GL_DRAW_FRAMEBUFFER);
+        auto i = current_framebuffer.find(target);
         if (i != current_framebuffer.end()) id = i->second;
     }
     {
         auto i = framebuffers.find(id);
-        if (i != framebuffers.end()) return i->second;
+        if (i != framebuffers.end()) return &i->second;
+    }
+    return nullptr;
+}
+
+Framebuffer &get_draw_framebuffer() {
+    if (Framebuffer *fb = get_framebuffer(GL_DRAW_FRAMEBUFFER)) {
+      return *fb;
     }
     // allocate a default framebuffer
     Framebuffer& fb = framebuffers[0];
@@ -1100,6 +1108,27 @@ void Clear(GLbitfield mask) {
         uint16_t depth = uint16_t(0xFFFF * cleardepth) - 0x8000;
         __m128i depthi = _mm_set1_epi16(depth);
         clear_buffer<uint16_t>(t, depthi, depth);
+    }
+}
+
+void ReadPixels(GLint x, GLint y, GLsizei width, GLsizei height, GLenum format, GLenum type, void *data) {
+    Framebuffer *fb = get_framebuffer(GL_READ_FRAMEBUFFER);
+    if (!fb) return;
+    assert(format == GL_RED || GL_RGBA || GL_RGBA_INTEGER);
+    Texture &t = textures[fb->color_attachment];
+    assert(x + width <= t.width);
+    assert(y + width <= t.height);
+    if (internal_format_for_data(format, type) != t.internal_format) {
+        printf("mismatched format for read pixels: %x vs %x\n", t.internal_format, internal_format_for_data(format, type));
+        assert(false);
+    }
+    int bpp = bytes_for_internal_format(t.internal_format);
+    char *dest = (char *)data;
+    char *src = t.buf + (t.width * t.height * fb->layer + t.width * y + + x) * bpp;
+    for (; height > 0; height--) {
+        memcpy(dest, src, t.width * bpp);
+        dest += width * bpp;
+        src += t.width * bpp;
     }
 }
 

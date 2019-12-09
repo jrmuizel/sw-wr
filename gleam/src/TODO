@@ -1,6 +1,5 @@
 Next:
 - make `wrench --no-picture-caching show benchmarking/text-rendering.yaml' work
-- add glReadPixels support
 - handle different features
 - specialize texture samplers some how. i.e. we want to know at compile time what the format of a texture is
 - investigate larger tiles:
