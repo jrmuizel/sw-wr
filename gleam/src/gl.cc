@@ -813,18 +813,17 @@ void TexSubImage3D(
         assert(t.internal_format == internal_format_for_data(format, ty));
         int bpp = bytes_for_internal_format(t.internal_format);
         if (!bpp) return;
-        char *dest = t.buf + (zoffset * t.width * t.height + yoffset * t.width + xoffset) * bpp;
         char *src = (char*)data;
         assert(xoffset + width <= t.width);
         assert(yoffset + height <= t.height);
         assert(zoffset + depth <= t.depth);
         for (int z = 0; z < depth; z++) {
+                char *dest = t.buf + ((zoffset + z) * t.width * t.height + yoffset * t.width + xoffset) * bpp;
                 for (int y = 0; y < height; y++) {
                         memcpy(dest, src, width * bpp);
                         dest += t.width * bpp;
                         src += width * bpp;
                 }
-                dest += t.width * (t.height - 1) * bpp;
         }
 
 }
