@@ -1553,12 +1553,26 @@ impl Device {
     pub fn compile_shader(
         gl: &dyn gl::Gl,
         name: &str,
+        features: &str,
         shader_type: gl::GLenum,
         source: &String,
     ) -> Result<gl::GLuint, ShaderError> {
         println!("compile {}", name);
         let id = gl.create_shader(shader_type);
-        gl.shader_source_with_name(id, &[source.as_bytes()], name);
+        println!("features {}", features);
+        
+        // XXX: a really crappy parser of the feature defines
+        let feat = features.trim_start_matches("#define WR_MAX_VERTEX_TEXTURE_WIDTH ");
+        let feat = feat.trim_start_matches(char::is_numeric);
+        let feat = feat.trim_start_matches('U');
+        let feat = feat.trim();
+        let features: Vec<_> = feat.split("#define WR_FEATURE_").skip(1).collect();
+        let features = features.join(".");
+        println!("feat {}", feat);
+        println!("name: {}", &(name.to_owned() + &features));
+        
+        
+        gl.shader_source_with_name(id, &[source.as_bytes()], &(name.to_owned() + &features));
         gl.compile_shader(id);
         let log = gl.get_shader_info_log(id);
         let mut status = [0];
@@ -1866,7 +1880,7 @@ impl Device {
             println!("program {} {:?}", info.base_filename, info.features);
             // Compile the vertex shader
             let vs_source = info.compute_source(self, SHADER_KIND_VERTEX);
-            let vs_id = match Device::compile_shader(&*self.gl, &info.base_filename, gl::VERTEX_SHADER, &vs_source) {
+            let vs_id = match Device::compile_shader(&*self.gl, &info.base_filename, &info.features, gl::VERTEX_SHADER, &vs_source) {
                     Ok(vs_id) => vs_id,
                     Err(err) => return Err(err),
                 };
@@ -1874,7 +1888,7 @@ impl Device {
             // Compile the fragment shader
             let fs_source = info.compute_source(self, SHADER_KIND_FRAGMENT);
             let fs_id =
-                match Device::compile_shader(&*self.gl, &info.base_filename, gl::FRAGMENT_SHADER, &fs_source) {
+                match Device::compile_shader(&*self.gl, &info.base_filename, &info.features, gl::FRAGMENT_SHADER, &fs_source) {
                     Ok(fs_id) => fs_id,
                     Err(err) => {
                         self.gl.delete_shader(vs_id);

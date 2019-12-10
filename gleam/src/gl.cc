@@ -671,7 +671,9 @@ void LinkProgram(GLuint program) {
         static brush_image_program impl;
         p.impl = &impl;
     } else if (p.vs_name == "ps_text_run") {
-        // static ps_text_run_program impl;
+        static ps_text_run_program impl;
+        p.impl = &impl;
+    } else if (p.vs_name == "ps_text_runDUAL_SOURCE_BLENDING") {
         static ps_text_runDUAL_SOURCE_BLENDING_program impl;
         p.impl = &impl;
     } else {
