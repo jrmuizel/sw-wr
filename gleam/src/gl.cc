@@ -1204,8 +1204,8 @@ static inline int check_depth(uint16_t z, uint16_t* zbuf, __m128i& outmask, int 
     return 1;
 }
 
-static inline __m128i pack_pixels(vec4 output) {
-    output *= 255.5f;
+static inline __m128i pack_pixels() {
+    auto output = fragment_shader.gl_FragColor * 255.5f;
     __m128i rxz = _mm_packs_epi32(_mm_cvtps_epi32(output.x), _mm_cvtps_epi32(output.z));
     __m128i ryw = _mm_packs_epi32(_mm_cvtps_epi32(output.y), _mm_cvtps_epi32(output.w));
     __m128i rxy = _mm_unpacklo_epi16(rxz, ryw);
@@ -1215,12 +1215,17 @@ static inline __m128i pack_pixels(vec4 output) {
     return _mm_packus_epi16(rlo, rhi);
 }
 
-static inline __m128i blend_pixels(__m128i r, __m128i dst) {
-    const __m128i zero = _mm_setzero_si128();
-    __m128i slo = _mm_unpacklo_epi8(r, zero);
-    __m128i shi = _mm_unpackhi_epi8(r, zero);
-    __m128i dlo = _mm_unpacklo_epi8(dst, zero);
-    __m128i dhi = _mm_unpackhi_epi8(dst, zero);
+static inline __m128i blend_pixels(__m128i dst) {
+    auto output = fragment_shader.gl_FragColor * 255.5f;
+    __m128i sxz = _mm_packs_epi32(_mm_cvtps_epi32(output.x), _mm_cvtps_epi32(output.z));
+    __m128i syw = _mm_packs_epi32(_mm_cvtps_epi32(output.y), _mm_cvtps_epi32(output.w));
+    __m128i sxy = _mm_unpacklo_epi16(sxz, syw);
+    __m128i szw = _mm_unpackhi_epi16(sxz, syw);
+    __m128i slo = _mm_unpacklo_epi32(sxy, szw);
+    __m128i shi = _mm_unpackhi_epi32(sxy, szw);
+    __m128i dlo = _mm_unpacklo_epi8(dst, _mm_setzero_si128());
+    __m128i dhi = _mm_unpackhi_epi8(dst, _mm_setzero_si128());
+    __m128i r;
     // (x*y + x) >> 8, cheap approximation of (x*y) / 255
     #define muldiv255(x, y) ({ __m128i b = x; _mm_srli_epi16(_mm_add_epi16(_mm_mullo_epi16(b, y), b), 8); })
     #define alphas(c) _mm_shufflehi_epi16(_mm_shufflelo_epi16(c, 0xFF), 0xFF)
@@ -1295,9 +1300,8 @@ typedef float Interpolants __attribute__((ext_vector_type(MAX_INTERPOLANTS)));
 template<bool DISCARD>
 static inline void commit_output(uint32_t* buf, const Interpolants& step, __m128i mask = _mm_setzero_si128()) {
     fragment_shader.run(&step);
-    __m128i r = pack_pixels(fragment_shader.gl_FragColor);
     __m128i dst = _mm_loadu_si128((__m128i*)buf);
-    if (blend) r = blend_pixels(r, dst);
+    __m128i r = blend ? blend_pixels(dst) : pack_pixels();
     if (DISCARD) mask = _mm_or_si128(mask, fragment_shader.isPixelDiscarded);
     _mm_storeu_si128((__m128i*)buf,
         _mm_or_si128(_mm_and_si128(mask, dst),
@@ -1307,8 +1311,7 @@ static inline void commit_output(uint32_t* buf, const Interpolants& step, __m128
 template<>
 static inline void commit_output<false>(uint32_t* buf, const Interpolants& step, __m128i mask) {
     fragment_shader.run(&step);
-    __m128i r = pack_pixels(fragment_shader.gl_FragColor);
-    if (blend) r = blend_pixels(r, _mm_loadu_si128((__m128i*)buf));
+    __m128i r = blend ? blend_pixels(_mm_loadu_si128((__m128i*)buf)) : pack_pixels();
     _mm_storeu_si128((__m128i*)buf, r);
 }
 
@@ -1555,7 +1558,7 @@ void draw_quad(int nump) {
         double end = ({ struct timespec tp; clock_gettime(CLOCK_MONOTONIC, &tp); tp.tv_sec * 1e9 + tp.tv_nsec; });
 #endif
         auto output = get_nth(fragment_shader.gl_FragColor, 0);
-        auto pixels = pack_pixels(fragment_shader.gl_FragColor);
+        auto pixels = pack_pixels();
         int pixel0 = _mm_cvtsi128_si32(_mm_shuffle_epi32(pixels, 0));
         int pixel1 = _mm_cvtsi128_si32(_mm_shuffle_epi32(pixels, 0x55));
         int pixel2 = _mm_cvtsi128_si32(_mm_shuffle_epi32(pixels, 0xAA));
