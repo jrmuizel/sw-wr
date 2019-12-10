@@ -234,6 +234,7 @@ struct vec2_scalar {
         vec2_scalar() : vec2_scalar(0.0f) {}
         vec2_scalar(double a): x(a), y(a) {}
         vec2_scalar(float a): x(a), y(a) {}
+        vec2_scalar(int a): x(a), y(a) {}
         constexpr vec2_scalar(float x, float y): x(x), y(y) {}
 
         float& select(XYZW c) {
@@ -2238,6 +2239,10 @@ float get_nth(Float a, int n) {
 
 float get_nth(float a, int n) {
         return a;
+}
+
+ivec2_scalar get_nth(ivec2 a, int n) {
+        return ivec2_scalar{a.x[n], a.y[n]};
 }
 
 vec2_scalar get_nth(vec2 a, int n) {
