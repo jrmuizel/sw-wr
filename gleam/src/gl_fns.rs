@@ -149,6 +149,7 @@ extern "C" {
     );
     fn Finish();
     fn ShaderSourceByName(shader: GLuint, name: *const GLchar);
+    fn TexParameteri(target: GLenum, pname: GLenum, param: GLint);
 }
 
 impl GlFns {
@@ -1426,7 +1427,11 @@ impl Gl for GlFns {
     fn tex_parameter_i(&self, target: GLenum, pname: GLenum, param: GLint) {
         //panic!();
         unsafe {
-            self.ffi_gl_.TexParameteri(target, pname, param);
+            if SW {
+                TexParameteri(target, pname, param);
+            } else {
+                self.ffi_gl_.TexParameteri(target, pname, param);
+            }
         }
     }
 

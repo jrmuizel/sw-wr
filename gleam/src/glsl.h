@@ -513,6 +513,10 @@ I32   cast  (Float v) { return      __builtin_convertvector(v,   I32); }
     #endif
     }
 
+vec2 floor(vec2 v) {
+        return vec2(floor(v.x), floor(v.y));
+}
+
 Float ceil(Float v) {
     #if defined(JUMPER_IS_SSE41)
         return _mm_ceil_ps(v);
@@ -712,6 +716,9 @@ struct ivec3 {
         I32 y;
         I32 z;
 
+        friend ivec3 operator+(ivec3 a, ivec3 b) {
+                return ivec3(a.x+b.x, a.y+b.y, a.z+b.z);
+        }
 };
 
 vec2_scalar make_vec2(ivec3_scalar s) {
@@ -1531,6 +1538,11 @@ enum TextureFormat {
         R8
 };
 
+enum TextureFilter {
+        NEAREST,
+        LINEAR
+};
+
 struct sampler2DArray_impl {
         uint32_t *buf;
         uint32_t stride; // in bytes
@@ -1539,6 +1551,7 @@ struct sampler2DArray_impl {
         uint32_t width;
         uint32_t depth;
         TextureFormat format;
+        TextureFilter filter;
 };
 
 
@@ -1550,6 +1563,7 @@ struct sampler2D_impl {
         uint32_t height;
         uint32_t width;
         TextureFormat format;
+        TextureFilter filter;
 };
 
 typedef sampler2D_impl *sampler2D;
@@ -1829,33 +1843,34 @@ SI mat4 if_then_else(int32_t c, mat4 t, mat4 e) {
     return c ? t : e;
 }
 
+SI I32 clampCoord(I32 coord, int limit) {
+    return _mm_min_epi16(_mm_max_epi16(coord, _mm_setzero_si128()), _mm_set1_epi16(limit));
+}
+SI int clampCoord(int coord, int limit) {
+    return std::min(std::max(coord, 0), limit);
+}
+template<typename T, typename S> SI T clamp2D(T P, S sampler) {
+    return T{clampCoord(P.x, sampler->width), clampCoord(P.y, sampler->height)};
+}
+template<typename T> SI T clamp2DArray(T P, sampler2DArray sampler) {
+    return T{clampCoord(P.x, sampler->width), clampCoord(P.y, sampler->height), clampCoord(P.z, sampler->depth)};
+}
+
 uint32_t fetchPixel(isampler2D sampler, int x, int y) {
-        if (x > sampler->width || y > sampler->height) {
-                return 0;
-        }
         return sampler->buf[x  + y * sampler->stride/4];
 }
 
 uint32_t fetchPixel(sampler2D sampler, int x, int y) {
-        if (x > sampler->width || y > sampler->height) {
-                return 0;
-        }
         return sampler->buf[x  + y * sampler->stride/4];
 }
 
 uint32_t fetchPixel(sampler2DArray sampler, int x, int y, int z) {
-        if (x > sampler->width || y > sampler->height || z > sampler->depth) {
-                return 0;
-        }
         return sampler->buf[x  + y * sampler->stride/4 + z * sampler->height_stride/4];
 }
 
 
 
 Float fetchPixelFloat(sampler2D sampler, int x, int y) {
-        if (x > sampler->width || y > sampler->height) {
-                return Float(0);
-        }
         return Float{
                 ((float*)sampler->buf)[x*4  + y * sampler->stride/4],
                 ((float*)sampler->buf)[x*4  + y * sampler->stride/4 + 1],
@@ -1864,9 +1879,6 @@ Float fetchPixelFloat(sampler2D sampler, int x, int y) {
 }
 
 Float fetchPixelFloat(sampler2DArray sampler, int x, int y, int z) {
-        if (x > sampler->width || y > sampler->height || z > sampler->depth) {
-                return Float(0);
-        }
         return Float{
                 ((float*)sampler->buf)[x*4  + y * sampler->stride/4 + z * sampler->height_stride/4],
                 ((float*)sampler->buf)[x*4  + y * sampler->stride/4 + z * sampler->height_stride/4 + 1],
@@ -1876,9 +1888,6 @@ Float fetchPixelFloat(sampler2DArray sampler, int x, int y, int z) {
 
 
 I32 fetchPixelInt(isampler2D sampler, int x, int y) {
-        if (x > sampler->width || y > sampler->height) {
-                return I32(0);
-        }
         return I32{
                 ((int*)sampler->buf)[x*4  + y * sampler->stride/4],
                 ((int*)sampler->buf)[x*4  + y * sampler->stride/4 + 1],
@@ -1969,6 +1978,7 @@ vec4 texelFetchFloat(sampler2DArray sampler, ivec3 P, int lod) {
 
 
 vec4 texelFetch(sampler2D sampler, ivec2 P, int lod) {
+        P = clamp2D(P, sampler);
         if (sampler->format == TextureFormat::RGBA32F) {
                 return texelFetchFloat(sampler, P, lod);
         } else {
@@ -1978,10 +1988,12 @@ vec4 texelFetch(sampler2D sampler, ivec2 P, int lod) {
 }
 
 vec4_scalar texelFetch(sampler2D sampler, ivec2_scalar P, int lod) {
+        P = clamp2D(P, sampler);
         return pixel_to_vec4(fetchPixel(sampler, P.x, P.y));
 }
 
 vec4 texelFetch(sampler2DArray sampler, ivec3 P, int lod) {
+        P = clamp2DArray(P, sampler);
         if (sampler->format == TextureFormat::RGBA32F) {
                 return texelFetchFloat(sampler, P, lod);
         } else {
@@ -1993,6 +2005,7 @@ vec4 texelFetch(sampler2DArray sampler, ivec3 P, int lod) {
 
 
 ivec4 texelFetch(isampler2D sampler, ivec2 P, int lod) {
+        P = clamp2D(P, sampler);
         assert(sampler->format == TextureFormat::RGBA32I);
         return pixel_int_to_ivec4(
                       fetchPixelInt(sampler, P.x.x, P.y.x),
@@ -2002,10 +2015,50 @@ ivec4 texelFetch(isampler2D sampler, ivec2 P, int lod) {
                       );
 }
 
+template <typename T, typename U, typename A, typename R = typename T::vector_type>
+SI R mix(T x, U y, A a) {
+        return (y - x) * a + x;
+}
+
+SI Float mix(Float x, Float y, Float a) {
+        return (y - x) * a + x;
+}
+
+vec4 textureLinear(sampler2D sampler, vec2 P) {
+    P.x *= sampler->width;
+    P.y *= sampler->height;
+    P -= 0.5f;
+    vec2 f = floor(P);
+    vec2 r = P - f;
+    ivec2 i((I32)_mm_cvtps_epi32(f.x), (I32)_mm_cvtps_epi32(f.y));
+    vec4 c00 = texelFetch(sampler, i, 0);
+    vec4 c10 = texelFetch(sampler, i + ivec2(1, 0), 0);
+    vec4 c01 = texelFetch(sampler, i + ivec2(0, 1), 0);
+    vec4 c11 = texelFetch(sampler, i + ivec2(1, 1), 0);
+    return mix(mix(c00, c10, r.x), mix(c10, c11, r.x), r.y);
+}
+
+vec4 textureLinear(sampler2DArray sampler, vec2 P, Float z) {
+    P.x *= sampler->width;
+    P.y *= sampler->height;
+    P -= 0.5f;
+    vec2 f = floor(P);
+    vec2 r = P - f;
+    ivec3 i((I32)_mm_cvtps_epi32(f.x), (I32)_mm_cvtps_epi32(f.y), (I32)_mm_cvtps_epi32(z));
+    vec4 c00 = texelFetch(sampler, i, 0);
+    vec4 c10 = texelFetch(sampler, i + ivec3(1, 0, 0), 0);
+    vec4 c01 = texelFetch(sampler, i + ivec3(0, 1, 0), 0);
+    vec4 c11 = texelFetch(sampler, i + ivec3(1, 1, 0), 0);
+    return mix(mix(c00, c10, r.x), mix(c01, c11, r.x), r.y);
+}
+
 vec4 texture(sampler2D sampler, vec2 P) {
-        // just do nearest for now
+    if (sampler->filter == TextureFilter::LINEAR) {
+        return textureLinear(sampler, P);
+    } else {
         ivec2 coord(round(P.x, sampler->width), round(P.y, sampler->height));
         return texelFetch(sampler, coord, 0);
+    }
 }
 
 vec4 textureLod(sampler2DArray sampler, vec3 P, Float lod) {
@@ -2021,9 +2074,13 @@ vec4 texture(sampler2DArray sampler, vec3 P, Float layer) {
         return vec4();
 }
 vec4 texture(sampler2DArray sampler, vec3 P) {
+    if (sampler->filter == TextureFilter::LINEAR) {
+        return textureLinear(sampler, vec2(P.x, P.y), P.z);
+    } else {
         // just do nearest for now
         ivec3 coord(round(P.x, sampler->width), round(P.y, sampler->height), round(P.z, 1.));
         return texelFetch(sampler, coord, 0);
+    }
 }
 
 
@@ -2046,15 +2103,6 @@ vec4 vec2::sel(XYZW c1, XYZW c2, XYZW c3, XYZW c4)
         {
                 return vec4(select(c1), select(c2), select(c3), select(c4));
         }
-
-template <typename T, typename U, typename A, typename R = typename T::vector_type>
-SI R mix(T x, U y, A a) {
-        return (y - x) * a + x;
-}
-
-SI Float mix(Float x, Float y, Float a) {
-        return (y - x) * a + x;
-}
 
 bool any(bool x) {
         return x;
@@ -2156,10 +2204,6 @@ mat3 transpose(mat3 m) {
         return mat3(vec3(m[0].x, m[1].x, m[2].x),
                     vec3(m[0].y, m[1].y, m[2].y),
                     vec3(m[0].z, m[1].z, m[2].z));
-}
-
-vec2 floor(vec2 v) {
-        return vec2(floor(v.x), floor(v.y));
 }
 
 vec2 abs(vec2 v) {

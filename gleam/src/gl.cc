@@ -115,6 +115,30 @@ struct Renderbuffer {
         Renderbuffer() : texture(0) {}
 };
 
+#define GL_NEAREST                  0x2600
+#define GL_LINEAR                   0x2601
+#define GL_NEAREST_MIPMAP_NEAREST   0x2700
+#define GL_NEAREST_MIPMAP_LINEAR    0x2702
+#define GL_LINEAR_MIPMAP_NEAREST    0x2701
+#define GL_LINEAR_MIPMAP_LINEAR     0x2703
+#define GL_TEXTURE_WRAP_S           0x2802
+#define GL_TEXTURE_WRAP_T           0x2803
+#define GL_TEXTURE_MAG_FILTER       0x2800
+#define GL_TEXTURE_MIN_FILTER       0x2801
+#define GL_CLAMP_TO_EDGE            0x812F
+
+glsl::TextureFilter gl_filter_to_texture_filter(int type) {
+        switch (type) {
+                case GL_NEAREST: return glsl::TextureFilter::NEAREST;
+                case GL_NEAREST_MIPMAP_LINEAR: return glsl::TextureFilter::NEAREST;
+                case GL_NEAREST_MIPMAP_NEAREST: return glsl::TextureFilter::NEAREST;
+                case GL_LINEAR: return glsl::TextureFilter::LINEAR;
+                case GL_LINEAR_MIPMAP_LINEAR: return glsl::TextureFilter::LINEAR;
+                case GL_LINEAR_MIPMAP_NEAREST: return glsl::TextureFilter::LINEAR;
+                defaut: assert(0);
+        }
+}
+
 struct Texture {
     GLenum target;
     int levels;
@@ -123,6 +147,8 @@ struct Texture {
     int height;
     int depth;
     char *buf;
+    GLenum min_filter;
+    GLenum mag_filter;
 };
 
 #define MAX_ATTRS 16
@@ -409,6 +435,7 @@ sampler2D lookup_sampler(sampler2D_impl *s, int texture) {
             s->stride = 0;
             s->buf = nullptr;
             s->format = TextureFormat::RGBA8;
+            s->filter = TextureFilter::NEAREST;
         } else {
             Texture &t = textures[texture_slots[texture]];
             s->width = t.width;
@@ -416,6 +443,7 @@ sampler2D lookup_sampler(sampler2D_impl *s, int texture) {
             s->stride = bytes_for_internal_format(t.internal_format) * t.width;
             s->buf = (uint32_t*)t.buf; //XXX: wrong
             s->format = gl_format_to_texture_format(t.internal_format);
+            s->filter = gl_filter_to_texture_filter(t.mag_filter);
         }
         return s;
 }
@@ -447,6 +475,7 @@ sampler2DArray lookup_sampler_array(sampler2DArray_impl *s, int texture) {
             s->height_stride = 0;
             s->buf = nullptr;
             s->format = TextureFormat::RGBA8;
+            s->filter = TextureFilter::NEAREST;
         } else {
             Texture &t = textures[texture_slots[texture]];
             s->width = t.width;
@@ -456,6 +485,7 @@ sampler2DArray lookup_sampler_array(sampler2DArray_impl *s, int texture) {
             s->height_stride = bytes_for_internal_format(t.internal_format) * t.width * t.height;
             s->buf = (uint32_t*)t.buf; //XXX: wrong
             s->format = gl_format_to_texture_format(t.internal_format);
+            s->filter = gl_filter_to_texture_filter(t.mag_filter);
         }
         return s;
 }
@@ -830,6 +860,23 @@ void TexSubImage3D(
 
 }
 
+void TexParameteri(GLenum target, GLenum pname, GLint param) {
+        Texture &t = textures[current_texture[target]];
+        switch (pname) {
+        case GL_TEXTURE_WRAP_S: assert(param == GL_CLAMP_TO_EDGE); break;
+        case GL_TEXTURE_WRAP_T: assert(param == GL_CLAMP_TO_EDGE); break;
+        case GL_TEXTURE_MIN_FILTER:
+            assert(param == GL_NEAREST || param == GL_LINEAR);
+            t.min_filter = param;
+            break;
+        case GL_TEXTURE_MAG_FILTER:
+            assert(param == GL_NEAREST || param == GL_LINEAR);
+            t.mag_filter = param;
+            break;
+        default:
+            break;
+        }
+}
 
 void GenTextures(int n, int *result) {
         for (int i = 0; i < n; i++) {
