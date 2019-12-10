@@ -485,6 +485,7 @@ void load_attrib(T& attrib, VertexAttrib &va, unsigned short *indices, int start
 #include "brush_solid.h"
 #include "brush_image.h"
 #include "ps_text_run.h"
+#include "ps_text_runDUAL_SOURCE_BLENDING.h"
 extern "C" {
 
 void UseProgram(GLuint program) {
@@ -670,7 +671,8 @@ void LinkProgram(GLuint program) {
         static brush_image_program impl;
         p.impl = &impl;
     } else if (p.vs_name == "ps_text_run") {
-        static ps_text_run_program impl;
+        // static ps_text_run_program impl;
+        static ps_text_runDUAL_SOURCE_BLENDING_program impl;
         p.impl = &impl;
     } else {
         printf("unknown program %s\n", p.vs_name.c_str());
