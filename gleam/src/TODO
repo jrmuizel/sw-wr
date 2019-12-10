@@ -1,8 +1,7 @@
 Next:
 - make `wrench --no-picture-caching show benchmarking/text-rendering.yaml' look better
-- handle different features
+- handle drawing to R8 framebuffers
 - specialize texture samplers some how. i.e. we want to know at compile time what the format of a texture is
-- add bilinear texture sampling
 - investigate larger tiles:
  llvmpipe runs the shader 4 times to get a 4x4 block of pixels
  that it can convert to integers and then shuffle into the right
