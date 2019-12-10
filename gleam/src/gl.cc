@@ -227,6 +227,7 @@ struct FragmentShaderImpl : ShaderImpl {
     vec4 gl_FragCoord;
     Bool isPixelDiscarded;
     vec4 gl_FragColor;
+    vec4 gl_SecondaryFragColor;
 
     ALWAYS_INLINE void step_fragcoord() {
         gl_FragCoord.x += 4;
@@ -292,21 +293,25 @@ struct Viewport {
 
 Viewport viewport;
 
-#define GL_BLEND                0x0BE2
-#define GL_ZERO                 0
-#define GL_ONE                  1
-#define GL_SRC_COLOR            0x0300
-#define GL_ONE_MINUS_SRC_COLOR  0x0301
-#define GL_SRC_ALPHA            0x0302
-#define GL_ONE_MINUS_SRC_ALPHA  0x0303
-#define GL_DST_ALPHA            0x0304
-#define GL_ONE_MINUS_DST_ALPHA  0x0305
-#define GL_DST_COLOR            0x0306
-#define GL_ONE_MINUS_DST_COLOR  0x0307
+#define GL_BLEND                    0x0BE2
+#define GL_ZERO                     0
+#define GL_ONE                      1
+#define GL_SRC_COLOR                0x0300
+#define GL_ONE_MINUS_SRC_COLOR      0x0301
+#define GL_SRC_ALPHA                0x0302
+#define GL_ONE_MINUS_SRC_ALPHA      0x0303
+#define GL_DST_ALPHA                0x0304
+#define GL_ONE_MINUS_DST_ALPHA      0x0305
+#define GL_DST_COLOR                0x0306
+#define GL_ONE_MINUS_DST_COLOR      0x0307
 #define GL_CONSTANT_COLOR           0x8001
 #define GL_ONE_MINUS_CONSTANT_COLOR 0x8002
 #define GL_CONSTANT_ALPHA           0x8003
 #define GL_ONE_MINUS_CONSTANT_ALPHA 0x8004
+#define GL_SRC1_ALPHA               0x8589
+#define GL_SRC1_COLOR               0x88F9
+#define GL_ONE_MINUS_SRC1_COLOR     0x88FA
+#define GL_ONE_MINUS_SRC1_ALPHA     0x88FB
 
 bool blend = false;
 GLenum blendfunc_srgb = GL_ONE;
@@ -334,7 +339,8 @@ __m128i blendcolor = _mm_set1_epi16(0);
     macro(GL_ONE, GL_ONE, GL_ONE, GL_ONE_MINUS_SRC_ALPHA) \
     macro(GL_ONE, GL_ZERO, 0, 0) \
     macro(GL_ONE_MINUS_DST_ALPHA, GL_ONE, GL_ZERO, GL_ONE) \
-    macro(GL_CONSTANT_COLOR, GL_ONE_MINUS_SRC_COLOR, 0, 0)
+    macro(GL_CONSTANT_COLOR, GL_ONE_MINUS_SRC_COLOR, 0, 0) \
+    macro(GL_ONE, GL_ONE_MINUS_SRC1_COLOR, 0, 0)
 
 #define DEFINE_BLEND_KEY(...) BLEND_KEY(__VA_ARGS__),
 enum BlendKey : uint8_t
@@ -527,6 +533,10 @@ GLenum remap_blendfunc(GLenum rgb, GLenum a) {
     case GL_ONE_MINUS_DST_COLOR: if (rgb == GL_ONE_MINUS_DST_ALPHA) a = GL_ONE_MINUS_DST_ALPHA; break;
     case GL_CONSTANT_COLOR: if (rgb == GL_CONSTANT_ALPHA) a = GL_CONSTANT_ALPHA; break;
     case GL_ONE_MINUS_CONSTANT_COLOR: if (rgb == GL_ONE_MINUS_CONSTANT_ALPHA) a = GL_ONE_MINUS_CONSTANT_ALPHA; break;
+    case GL_SRC1_ALPHA: if (rgb == GL_SRC1_COLOR) a = GL_SRC1_COLOR; break;
+    case GL_ONE_MINUS_SRC1_ALPHA: if (rgb == GL_ONE_MINUS_SRC1_COLOR) a = GL_ONE_MINUS_SRC1_COLOR; break;
+    case GL_SRC1_COLOR: if (rgb == GL_SRC1_ALPHA) a = GL_SRC1_ALPHA; break;
+    case GL_ONE_MINUS_SRC1_COLOR: if (rgb == GL_ONE_MINUS_SRC1_ALPHA) a = GL_ONE_MINUS_SRC1_ALPHA; break;
     }
     return a;
 }
@@ -1285,6 +1295,19 @@ static inline __m128i blend_pixels(__m128i dst) {
                 _mm_add_epi16(dlo, muldiv255(_mm_sub_epi16(blendcolor, dlo), slo)),
                 _mm_add_epi16(dhi, muldiv255(_mm_sub_epi16(blendcolor, dhi), shi)));
         break;
+    case BLEND_KEY(GL_ONE, GL_ONE_MINUS_SRC1_COLOR): {
+        auto secondary = fragment_shader.gl_SecondaryFragColor * 255.5f;
+        __m128i s1xz = _mm_packs_epi32(_mm_cvtps_epi32(secondary.x), _mm_cvtps_epi32(secondary.z));
+        __m128i s1yw = _mm_packs_epi32(_mm_cvtps_epi32(secondary.y), _mm_cvtps_epi32(secondary.w));
+        __m128i s1xy = _mm_unpacklo_epi16(s1xz, s1yw);
+        __m128i s1zw = _mm_unpackhi_epi16(s1xz, s1yw);
+        __m128i s1lo = _mm_unpacklo_epi32(s1xy, s1zw);
+        __m128i s1hi = _mm_unpackhi_epi32(s1xy, s1zw);
+        r = _mm_packus_epi16(
+                _mm_add_epi16(slo, _mm_sub_epi16(dlo, muldiv255(dlo, s1lo))),
+                _mm_add_epi16(shi, _mm_sub_epi16(dhi, muldiv255(dhi, s1hi))));
+        break;
+    }
     default:
         UNREACHABLE;
         break;
