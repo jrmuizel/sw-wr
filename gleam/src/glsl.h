@@ -2048,8 +2048,9 @@ vec4 textureLinear(S sampler, vec2 P, I32 zoffset = 0) {
 
     __m128i xlt = _mm_cmplt_epi32(i.x, _mm_setzero_si128());
     __m128i xgt = _mm_cmpgt_epi32(i.x, _mm_set1_epi32(sampler->width - 2));
-
     __m128i fracx = _mm_cvtps_epi32(r.x * 256.0f);
+    fracx = _mm_or_si128(_mm_andnot_si128(_mm_or_si128(xlt, xgt), fracx),
+                         _mm_and_si128(xgt, _mm_set1_epi32(256)));
     fracx = _mm_shufflelo_epi16(fracx, _MM_SHUFFLE(2, 2, 0, 0));
     fracx = _mm_shufflehi_epi16(fracx, _MM_SHUFFLE(2, 2, 0, 0));
     fracx = _mm_slli_epi16(fracx, 4);
@@ -2067,9 +2068,6 @@ vec4 textureLinear(S sampler, vec2 P, I32 zoffset = 0) {
         __m128i cc = _mm_unpacklo_epi8( \
             _mm_loadl_epi64((__m128i*)&sampler->buf[_mm_cvtsi128_si32(_mm_shuffle_epi32(row0, _MM_SHUFFLE(idx, idx, idx, idx)))]), \
             _mm_loadl_epi64((__m128i*)&sampler->buf[_mm_cvtsi128_si32(_mm_shuffle_epi32(row1, _MM_SHUFFLE(idx, idx, idx, idx)))])); \
-        __m128i mask = _mm_shuffle_ps(xlt, xgt, _MM_SHUFFLE(idx, idx, idx, idx)); \
-        cc = _mm_or_si128(_mm_andnot_si128(mask, cc), \
-                          _mm_and_si128(mask, _mm_shuffle_epi32(cc, _MM_SHUFFLE(1, 0, 3, 2)))); \
         __m128i cc0 = _mm_unpacklo_epi8(cc, _mm_setzero_si128()); \
         __m128i cc1 = _mm_unpackhi_epi8(cc, _mm_setzero_si128()); \
         cc = _mm_add_epi16(cc0, \
