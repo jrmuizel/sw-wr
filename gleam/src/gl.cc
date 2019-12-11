@@ -530,13 +530,12 @@ void load_attrib(T& attrib, VertexAttrib &va, unsigned short *indices, int start
     if (va.divisor == 1) {
         char* src = (char*)va.buf + va.stride * instance;
         assert(src + va.size <= va.buf + va.buf_size);
-        typedef decltype(get_nth(attrib, 0)) scalar_type;
         if (sizeof(scalar_type) > va.size) {
             scalar_type scalar = {0};
             memcpy(&scalar, src, va.size);
             attrib = T(scalar);
         } else {
-            attrib = *reinterpret_cast<scalar_type*>(src);
+            attrib = T(*reinterpret_cast<scalar_type*>(src));
         }
     } else if (va.divisor == 0) {
         for (int n = 0; n < count; n++) {
