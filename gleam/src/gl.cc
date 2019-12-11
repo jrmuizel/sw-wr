@@ -140,15 +140,45 @@ glsl::TextureFilter gl_filter_to_texture_filter(int type) {
 }
 
 struct Texture {
-    GLenum target;
-    int levels;
-    GLenum internal_format;
-    int width;
-    int height;
-    int depth;
-    char *buf;
-    GLenum min_filter;
-    GLenum mag_filter;
+    GLenum target = 0;
+    int levels = 0;
+    GLenum internal_format = 0;
+    int width = 0;
+    int height = 0;
+    int depth = 0;
+    char *buf = nullptr;
+    GLenum min_filter = GL_NEAREST;
+    GLenum mag_filter = GL_NEAREST;
+
+    void allocate() {
+        if (!buf) {
+            size_t size = bytes_for_internal_format(internal_format) * width * height * std::max(depth, 1) * levels;
+            buf = (char*)malloc(size + sizeof(__m128i));
+        }
+    }
+
+    void make_renderable() {
+        switch (internal_format) {
+        case GL_DEPTH_COMPONENT:
+        case GL_DEPTH_COMPONENT24:
+        case GL_DEPTH_COMPONENT32:
+            assert(!buf);
+            internal_format = GL_DEPTH_COMPONENT16;
+            break;
+        case GL_DEPTH_COMPONENT16:
+            break;
+        case GL_R8:
+            assert(!buf);
+            internal_format = GL_RGBA8;
+            break;
+        case GL_RGBA8:
+            break;
+        default:
+            printf("non-renderable texture format %x\n", internal_format);
+            assert(false);
+        }
+        allocate();
+    }
 };
 
 #define MAX_ATTRS 16
@@ -766,8 +796,6 @@ void TexStorage3D(
     t.width = width;
     t.height = height;
     t.depth = depth;
-    size_t size = bytes_for_internal_format(internal_format) * width * height * depth * levels;
-    t.buf = (char*)malloc(size + sizeof(__m128i));
 }
 
 void TexStorage2D(
@@ -782,8 +810,6 @@ void TexStorage2D(
     t.internal_format = internal_format;
     t.width = width;
     t.height = height;
-    size_t size = bytes_for_internal_format(internal_format) * width * height * levels;
-    t.buf = (char*)malloc(size + sizeof(__m128i));
 }
 
 #define GL_RED                            0x1903
@@ -820,6 +846,7 @@ void TexSubImage2D(
         assert(t.internal_format == internal_format_for_data(format, ty));
         int bpp = bytes_for_internal_format(t.internal_format);
         if (!bpp) return;
+        t.allocate();
         char *dest = t.buf + (yoffset * t.width + xoffset) * bpp;
         char *src = (char*)data;
         for (int y = 0; y < height; y++) {
@@ -845,6 +872,7 @@ void TexSubImage3D(
         assert(t.internal_format == internal_format_for_data(format, ty));
         int bpp = bytes_for_internal_format(t.internal_format);
         if (!bpp) return;
+        t.allocate();
         char *src = (char*)data;
         assert(xoffset + width <= t.width);
         assert(yoffset + height <= t.height);
@@ -919,6 +947,10 @@ void RenderbufferStorage(
             // Force depth format to 16 bits...
             internalformat = GL_DEPTH_COMPONENT16;
             break;
+        case GL_R8:
+            // Force color format to 32 bits...
+            internalformat = GL_RGBA8;
+            break;
     }
     TexStorage2D(target, 1, internalformat, width, height);
 }
@@ -927,7 +959,8 @@ int bytes_per_type(GLenum type) {
         switch (type) {
                 case GL_INT: return 4;
                 case GL_FLOAT: return 4;
-                case GL_UNSIGNED_SHORT: return 4;
+                case GL_UNSIGNED_SHORT: return 2;
+                case GL_UNSIGNED_BYTE: return 1;
                 default: assert(0);
         }
 }
@@ -1038,6 +1071,7 @@ void FramebufferTexture2D(
         GLint level)
 {
         if (attachment == GL_COLOR_ATTACHMENT0) {
+               textures[texture].make_renderable();
                Framebuffer &fb = framebuffers[current_framebuffer[target]];
                fb.color_attachment = texture;
                fb.layer = 0;
@@ -1059,6 +1093,7 @@ void FramebufferTextureLayer(
         assert(level == 0);
         assert(target == GL_READ_FRAMEBUFFER || target == GL_DRAW_FRAMEBUFFER);
         if (attachment == GL_COLOR_ATTACHMENT0) {
+               textures[texture].make_renderable();
                Framebuffer &fb = framebuffers[current_framebuffer[target]];
                fb.color_attachment = texture;
                fb.layer = layer;
@@ -1082,8 +1117,10 @@ void FramebufferRenderbuffer(
     if (attachment == GL_COLOR_ATTACHMENT0) {
         fb.color_attachment = rb.texture;
         fb.layer = 0;
+        textures[rb.texture].make_renderable();
     } else if (attachment == GL_DEPTH_ATTACHMENT) {
         fb.depth_attachment = rb.texture;
+        textures[rb.texture].make_renderable();
     }
 }
 
@@ -1114,9 +1151,11 @@ Framebuffer &get_draw_framebuffer() {
     fb.layer = 0;
     current_texture[GL_DRAW_FRAMEBUFFER] = fb.color_attachment;
     TexStorage2D(GL_DRAW_FRAMEBUFFER, 1, GL_RGBA8, width, height);
+    textures[fb.color_attachment].make_renderable();
     GenTextures(1, &fb.depth_attachment);
     current_texture[GL_DRAW_FRAMEBUFFER] = fb.depth_attachment;
     TexStorage2D(GL_DRAW_FRAMEBUFFER, 1, GL_DEPTH_COMPONENT16, width, height);
+    textures[fb.depth_attachment].make_renderable();
     return fb;
 }
 
@@ -1178,6 +1217,7 @@ void ReadPixels(GLint x, GLint y, GLsizei width, GLsizei height, GLenum format, 
     if (!fb) return;
     assert(format == GL_RED || GL_RGBA || GL_RGBA_INTEGER);
     Texture &t = textures[fb->color_attachment];
+    if (!t.buf) return;
     printf("read pixels %d, %d, %d, %d from fb %d with format %x\n", x, y, width, height, current_framebuffer[GL_READ_FRAMEBUFFER], t.internal_format);
     assert(x + width <= t.width);
     assert(y + height <= t.height);
