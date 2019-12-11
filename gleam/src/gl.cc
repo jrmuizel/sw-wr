@@ -470,7 +470,7 @@ sampler2D lookup_sampler(sampler2D_impl *s, int texture) {
             Texture &t = textures[texture_slots[texture]];
             s->width = t.width;
             s->height = t.height;
-            s->stride = bytes_for_internal_format(t.internal_format) * t.width;
+            s->stride = bytes_for_internal_format(t.internal_format) * t.width / 4;
             s->buf = (uint32_t*)t.buf; //XXX: wrong
             s->format = gl_format_to_texture_format(t.internal_format);
             s->filter = gl_filter_to_texture_filter(t.mag_filter);
@@ -489,7 +489,7 @@ isampler2D lookup_isampler(isampler2D_impl *s, int texture) {
             Texture &t = textures[texture_slots[texture]];
             s->width = t.width;
             s->height = t.height;
-            s->stride = bytes_for_internal_format(t.internal_format) * t.width;
+            s->stride = bytes_for_internal_format(t.internal_format) * t.width / 4;
             s->buf = (uint32_t*)t.buf; //XXX: wrong
             s->format = gl_format_to_texture_format(t.internal_format);
         }
@@ -512,7 +512,7 @@ sampler2DArray lookup_sampler_array(sampler2DArray_impl *s, int texture) {
             s->height = t.height;
             s->depth = t.depth;
             s->stride = bytes_for_internal_format(t.internal_format) * t.width;
-            s->height_stride = bytes_for_internal_format(t.internal_format) * t.width * t.height;
+            s->height_stride = bytes_for_internal_format(t.internal_format) * t.width * t.height / 4;
             s->buf = (uint32_t*)t.buf; //XXX: wrong
             s->format = gl_format_to_texture_format(t.internal_format);
             s->filter = gl_filter_to_texture_filter(t.mag_filter);

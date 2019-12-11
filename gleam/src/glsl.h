@@ -1552,8 +1552,8 @@ enum TextureFilter {
 
 struct sampler2DArray_impl {
         uint32_t *buf;
-        uint32_t stride; // in bytes
-        uint32_t height_stride; // in bytes
+        uint32_t stride; // in dwords
+        uint32_t height_stride; // in dwords
         uint32_t height;
         uint32_t width;
         uint32_t depth;
@@ -1566,7 +1566,7 @@ typedef sampler2DArray_impl *sampler2DArray;
 
 struct sampler2D_impl {
         uint32_t *buf;
-        uint32_t stride; // in bytes
+        uint32_t stride; // in dwords
         uint32_t height;
         uint32_t width;
         TextureFormat format;
@@ -1577,7 +1577,7 @@ typedef sampler2D_impl *sampler2D;
 
 struct isampler2D_impl {
         uint32_t *buf;
-        uint32_t stride;
+        uint32_t stride; // in dwords
         uint32_t height;
         uint32_t width;
         TextureFormat format;
@@ -1899,7 +1899,7 @@ vec4_scalar pixel_to_vec4(uint32_t p) {
                        to_float((p >> 24) & 0xFF)};
 }
 vec4 texelFetchByte(sampler2D sampler, ivec2 P, int lod) {
-        I32 offset = P.x + P.y*(sampler->stride/4);
+        I32 offset = P.x + P.y*sampler->stride;
         return pixel_to_vec4(
                       sampler->buf[offset.x],
                       sampler->buf[offset.y],
@@ -1907,7 +1907,7 @@ vec4 texelFetchByte(sampler2D sampler, ivec2 P, int lod) {
                       sampler->buf[offset.w]);
 }
 vec4 texelFetchByte(sampler2DArray sampler, ivec3 P, int lod) {
-        I32 offset = P.x + P.y*(sampler->stride/4) + P.z*(sampler->height_stride/4);
+        I32 offset = P.x + P.y*sampler->stride + P.z*sampler->height_stride;
         return pixel_to_vec4(
                       sampler->buf[offset.x],
                       sampler->buf[offset.y],
@@ -1917,7 +1917,7 @@ vec4 texelFetchByte(sampler2DArray sampler, ivec3 P, int lod) {
 
 
 vec4 texelFetchFloat(sampler2D sampler, ivec2 P, int lod) {
-        I32 offset = P.x*4 + P.y*(sampler->stride/4);
+        I32 offset = P.x*4 + P.y*sampler->stride;
         return pixel_float_to_vec4(
                       *(Float*)&sampler->buf[offset.x],
                       *(Float*)&sampler->buf[offset.y],
@@ -1926,7 +1926,7 @@ vec4 texelFetchFloat(sampler2D sampler, ivec2 P, int lod) {
 }
 
 vec4 texelFetchFloat(sampler2DArray sampler, ivec3 P, int lod) {
-        I32 offset = P.x*4 + P.y*(sampler->stride/4) + P.z*(sampler->height_stride/4);
+        I32 offset = P.x*4 + P.y*sampler->stride + P.z*sampler->height_stride;
         return pixel_float_to_vec4(
                       *(Float*)&sampler->buf[offset.x],
                       *(Float*)&sampler->buf[offset.y],
@@ -1948,7 +1948,7 @@ vec4 texelFetch(sampler2D sampler, ivec2 P, int lod) {
 
 vec4_scalar texelFetch(sampler2D sampler, ivec2_scalar P, int lod) {
         P = clamp2D(P, sampler);
-        return pixel_to_vec4(sampler->buf[P.x + P.y * sampler->stride/4]);
+        return pixel_to_vec4(sampler->buf[P.x + P.y * sampler->stride]);
 }
 
 vec4 texelFetch(sampler2DArray sampler, ivec3 P, int lod) {
@@ -1966,7 +1966,7 @@ vec4 texelFetch(sampler2DArray sampler, ivec3 P, int lod) {
 ivec4 texelFetch(isampler2D sampler, ivec2 P, int lod) {
         P = clamp2D(P, sampler);
         assert(sampler->format == TextureFormat::RGBA32I);
-        I32 offset = P.x*4 + P.y*(sampler->stride/4);
+        I32 offset = P.x*4 + P.y*sampler->stride;
         return pixel_int_to_ivec4(
                       *(I32*)&sampler->buf[offset.x],
                       *(I32*)&sampler->buf[offset.y],
@@ -2067,7 +2067,7 @@ vec4 texture(sampler2DArray sampler, vec3 P, Float layer) {
 }
 vec4 texture(sampler2DArray sampler, vec3 P) {
     if (sampler->filter == TextureFilter::LINEAR) {
-        I32 zoffset = clampCoord(_mm_cvtps_epi32(P.z), sampler->depth) * (sampler->height_stride/4);
+        I32 zoffset = clampCoord(_mm_cvtps_epi32(P.z), sampler->depth) * sampler->height_stride;
         return textureLinear(sampler, vec2(P.x, P.y), zoffset);
     } else {
         // just do nearest for now
