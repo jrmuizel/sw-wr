@@ -1071,7 +1071,6 @@ void FramebufferTexture2D(
         GLint level)
 {
         if (attachment == GL_COLOR_ATTACHMENT0) {
-               textures[texture].make_renderable();
                Framebuffer &fb = framebuffers[current_framebuffer[target]];
                fb.color_attachment = texture;
                fb.layer = 0;
@@ -1093,7 +1092,6 @@ void FramebufferTextureLayer(
         assert(level == 0);
         assert(target == GL_READ_FRAMEBUFFER || target == GL_DRAW_FRAMEBUFFER);
         if (attachment == GL_COLOR_ATTACHMENT0) {
-               textures[texture].make_renderable();
                Framebuffer &fb = framebuffers[current_framebuffer[target]];
                fb.color_attachment = texture;
                fb.layer = layer;
@@ -1117,10 +1115,8 @@ void FramebufferRenderbuffer(
     if (attachment == GL_COLOR_ATTACHMENT0) {
         fb.color_attachment = rb.texture;
         fb.layer = 0;
-        textures[rb.texture].make_renderable();
     } else if (attachment == GL_DEPTH_ATTACHMENT) {
         fb.depth_attachment = rb.texture;
-        textures[rb.texture].make_renderable();
     }
 }
 
@@ -1151,11 +1147,9 @@ Framebuffer &get_draw_framebuffer() {
     fb.layer = 0;
     current_texture[GL_DRAW_FRAMEBUFFER] = fb.color_attachment;
     TexStorage2D(GL_DRAW_FRAMEBUFFER, 1, GL_RGBA8, width, height);
-    textures[fb.color_attachment].make_renderable();
     GenTextures(1, &fb.depth_attachment);
     current_texture[GL_DRAW_FRAMEBUFFER] = fb.depth_attachment;
     TexStorage2D(GL_DRAW_FRAMEBUFFER, 1, GL_DEPTH_COMPONENT16, width, height);
-    textures[fb.depth_attachment].make_renderable();
     return fb;
 }
 
@@ -1192,6 +1186,7 @@ void Clear(GLbitfield mask) {
     Framebuffer& fb = get_draw_framebuffer();
     if ((mask & GL_COLOR_BUFFER_BIT) && fb.color_attachment) {
         Texture& t = textures[fb.color_attachment];
+        t.make_renderable();
         if (t.internal_format == GL_RGBA8) {
             __m128 colorf = _mm_loadu_ps(clearcolor);
             __m128i colori = _mm_cvtps_epi32(_mm_mul_ps(colorf, _mm_set1_ps(255.5f)));
@@ -1205,6 +1200,7 @@ void Clear(GLbitfield mask) {
     }
     if ((mask & GL_DEPTH_BUFFER_BIT) && fb.depth_attachment) {
         Texture& t = textures[fb.depth_attachment];
+        t.make_renderable();
         assert(t.internal_format == GL_DEPTH_COMPONENT16);
         uint16_t depth = uint16_t(0xFFFF * cleardepth) - 0x8000;
         __m128i depthi = _mm_set1_epi16(depth);
@@ -1454,12 +1450,14 @@ static inline void commit_output(uint32_t* buf, int span) {
 void draw_quad(int nump) {
         Framebuffer& fb = get_draw_framebuffer();
         Texture& colortex = textures[fb.color_attachment];
+        colortex.make_renderable();
         assert(colortex.internal_format == GL_RGBA8);
         static Texture nodepthtex;
         Texture& depthtex = depthtest && fb.depth_attachment ? textures[fb.depth_attachment] : nodepthtex;
         if (&depthtex != &nodepthtex) {
             assert(depthtex.internal_format == GL_DEPTH_COMPONENT16);
             assert(colortex.width == depthtex.width && colortex.height == depthtex.height);
+            depthtex.make_renderable();
         }
         float fx0 = 0;
         float fy0 = 0;
