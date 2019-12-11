@@ -1993,13 +1993,13 @@ vec4 textureLinear(S sampler, vec2 P, I32 zoffset = 0) {
     i >>= 8;
 
     __m128i row0 = _mm_min_epi16(_mm_max_epi16(i.y, _mm_setzero_si128()), _mm_set1_epi32(sampler->height - 1));
-    row0 = _mm_madd_epi16(row0, _mm_set1_epi32(sampler->stride>>2));
+    row0 = _mm_madd_epi16(row0, _mm_set1_epi32(sampler->stride));
     row0 = _mm_add_epi32(row0, _mm_min_epi16(_mm_max_epi16(i.x, _mm_setzero_si128()), _mm_set1_epi32(sampler->width - 2)));
     row0 = _mm_add_epi32(row0, zoffset);
 
     __m128i yinside = _mm_andnot_si128(_mm_cmplt_epi32(i.y, _mm_setzero_si128()),
                                        _mm_cmplt_epi32(i.y, _mm_set1_epi32(sampler->height - 1)));
-    __m128i row1 = _mm_add_epi32(row0, _mm_and_si128(yinside, _mm_set1_epi32(sampler->stride>>2)));
+    __m128i row1 = _mm_add_epi32(row0, _mm_and_si128(yinside, _mm_set1_epi32(sampler->stride)));
 
     __m128i xlt = _mm_cmplt_epi32(i.x, _mm_setzero_si128());
     __m128i xgt = _mm_cmpgt_epi32(i.x, _mm_set1_epi32(sampler->width - 2));

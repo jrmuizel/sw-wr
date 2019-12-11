@@ -511,7 +511,7 @@ sampler2DArray lookup_sampler_array(sampler2DArray_impl *s, int texture) {
             s->width = t.width;
             s->height = t.height;
             s->depth = t.depth;
-            s->stride = bytes_for_internal_format(t.internal_format) * t.width;
+            s->stride = bytes_for_internal_format(t.internal_format) * t.width / 4;
             s->height_stride = bytes_for_internal_format(t.internal_format) * t.width * t.height / 4;
             s->buf = (uint32_t*)t.buf; //XXX: wrong
             s->format = gl_format_to_texture_format(t.internal_format);
