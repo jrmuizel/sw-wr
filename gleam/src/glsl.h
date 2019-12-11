@@ -630,14 +630,19 @@ struct ivec2 {
         ivec4 sel(XYZW c1, XYZW c2, XYZW c3, XYZW c4);
 
 
-        ivec2 operator*=(I32 a) {
+        ivec2& operator*=(I32 a) {
                 x *= a;
                 y *= a;
                 return *this;
         }
-        ivec2 operator+=(ivec2 a) {
+        ivec2& operator+=(ivec2 a) {
                 x += a.x;
                 y += a.y;
+                return *this;
+        }
+        ivec2& operator>>=(int shift) {
+                x >>= shift;
+                y >>= shift;
                 return *this;
         }
 
@@ -647,11 +652,12 @@ struct ivec2 {
         friend ivec2 operator&(ivec2 a, ivec2 b) {
                 return ivec2(a.x&b.x, a.y&b.y);
         }
-
+        friend ivec2 operator&(ivec2 a, I32 b) {
+                return ivec2(a.x&b, a.y&b);
+        }
         friend ivec2 operator+(ivec2 a, ivec2 b) {
                 return ivec2(a.x+b.x, a.y+b.y);
         }
-
 };
 
 vec2::vec2(ivec2 a) : x(cast(a.x)), y(cast(a.y)) {}
@@ -1857,65 +1863,17 @@ template<typename T> SI T clamp2DArray(T P, sampler2DArray sampler) {
     return T{clampCoord(P.x, sampler->width), clampCoord(P.y, sampler->height), clampCoord(P.z, sampler->depth)};
 }
 
-uint32_t fetchPixel(isampler2D sampler, int x, int y) {
-        return sampler->buf[x  + y * sampler->stride/4];
-}
-
-uint32_t fetchPixel(sampler2D sampler, int x, int y) {
-        return sampler->buf[x  + y * sampler->stride/4];
-}
-
-uint32_t fetchPixel(sampler2DArray sampler, int x, int y, int z) {
-        return sampler->buf[x  + y * sampler->stride/4 + z * sampler->height_stride/4];
-}
-
-
-
-Float fetchPixelFloat(sampler2D sampler, int x, int y) {
-        return Float{
-                ((float*)sampler->buf)[x*4  + y * sampler->stride/4],
-                ((float*)sampler->buf)[x*4  + y * sampler->stride/4 + 1],
-                ((float*)sampler->buf)[x*4  + y * sampler->stride/4 + 2],
-                ((float*)sampler->buf)[x*4  + y * sampler->stride/4 + 3]};
-}
-
-Float fetchPixelFloat(sampler2DArray sampler, int x, int y, int z) {
-        return Float{
-                ((float*)sampler->buf)[x*4  + y * sampler->stride/4 + z * sampler->height_stride/4],
-                ((float*)sampler->buf)[x*4  + y * sampler->stride/4 + z * sampler->height_stride/4 + 1],
-                ((float*)sampler->buf)[x*4  + y * sampler->stride/4 + z * sampler->height_stride/4 + 2],
-                ((float*)sampler->buf)[x*4  + y * sampler->stride/4 + z * sampler->height_stride/4 + 3]};
-}
-
-
-I32 fetchPixelInt(isampler2D sampler, int x, int y) {
-        return I32{
-                ((int*)sampler->buf)[x*4  + y * sampler->stride/4],
-                ((int*)sampler->buf)[x*4  + y * sampler->stride/4 + 1],
-                ((int*)sampler->buf)[x*4  + y * sampler->stride/4 + 2],
-                ((int*)sampler->buf)[x*4  + y * sampler->stride/4 + 3]};
-}
-
 float to_float(uint32_t x) {
         return x * (1.f/255.f);
 }
 
-Float extract_component(uint32_t a, uint32_t b, uint32_t c, uint32_t d, int shift) {
-        int mask = 0xff << shift;
-        Float ret = {
-                to_float((a & mask) >> shift),
-                to_float((b & mask) >> shift),
-                to_float((c & mask) >> shift),
-                to_float((d & mask) >> shift)};
-        return ret;
-}
-
-// This needs to be faster
-vec4 pixel_to_vec4(uint32_t a, uint32_t b, uint32_t c, uint32_t d) {
-      return vec4(extract_component(a, b, c, d, 16),
-           extract_component(a, b, c, d, 8),
-           extract_component(a, b, c, d, 0),
-           extract_component(a, b, c, d, 24));
+vec4 pixel_to_vec4(int a, int b, int c, int d) {
+    I32 pixels = { a, b, c, d };
+    return vec4(
+        cast((pixels >> 16) & 0xFF),
+        cast((pixels >> 8) & 0xFF),
+        cast(pixels & 0xFF),
+        cast(pixels >> 24)) * (1.0f / 255.0f);
 }
 
 vec4 pixel_float_to_vec4(Float a, Float b, Float c, Float d) {
@@ -1941,39 +1899,39 @@ vec4_scalar pixel_to_vec4(uint32_t p) {
                        to_float((p >> 24) & 0xFF)};
 }
 vec4 texelFetchByte(sampler2D sampler, ivec2 P, int lod) {
+        I32 offset = P.x + P.y*(sampler->stride/4);
         return pixel_to_vec4(
-                      fetchPixel(sampler, P.x.x, P.y.x),
-                      fetchPixel(sampler, P.x.y, P.y.y),
-                      fetchPixel(sampler, P.x.z, P.y.z),
-                      fetchPixel(sampler, P.x.w, P.y.w)
-                      );
+                      sampler->buf[offset.x],
+                      sampler->buf[offset.y],
+                      sampler->buf[offset.z],
+                      sampler->buf[offset.w]);
 }
 vec4 texelFetchByte(sampler2DArray sampler, ivec3 P, int lod) {
+        I32 offset = P.x + P.y*(sampler->stride/4) + P.z*(sampler->height_stride/4);
         return pixel_to_vec4(
-                      fetchPixel(sampler, P.x.x, P.y.x, P.z.x),
-                      fetchPixel(sampler, P.x.y, P.y.y, P.z.y),
-                      fetchPixel(sampler, P.x.z, P.y.z, P.z.z),
-                      fetchPixel(sampler, P.x.w, P.y.w, P.z.w)
-                      );
+                      sampler->buf[offset.x],
+                      sampler->buf[offset.y],
+                      sampler->buf[offset.z],
+                      sampler->buf[offset.w]);
 }
 
 
 vec4 texelFetchFloat(sampler2D sampler, ivec2 P, int lod) {
+        I32 offset = P.x*4 + P.y*(sampler->stride/4);
         return pixel_float_to_vec4(
-                      fetchPixelFloat(sampler, P.x.x, P.y.x),
-                      fetchPixelFloat(sampler, P.x.y, P.y.y),
-                      fetchPixelFloat(sampler, P.x.z, P.y.z),
-                      fetchPixelFloat(sampler, P.x.w, P.y.w)
-                      );
+                      *(Float*)&sampler->buf[offset.x],
+                      *(Float*)&sampler->buf[offset.y],
+                      *(Float*)&sampler->buf[offset.z],
+                      *(Float*)&sampler->buf[offset.w]);
 }
 
 vec4 texelFetchFloat(sampler2DArray sampler, ivec3 P, int lod) {
+        I32 offset = P.x*4 + P.y*(sampler->stride/4) + P.z*(sampler->height_stride/4);
         return pixel_float_to_vec4(
-                      fetchPixelFloat(sampler, P.x.x, P.y.x, P.z.x),
-                      fetchPixelFloat(sampler, P.x.y, P.y.y, P.z.y),
-                      fetchPixelFloat(sampler, P.x.z, P.y.z, P.z.z),
-                      fetchPixelFloat(sampler, P.x.w, P.y.w, P.z.w)
-                      );
+                      *(Float*)&sampler->buf[offset.x],
+                      *(Float*)&sampler->buf[offset.y],
+                      *(Float*)&sampler->buf[offset.z],
+                      *(Float*)&sampler->buf[offset.w]);
 }
 
 
@@ -1990,7 +1948,7 @@ vec4 texelFetch(sampler2D sampler, ivec2 P, int lod) {
 
 vec4_scalar texelFetch(sampler2D sampler, ivec2_scalar P, int lod) {
         P = clamp2D(P, sampler);
-        return pixel_to_vec4(fetchPixel(sampler, P.x, P.y));
+        return pixel_to_vec4(sampler->buf[P.x + P.y * sampler->stride/4]);
 }
 
 vec4 texelFetch(sampler2DArray sampler, ivec3 P, int lod) {
@@ -2008,12 +1966,12 @@ vec4 texelFetch(sampler2DArray sampler, ivec3 P, int lod) {
 ivec4 texelFetch(isampler2D sampler, ivec2 P, int lod) {
         P = clamp2D(P, sampler);
         assert(sampler->format == TextureFormat::RGBA32I);
+        I32 offset = P.x*4 + P.y*(sampler->stride/4);
         return pixel_int_to_ivec4(
-                      fetchPixelInt(sampler, P.x.x, P.y.x),
-                      fetchPixelInt(sampler, P.x.y, P.y.y),
-                      fetchPixelInt(sampler, P.x.z, P.y.z),
-                      fetchPixelInt(sampler, P.x.w, P.y.w)
-                      );
+                      *(I32*)&sampler->buf[offset.x],
+                      *(I32*)&sampler->buf[offset.y],
+                      *(I32*)&sampler->buf[offset.z],
+                      *(I32*)&sampler->buf[offset.w]);
 }
 
 template <typename T, typename U, typename A, typename R = typename T::vector_type>
@@ -2027,12 +1985,12 @@ SI Float mix(Float x, Float y, Float a) {
 
 template<typename S>
 vec4 textureLinear(S sampler, vec2 P, I32 zoffset = 0) {
-    P.x *= sampler->width;
-    P.y *= sampler->height;
-    P -= 0.5f;
-    vec2 f = floor(P);
-    vec2 r = P - f;
-    ivec2 i((I32)_mm_cvtps_epi32(f.x), (I32)_mm_cvtps_epi32(f.y));
+    P.x *= sampler->width * 256.0f;
+    P.y *= sampler->height * 256.0f;
+    P -= 0.5f * 256.0f;
+    ivec2 i(P);
+    ivec2 frac = i & (I32)0xFF;
+    i >>= 8;
 
     __m128i row0 = _mm_min_epi16(_mm_max_epi16(i.y, _mm_setzero_si128()), _mm_set1_epi32(sampler->height - 1));
     row0 = _mm_madd_epi16(row0, _mm_set1_epi32(sampler->stride>>2));
@@ -2045,15 +2003,13 @@ vec4 textureLinear(S sampler, vec2 P, I32 zoffset = 0) {
 
     __m128i xlt = _mm_cmplt_epi32(i.x, _mm_setzero_si128());
     __m128i xgt = _mm_cmpgt_epi32(i.x, _mm_set1_epi32(sampler->width - 2));
-    __m128i fracx = _mm_cvtps_epi32(r.x * 256.0f);
-    fracx = _mm_or_si128(_mm_andnot_si128(_mm_or_si128(xlt, xgt), fracx),
-                         _mm_and_si128(xgt, _mm_set1_epi32(256)));
+    __m128i fracx = _mm_or_si128(_mm_andnot_si128(_mm_or_si128(xlt, xgt), frac.x),
+                                 _mm_and_si128(xgt, _mm_set1_epi32(256)));
     fracx = _mm_shufflelo_epi16(fracx, _MM_SHUFFLE(2, 2, 0, 0));
     fracx = _mm_shufflehi_epi16(fracx, _MM_SHUFFLE(2, 2, 0, 0));
     fracx = _mm_slli_epi16(fracx, 4);
 
-    __m128i fracy = _mm_cvtps_epi32(r.y * 256.0f);
-    fracy = _mm_or_si128(_mm_slli_epi32(fracy, 16), _mm_sub_epi32(_mm_set1_epi32(256), fracy));
+    __m128i fracy = _mm_or_si128(_mm_slli_epi32(frac.y, 16), _mm_sub_epi32(_mm_set1_epi32(256), frac.y));
 
 // r0,g0,b0,a0,r1,g1,b1,a1 \/ R0,G0,B0,A0,R1,G1,B1,A1
 // r0,R0,g0,G0,b0,B0,a0,A0,r1,R1,g1,G1,b1,B1,a1,A1
