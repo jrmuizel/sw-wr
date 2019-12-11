@@ -795,13 +795,16 @@ static void read_flat_inputs(Self *self, const FlatInputs *src) {
   self->vUvBorder = src->vUvBorder;
   self->vMaskSwizzle = src->vMaskSwizzle;
 }
-static void read_interp_inputs(Self *self, const InterpInputs *init, const InterpInputs *step) {
+InterpInputs interp_step;
+static void read_interp_inputs(Self *self, const InterpInputs *init, const InterpInputs *step, float step_width) {
   self->vClipMaskUv = init_interp(init->vClipMaskUv, step->vClipMaskUv);
+  self->interp_step.vClipMaskUv = step->vClipMaskUv * step_width;
   self->vUv = init_interp(init->vUv, step->vUv);
+  self->interp_step.vUv = step->vUv * step_width;
 }
-ALWAYS_INLINE void step_interp_inputs(const InterpInputs* step) {
-  vClipMaskUv += step->vClipMaskUv;
-  vUv += step->vUv;
+ALWAYS_INLINE void step_interp_inputs() {
+  vClipMaskUv += interp_step.vClipMaskUv;
+  vUv += interp_step.vUv;
 }
 static void bind_textures(Self *self, ps_text_runDUAL_SOURCE_BLENDING_program *prog) {
  self->sColor0 = lookup_sampler_array(&prog->samplers.sColor0_impl, prog->samplers.sColor0_slot);
@@ -891,12 +894,12 @@ ALWAYS_INLINE void main(void) {
  oFragBlend = (alpha_mask)*((vColor).sel(A));
 }
 static bool use_discard(Self*) { return false; }
-static void run(Self *self, const InterpInputs* step) {
+static void run(Self *self) {
  self->main();
- self->step_interp_inputs(step);
+ self->step_interp_inputs();
 }
-static void skip(Self *self, const InterpInputs* step) {
- self->step_interp_inputs(step);
+static void skip(Self *self) {
+ self->step_interp_inputs();
 }
 void init_shader() {
  set_uniform_1i_func = (SetUniform1iFunc)&set_uniform_1i;

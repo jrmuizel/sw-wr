@@ -647,11 +647,13 @@ static void read_flat_inputs(Self *self, const FlatInputs *src) {
   self->vClipMaskUvBounds = src->vClipMaskUvBounds;
   self->vColor = src->vColor;
 }
-static void read_interp_inputs(Self *self, const InterpInputs *init, const InterpInputs *step) {
+InterpInputs interp_step;
+static void read_interp_inputs(Self *self, const InterpInputs *init, const InterpInputs *step, float step_width) {
   self->vClipMaskUv = init_interp(init->vClipMaskUv, step->vClipMaskUv);
+  self->interp_step.vClipMaskUv = step->vClipMaskUv * step_width;
 }
-ALWAYS_INLINE void step_interp_inputs(const InterpInputs* step) {
-  vClipMaskUv += step->vClipMaskUv;
+ALWAYS_INLINE void step_interp_inputs() {
+  vClipMaskUv += interp_step.vClipMaskUv;
 }
 static void bind_textures(Self *self, brush_solid_program *prog) {
  self->sGpuCache = lookup_sampler(&prog->samplers.sGpuCache_impl, prog->samplers.sGpuCache_slot);
@@ -733,12 +735,12 @@ ALWAYS_INLINE void main(void) {
  write_output((frag).color);
 }
 static bool use_discard(Self*) { return false; }
-static void run(Self *self, const InterpInputs* step) {
+static void run(Self *self) {
  self->main();
- self->step_interp_inputs(step);
+ self->step_interp_inputs();
 }
-static void skip(Self *self, const InterpInputs* step) {
- self->step_interp_inputs(step);
+static void skip(Self *self) {
+ self->step_interp_inputs();
 }
 void init_shader() {
  set_uniform_1i_func = (SetUniform1iFunc)&set_uniform_1i;

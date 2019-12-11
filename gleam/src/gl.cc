@@ -268,9 +268,9 @@ GLuint current_program = 0;
 struct FragmentShaderImpl : ShaderImpl {
     typedef void (*InitBatchFunc)(FragmentShaderImpl*, ProgramImpl *prog);
     typedef void (*InitPrimitiveFunc)(FragmentShaderImpl*, const void* flats);
-    typedef void (*InitSpanFunc)(FragmentShaderImpl*, const void* interps, const void* step);
-    typedef void (*RunFunc)(FragmentShaderImpl*, const void* step);
-    typedef void (*SkipFunc)(FragmentShaderImpl*, const void* step);
+    typedef void (*InitSpanFunc)(FragmentShaderImpl*, const void* interps, const void* step, float step_width);
+    typedef void (*RunFunc)(FragmentShaderImpl*);
+    typedef void (*SkipFunc)(FragmentShaderImpl*);
     typedef bool (*UseDiscardFunc)(FragmentShaderImpl*);
 
     InitBatchFunc init_batch_func = nullptr;
@@ -299,16 +299,16 @@ struct FragmentShader : ShaderCommon<FragmentShaderImpl> {
         (*init_primitive_func)(this, flats);
     }
 
-    ALWAYS_INLINE void init_span(const void* interps, const void* step) {
-        (*init_span_func)(this, interps, step);
+    ALWAYS_INLINE void init_span(const void* interps, const void* step, float step_width) {
+        (*init_span_func)(this, interps, step, step_width);
     }
 
-    ALWAYS_INLINE void run(const void* step) {
-        (*run_func)(this, step);
+    ALWAYS_INLINE void run() {
+        (*run_func)(this);
     }
 
-    ALWAYS_INLINE void skip(const void* step) {
-        (*skip_func)(this, step);
+    ALWAYS_INLINE void skip() {
+        (*skip_func)(this);
     }
 
     ALWAYS_INLINE bool use_discard() {
@@ -1411,8 +1411,8 @@ static const size_t MAX_INTERPOLANTS = 16;
 typedef float Interpolants __attribute__((ext_vector_type(MAX_INTERPOLANTS)));
 
 template<bool DISCARD>
-static inline void commit_output(uint32_t* buf, const Interpolants& step, __m128i mask = _mm_setzero_si128()) {
-    fragment_shader.run(&step);
+static inline void commit_output(uint32_t* buf, __m128i mask = _mm_setzero_si128()) {
+    fragment_shader.run();
     __m128i dst = _mm_loadu_si128((__m128i*)buf);
     __m128i r = blend ? blend_pixels(dst) : pack_pixels();
     if (DISCARD) mask = _mm_or_si128(mask, fragment_shader.isPixelDiscarded);
@@ -1422,33 +1422,33 @@ static inline void commit_output(uint32_t* buf, const Interpolants& step, __m128
 }
 
 template<>
-static inline void commit_output<false>(uint32_t* buf, const Interpolants& step, __m128i mask) {
-    fragment_shader.run(&step);
+static inline void commit_output<false>(uint32_t* buf, __m128i mask) {
+    fragment_shader.run();
     __m128i r = blend ? blend_pixels(_mm_loadu_si128((__m128i*)buf)) : pack_pixels();
     _mm_storeu_si128((__m128i*)buf, r);
 }
 
 template<bool DISCARD>
-static inline void commit_output(uint32_t* buf, uint16_t z, uint16_t* zbuf, const Interpolants& step) {
+static inline void commit_output(uint32_t* buf, uint16_t z, uint16_t* zbuf) {
     __m128i mask;
     if (check_depth<1>(z, zbuf, mask)) {
-        commit_output<DISCARD>(buf, step, mask);
+        commit_output<DISCARD>(buf, mask);
     } else {
-        fragment_shader.skip(&step);
+        fragment_shader.skip();
     }
 }
 
 template<bool DISCARD>
-static inline void commit_output(uint32_t* buf, uint16_t z, uint16_t* zbuf, const Interpolants& step, int span) {
+static inline void commit_output(uint32_t* buf, uint16_t z, uint16_t* zbuf, int span) {
     __m128i mask;
     if (check_depth<0>(z, zbuf, mask, span)) {
-        commit_output<DISCARD>(buf, step, mask);
+        commit_output<DISCARD>(buf, mask);
     }
 }
 
 template<bool DISCARD>
-static inline void commit_output(uint32_t* buf, const Interpolants& step, int span) {
-    commit_output<DISCARD>(buf, step, _mm_cmplt_epi32(_mm_set1_epi32(span), _mm_set_epi32(4, 3, 2, 1)));
+static inline void commit_output(uint32_t* buf, int span) {
+    commit_output<DISCARD>(buf, _mm_cmplt_epi32(_mm_set1_epi32(span), _mm_set_epi32(4, 3, 2, 1)));
 }
 
 void draw_quad(int nump) {
@@ -1597,12 +1597,11 @@ void draw_quad(int nump) {
                 shaded_pixels += span;
                 fragment_shader.gl_FragCoord.x = init_interp(startx + 0.5f, 1);
                 fragment_shader.gl_FragCoord.y = y;
-                Interpolants stepo = (ro - lo) * (1.0f / (rx - lx));
                 {
-                    Interpolants o = lo + stepo * (startx + 0.5f - lx);
-                    fragment_shader.init_span(&o, &stepo);
+                    Interpolants step = (ro - lo) * (1.0f / (rx - lx));
+                    Interpolants o = lo + step * (startx + 0.5f - lx);
+                    fragment_shader.init_span(&o, &step, 4.0f);
                 }
-                stepo *= 4;
                 uint32_t* buf = fbuf + startx;
                 uint16_t* depth = fdepth + startx;
                 if (!fragment_shader.use_discard()) {
@@ -1611,47 +1610,47 @@ void draw_quad(int nump) {
                             __m128i zmask;
                             switch (check_depth<2>(z, depth, zmask)) {
                             case 0:
-                                fragment_shader.skip(&stepo);
-                                fragment_shader.skip(&stepo);
+                                fragment_shader.skip();
+                                fragment_shader.skip();
                                 break;
                             case -1:
-                                commit_output<false>(buf, stepo);
-                                commit_output<false>(buf + 4, stepo);
+                                commit_output<false>(buf);
+                                commit_output<false>(buf + 4);
                                 break;
                             default:
-                                commit_output<false>(buf, stepo, _mm_unpacklo_epi16(zmask, zmask));
-                                commit_output<false>(buf + 4, stepo, _mm_unpackhi_epi16(zmask, zmask));
+                                commit_output<false>(buf, _mm_unpacklo_epi16(zmask, zmask));
+                                commit_output<false>(buf + 4, _mm_unpackhi_epi16(zmask, zmask));
                                 break;
                             }
                         }
                         for (; span >= 4; span -= 4, buf += 4, depth += 4) {
-                            commit_output<false>(buf, z, depth, stepo);
+                            commit_output<false>(buf, z, depth);
                         }
                         if (span > 0) {
-                            commit_output<false>(buf, z, depth, stepo, span);
+                            commit_output<false>(buf, z, depth, span);
                         }
                     } else {
                         for (; span >= 4; span -= 4, buf += 4) {
-                            commit_output<false>(buf, stepo);
+                            commit_output<false>(buf);
                         }
                         if (span > 0) {
-                            commit_output<false>(buf, stepo, span);
+                            commit_output<false>(buf, span);
                         }
                     }
                 } else {
                     if (fdepth) {
                         for (; span >= 4; span -= 4, buf += 4, depth += 4) {
-                            commit_output<true>(buf, z, depth, stepo);
+                            commit_output<true>(buf, z, depth);
                         }
                         if (span > 0) {
-                            commit_output<true>(buf, z, depth, stepo, span);
+                            commit_output<true>(buf, z, depth, span);
                         }
                     } else {
                         for (; span >= 4; span -= 4, buf += 4, depth += 4) {
-                            commit_output<true>(buf, stepo);
+                            commit_output<true>(buf);
                         }
                         if (span > 0) {
-                            commit_output<true>(buf, stepo, span);
+                            commit_output<true>(buf, span);
                         }
                     }
                 }
