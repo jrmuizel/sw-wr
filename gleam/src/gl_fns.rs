@@ -150,6 +150,56 @@ extern "C" {
     fn Finish();
     fn ShaderSourceByName(shader: GLuint, name: *const GLchar);
     fn TexParameteri(target: GLenum, pname: GLenum, param: GLint);
+    fn CopyImageSubData(
+        src_name: GLuint,
+        src_target: GLenum,
+        src_level: GLint,
+        src_x: GLint,
+        src_y: GLint,
+        src_z: GLint,
+        dst_name: GLuint,
+        dst_target: GLenum,
+        dst_level: GLint,
+        dst_x: GLint,
+        dst_y: GLint,
+        dst_z: GLint,
+        src_width: GLsizei,
+        src_height: GLsizei,
+        src_depth: GLsizei,
+    );
+    fn CopyTexSubImage2D(
+        target: GLenum,
+        level: GLint,
+        xoffset: GLint,
+        yoffset: GLint,
+        x: GLint,
+        y: GLint,
+        width: GLsizei,
+        height: GLsizei,
+    );
+    fn CopyTexSubImage3D(
+        target: GLenum,
+        level: GLint,
+        xoffset: GLint,
+        yoffset: GLint,
+        zoffset: GLint,
+        x: GLint,
+        y: GLint,
+        width: GLsizei,
+        height: GLsizei,
+    );
+    fn BlitFramebuffer(
+        src_x0: GLint,
+        src_y0: GLint,
+        src_x1: GLint,
+        src_y1: GLint,
+        dst_x0: GLint,
+        dst_y0: GLint,
+        dst_x1: GLint,
+        dst_y1: GLint,
+        mask: GLbitfield,
+        filter: GLenum,
+    );
 }
 
 impl GlFns {
@@ -998,10 +1048,13 @@ impl Gl for GlFns {
         width: GLsizei,
         height: GLsizei,
     ) {
-        panic!();
         unsafe {
-            self.ffi_gl_
-                .CopyTexSubImage2D(target, level, xoffset, yoffset, x, y, width, height);
+            if SW {
+                CopyTexSubImage2D(target, level, xoffset, yoffset, x, y, width, height);
+            } else {
+                self.ffi_gl_
+                    .CopyTexSubImage2D(target, level, xoffset, yoffset, x, y, width, height);
+            }
         }
     }
 
@@ -1017,11 +1070,14 @@ impl Gl for GlFns {
         width: GLsizei,
         height: GLsizei,
     ) {
-        panic!();
         unsafe {
-            self.ffi_gl_.CopyTexSubImage3D(
-                target, level, xoffset, yoffset, zoffset, x, y, width, height,
-            );
+            if SW {
+                CopyTexSubImage3D(target, level, xoffset, yoffset, zoffset, x, y, width, height);
+            } else {
+                self.ffi_gl_.CopyTexSubImage3D(
+                    target, level, xoffset, yoffset, zoffset, x, y, width, height,
+                );
+            }
         }
     }
 
@@ -1288,11 +1344,17 @@ impl Gl for GlFns {
         src_height: GLsizei,
         src_depth: GLsizei,
     ) {
-        panic!();
-        self.ffi_gl_.CopyImageSubData(
-            src_name, src_target, src_level, src_x, src_y, src_z, dst_name, dst_target, dst_level,
-            dst_x, dst_y, dst_z, src_width, src_height, src_depth,
-        );
+        if SW {
+            CopyImageSubData(
+                src_name, src_target, src_level, src_x, src_y, src_z, dst_name, dst_target, dst_level,
+                dst_x, dst_y, dst_z, src_width, src_height, src_depth,
+            );
+        } else {
+            self.ffi_gl_.CopyImageSubData(
+                src_name, src_target, src_level, src_x, src_y, src_z, dst_name, dst_target, dst_level,
+                dst_x, dst_y, dst_z, src_width, src_height, src_depth,
+            );
+        }
     }
 
     fn invalidate_framebuffer(&self, target: GLenum, attachments: &[GLenum]) {
@@ -1498,11 +1560,16 @@ impl Gl for GlFns {
         mask: GLbitfield,
         filter: GLenum,
     ) {
-        panic!();
         unsafe {
-            self.ffi_gl_.BlitFramebuffer(
-                src_x0, src_y0, src_x1, src_y1, dst_x0, dst_y0, dst_x1, dst_y1, mask, filter,
-            );
+            if SW {
+                BlitFramebuffer(
+                    src_x0, src_y0, src_x1, src_y1, dst_x0, dst_y0, dst_x1, dst_y1, mask, filter,
+                );
+            } else {
+                self.ffi_gl_.BlitFramebuffer(
+                    src_x0, src_y0, src_x1, src_y1, dst_x0, dst_y0, dst_x1, dst_y1, mask, filter,
+                );
+            }
         }
     }
 

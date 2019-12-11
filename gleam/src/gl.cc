@@ -139,6 +139,10 @@ glsl::TextureFilter gl_filter_to_texture_filter(int type) {
         }
 }
 
+#define GL_TEXTURE_2D               0x0DE1
+#define GL_TEXTURE_3D               0x806F
+#define GL_TEXTURE_2D_ARRAY         0x8C1A
+
 struct Texture {
     GLenum target = 0;
     int levels = 0;
@@ -1223,12 +1227,125 @@ void ReadPixels(GLint x, GLint y, GLsizei width, GLsizei height, GLenum format, 
     }
     int bpp = bytes_for_internal_format(t.internal_format);
     char *dest = (char *)data;
-    char *src = t.buf + (t.width * t.height * fb->layer + t.width * y + + x) * bpp;
+    char *src = t.buf + (t.width * t.height * fb->layer + t.width * y + x) * bpp;
     for (; height > 0; height--) {
         memcpy(dest, src, width * bpp);
         dest += width * bpp;
         src += t.width * bpp;
     }
+}
+
+void CopyImageSubData(
+    GLuint srcName,
+    GLenum srcTarget,
+    GLint srcLevel,
+    GLint srcX,
+    GLint srcY,
+    GLint srcZ,
+    GLuint dstName,
+    GLenum dstTarget,
+    GLint dstLevel,
+    GLint dstX,
+    GLint dstY,
+    GLint dstZ,
+    GLsizei srcWidth,
+    GLsizei srcHeight,
+    GLsizei srcDepth
+) {
+    if (srcTarget == GL_RENDERBUFFER) {
+        Renderbuffer &rb = renderbuffers[srcName];
+        srcName = rb.texture;
+    }
+    if (dstTarget == GL_RENDERBUFFER) {
+        Renderbuffer &rb = renderbuffers[dstName];
+        dstName = rb.texture;
+    }
+    Texture &srctex = textures[srcName];
+    if (!srctex.buf) return;
+    Texture &dsttex = textures[dstName];
+    assert(srctex.internal_format == dsttex.internal_format);
+    assert(srcX + srcWidth <= srctex.width);
+    assert(srcY + srcHeight <= srctex.height);
+    assert(srcZ + srcDepth <= srctex.depth);
+    assert(dstX + srcWidth <= dsttex.width);
+    assert(dstY + srcHeight <= dsttex.height);
+    assert(dstZ + srcDepth <= std::max(dsttex.depth, 1));
+    dsttex.allocate();
+    int bpp = bytes_for_internal_format(srctex.internal_format);
+    for (int z = 0; z < srcDepth; z++) {
+        char *dest = dsttex.buf + (dsttex.width * dsttex.height * (dstZ + z) + dsttex.width * dstY + dstX) * bpp;
+        char *src = srctex.buf + (srctex.width * srctex.height * (srcZ + z) + srctex.width * srcY + srcX) * bpp;
+        for (int y = 0; y < srcHeight; y++) {
+            memcpy(dest, src, srcWidth * bpp);
+            dest += dsttex.width * bpp;
+            src += srctex.width * bpp;
+        }
+    }
+}
+
+void CopyTexSubImage3D(
+        GLenum target,
+        GLint level,
+        GLint xoffset,
+        GLint yoffset,
+        GLint zoffset,
+        GLint x,
+        GLint y,
+        GLsizei width,
+        GLsizei height
+) {
+    Framebuffer *fb = get_framebuffer(GL_READ_FRAMEBUFFER);
+    if (!fb) return;
+    CopyImageSubData(
+        fb->color_attachment, GL_TEXTURE_3D, 0, x, y, fb->layer,
+        current_texture[target], GL_TEXTURE_3D, 0, xoffset, yoffset, zoffset,
+        width, height, 1);
+}
+
+void CopyTexSubImage2D(
+        GLenum target,
+        GLint level,
+        GLint xoffset,
+        GLint yoffset,
+        GLint x,
+        GLint y,
+        GLsizei width,
+        GLsizei height
+) {
+    Framebuffer *fb = get_framebuffer(GL_READ_FRAMEBUFFER);
+    if (!fb) return;
+    CopyImageSubData(
+        fb->color_attachment, GL_TEXTURE_2D_ARRAY, 0, x, y, fb->layer,
+        current_texture[target], GL_TEXTURE_2D_ARRAY, 0, xoffset, yoffset, 0,
+        width, height, 1);
+}
+
+void BlitFramebuffer(
+        GLint srcX0,
+        GLint srcY0,
+        GLint srcX1,
+        GLint srcY1,
+        GLint dstX0,
+        GLint dstY0,
+        GLint dstX1,
+        GLint dstY1,
+        GLbitfield mask,
+        GLenum filter
+) {
+    assert(mask == GL_COLOR_BUFFER_BIT);
+    Framebuffer *srcfb = get_framebuffer(GL_READ_FRAMEBUFFER);
+    if (!srcfb) return;
+    Framebuffer *dstfb = get_framebuffer(GL_DRAW_FRAMEBUFFER);
+    if (!dstfb) return;
+    int srcWidth = srcX1 - srcX0;
+    int srcHeight = srcY1 - srcY0;
+    int dstWidth = dstX1 - dstX0;
+    int dstHeight = dstY1 - dstY0;
+    assert(srcWidth == dstWidth && srcHeight == dstHeight);
+    CopyImageSubData(
+        srcfb->color_attachment, GL_TEXTURE_2D_ARRAY, 0, srcX0, srcY0, srcfb->layer,
+        dstfb->color_attachment, GL_TEXTURE_2D_ARRAY, 0, dstX0, dstY0, dstfb->layer,
+        srcWidth, srcHeight, 1);
 }
 
 #define GL_POINTS                         0x0000
