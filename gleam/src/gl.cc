@@ -1820,6 +1820,7 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
 void Finish() {
         Framebuffer& fb = get_draw_framebuffer();
         Texture& t = textures[fb.color_attachment];
+        t.make_renderable();
         //writetga("out.tga", t.width, t.height, t.buf);
         write_png("out.png", t.buf, t.width, t.height);
 }
