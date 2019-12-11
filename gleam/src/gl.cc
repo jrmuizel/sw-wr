@@ -526,23 +526,32 @@ sampler2DArray lookup_sampler_array(sampler2DArray_impl *s, int texture) {
 
 template<typename T>
 void load_attrib(T& attrib, VertexAttrib &va, unsigned short *indices, int start, int instance, int count) {
-    for (int n = 0; n < count; n++) {
-        char* src;
-        if (va.divisor == 0) {
-            src = (char*)va.buf + va.stride * indices[start + n];
-        } else {
-            assert(va.divisor == 1);
-            src = (char*)va.buf + va.stride * instance;
-        }
+    typedef decltype(force_scalar(attrib)) scalar_type;
+    if (va.divisor == 1) {
+        char* src = (char*)va.buf + va.stride * instance;
         assert(src + va.size <= va.buf + va.buf_size);
         typedef decltype(get_nth(attrib, 0)) scalar_type;
         if (sizeof(scalar_type) > va.size) {
             scalar_type scalar = {0};
             memcpy(&scalar, src, va.size);
-            put_nth(attrib, n, scalar);
+            attrib = T(scalar);
         } else {
-            put_nth(attrib, n, *reinterpret_cast<scalar_type*>(src));
+            attrib = *reinterpret_cast<scalar_type*>(src);
         }
+    } else if (va.divisor == 0) {
+        for (int n = 0; n < count; n++) {
+            char* src = (char*)va.buf + va.stride * indices[start + n];
+            assert(src + va.size <= va.buf + va.buf_size);
+            if (sizeof(scalar_type) > va.size) {
+                scalar_type scalar = {0};
+                memcpy(&scalar, src, va.size);
+                put_nth(attrib, n, scalar);
+            } else {
+                put_nth(attrib, n, *reinterpret_cast<scalar_type*>(src));
+            }
+        }
+    } else {
+        assert(false);
     }
 }
 
