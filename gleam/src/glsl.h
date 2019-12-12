@@ -698,6 +698,12 @@ template<typename X, typename Y> ivec2 make_ivec2(const X& x, const Y& y) {
     return ivec2(x, y);
 }
 
+ivec2_scalar force_scalar(const ivec2& v) {
+    return ivec2_scalar{ force_scalar(v.x), force_scalar(v.y) };
+}
+
+
+
 struct ivec3_scalar {
         int32_t x;
         int32_t y;
