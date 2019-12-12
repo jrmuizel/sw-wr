@@ -528,7 +528,7 @@ template<typename T>
 void load_attrib(T& attrib, VertexAttrib &va, unsigned short *indices, int start, int instance, int count) {
     typedef decltype(force_scalar(attrib)) scalar_type;
     if (va.divisor == 1) {
-        char* src = (char*)va.buf + va.stride * instance;
+        char* src = (char*)va.buf + va.stride * instance + va.offset;
         assert(src + va.size <= va.buf + va.buf_size);
         if (sizeof(scalar_type) > va.size) {
             scalar_type scalar = {0};
@@ -539,7 +539,7 @@ void load_attrib(T& attrib, VertexAttrib &va, unsigned short *indices, int start
         }
     } else if (va.divisor == 0) {
         for (int n = 0; n < count; n++) {
-            char* src = (char*)va.buf + va.stride * indices[start + n];
+            char* src = (char*)va.buf + va.stride * indices[start + n] + va.offset;
             assert(src + va.size <= va.buf + va.buf_size);
             if (sizeof(scalar_type) > va.size) {
                 scalar_type scalar = {0};
