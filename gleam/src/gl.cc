@@ -1714,8 +1714,8 @@ void draw_quad(int nump) {
                 rom = (interp_outs[r1i] - ro) * (1.0f / (r1.y - r0.y));
                 ro += rom * (y - r0.y);
             }
-            int startx = int(std::max(lx, fx0) + 0.5f);
-            int endx = int(std::min(rx, fx1) + 0.5f);
+            int startx = int(std::max(std::min(lx, rx), fx0) + 0.5f);
+            int endx = int(std::min(std::max(lx, rx), fx1) + 0.5f);
             int span = endx - startx;
             if (span > 0) {
                 shaded_lines++;
