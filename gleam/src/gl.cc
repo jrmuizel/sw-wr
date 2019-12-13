@@ -2022,8 +2022,10 @@ void Finish() {
         Framebuffer& fb = get_draw_framebuffer();
         Texture& t = textures[fb.color_attachment];
         t.make_renderable();
+        char tmp[100];
+        sprintf(tmp, "out-fin-%d-%d.png", current_framebuffer[GL_DRAW_FRAMEBUFFER], fb.color_attachment);
         //writetga("out.tga", t.width, t.height, t.buf);
-        write_png("out.png", t.buf, t.width, t.height);
+        write_png(tmp, t.buf, t.width, t.height);
 }
 
 } // extern "C"
