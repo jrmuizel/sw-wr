@@ -1575,18 +1575,35 @@ static inline void commit_output(uint32_t* buf, int span) {
     commit_output<DISCARD>(buf, _mm_cmplt_epi32(_mm_set1_epi32(span), _mm_set_epi32(4, 3, 2, 1)));
 }
 
-void draw_quad(int nump) {
-        Framebuffer& fb = get_draw_framebuffer();
-        Texture& colortex = textures[fb.color_attachment];
-        colortex.make_renderable();
-        assert(colortex.internal_format == GL_RGBA8);
-        static Texture nodepthtex;
-        Texture& depthtex = depthtest && fb.depth_attachment ? textures[fb.depth_attachment] : nodepthtex;
-        if (&depthtex != &nodepthtex) {
-            assert(depthtex.internal_format == GL_DEPTH_COMPONENT16);
-            assert(colortex.width == depthtex.width && colortex.height == depthtex.height);
-            depthtex.make_renderable();
+static int shaded_rows = 0;
+static int shaded_pixels = 0;
+
+void draw_quad(int nump, Texture& colortex, Texture& depthtex) {
+        Flats flat_outs;
+        Interpolants interp_outs[4];
+        vertex_shader.run((char *)flat_outs, (char *)interp_outs, sizeof(Interpolants));
+        Float w = 1.0f / vertex_shader.gl_Position.w;
+        vec3 clip = vertex_shader.gl_Position.sel(X, Y, Z) * w;
+        Point p[4];
+        vec3 screen = (clip + 1)*vec3(viewport.width/2, viewport.height/2, 0.5f) + vec3(viewport.x, viewport.y, 0);
+        for (int k = 0; k < 4; k++)
+        {
+        //        vec4 pos = vertex_shader.gl_Position;
+        //        printf("%f %f %f %f\n", pos.x[k], pos.y[k], pos.z[k], pos.y[k]);
+                p[k] = Point { screen.x[k], screen.y[k] };
+        //        printf("%f %f\n", p[k].x, p[k].y);
         }
+
+        auto top_left = p[0];
+        auto bot_right = p[0];
+        for (int i = 1; i < nump; i++) {
+            top_left.x = std::min(top_left.x, p[i].x);
+            top_left.y = std::min(top_left.y, p[i].y);
+            bot_right.x = std::max(bot_right.x, p[i].x);
+            bot_right.y = std::max(bot_right.y, p[i].y);
+        }
+        //printf("bbox: %f %f %f %f\n", top_left.x, top_left.y, bot_right.x, bot_right.y);
+
         float fx0 = 0;
         float fy0 = 0;
         float fx1 = colortex.width;
@@ -1600,36 +1617,9 @@ void draw_quad(int nump) {
             fy1 = std::min(fy1, float(scissor.y + scissor.height));
         }
 
-        Flats flat_outs;
-        Interpolants interp_outs[4];
-        vertex_shader.run((char *)flat_outs, (char *)interp_outs, sizeof(Interpolants));
-        Float w = 1.0f / vertex_shader.gl_Position.w;
-        vec3 clip = vertex_shader.gl_Position.sel(X, Y, Z) * w;
-        Point p[4];
-        vec3 screen = (clip + 1)*vec3(viewport.width/2, viewport.height/2, 0.5f) + vec3(viewport.x, viewport.y, 0);
-        for (int k = 0; k < 4; k++)
-        {
-                vec4 pos = vertex_shader.gl_Position;
-                printf("%f %f %f %f\n", pos.x[k], pos.y[k], pos.z[k], pos.y[k]);
-                p[k] = Point { screen.x[k], screen.y[k] };
-                printf("%f %f\n", p[k].x, p[k].y);
+        if (top_left.x >= fx1 || top_left.y >= fy1 || bot_right.x <= fx0 || bot_right.y <= fy0) {
+            return;
         }
-
-        auto top_left = p[0];
-        auto bot_right = p[0];
-        for (int i = 1; i < nump; i++) {
-            top_left.x = std::min(top_left.x, p[i].x);
-            top_left.y = std::min(top_left.y, p[i].y);
-            bot_right.x = std::max(bot_right.x, p[i].x);
-            bot_right.y = std::max(bot_right.y, p[i].y);
-        }
-        printf("bbox: %f %f %f %f\n", top_left.x, top_left.y, bot_right.x, bot_right.y);
-
-#ifdef  __MACH__
-        double start = mach_absolute_time();
-#else
-        double start = ({ struct timespec tp; clock_gettime(CLOCK_MONOTONIC, &tp); tp.tv_sec * 1e9 + tp.tv_nsec; });
-#endif
 
         // SSE2 does not support unsigned comparison, so bias Z to be negative.
         uint16_t z = uint16_t(0xFFFF * screen.z.x) - 0x8000;
@@ -1668,7 +1658,7 @@ void draw_quad(int nump) {
             r0 = p[r0i];
             l1 = p[l1i];
             r1 = p[r1i];
-            printf("l0: %d(%f,%f), r0: %d(%f,%f) -> l1: %d(%f,%f), r1: %d(%f,%f)\n", l0i, l0.x, l0.y, r0i, r0.x, r0.y, l1i, l1.x, l1.y, r1i, r1.x, r1.y);
+        //    printf("l0: %d(%f,%f), r0: %d(%f,%f) -> l1: %d(%f,%f), r1: %d(%f,%f)\n", l0i, l0.x, l0.y, r0i, r0.x, r0.y, l1i, l1.x, l1.y, r1i, r1.x, r1.y);
         }
 
         float lx = l0.x;
@@ -1685,8 +1675,6 @@ void draw_quad(int nump) {
         Interpolants ro = interp_outs[r0i];
         Interpolants rom = (interp_outs[r1i] - ro) * (1.0f / (r1.y - r0.y));
         ro = ro + rom * (y - r0.y);
-        int shaded_pixels = 0;
-        int shaded_lines = 0;
         fbuf += int(y) * colortex.width;
         fdepth += int(y) * depthtex.width;
         while (y < fy1) {
@@ -1718,7 +1706,7 @@ void draw_quad(int nump) {
             int endx = int(std::min(std::max(lx, rx), fx1) + 0.5f);
             int span = endx - startx;
             if (span > 0) {
-                shaded_lines++;
+                shaded_rows++;
                 shaded_pixels += span;
                 fragment_shader.gl_FragCoord.x = init_interp(startx + 0.5f, 1);
                 fragment_shader.gl_FragCoord.y = y;
@@ -1788,20 +1776,6 @@ void draw_quad(int nump) {
             fbuf += colortex.width;
             fdepth += depthtex.width;
         }
-
-#ifdef  __MACH__
-        double end = mach_absolute_time();
-#else
-        double end = ({ struct timespec tp; clock_gettime(CLOCK_MONOTONIC, &tp); tp.tv_sec * 1e9 + tp.tv_nsec; });
-#endif
-        auto output = get_nth(fragment_shader.gl_FragColor, 0);
-        auto pixels = pack_pixels();
-        int pixel0 = _mm_cvtsi128_si32(_mm_shuffle_epi32(pixels, 0));
-        int pixel1 = _mm_cvtsi128_si32(_mm_shuffle_epi32(pixels, 0x55));
-        int pixel2 = _mm_cvtsi128_si32(_mm_shuffle_epi32(pixels, 0xAA));
-        int pixel3 = _mm_cvtsi128_si32(_mm_shuffle_epi32(pixels, 0xFF));
-        printf("color %f %f %f %f -> %x, %x, %x, %x\n", output.x, output.y, output.z, output.w, pixel0, pixel1, pixel2, pixel3);
-        printf("%fms for %d pixels in %d rows\n", (end - start)/(1000.*1000.), shaded_pixels, shaded_lines);
 }
 
 #if 0
@@ -1895,15 +1869,37 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
         assert(type == GL_UNSIGNED_SHORT);
         assert(count == 6);
         assert(indices == 0);
+
+        Framebuffer& fb = get_draw_framebuffer();
+        Texture& colortex = textures[fb.color_attachment];
+        colortex.make_renderable();
+        assert(colortex.internal_format == GL_RGBA8);
+        static Texture nodepthtex;
+        Texture& depthtex = depthtest && fb.depth_attachment ? textures[fb.depth_attachment] : nodepthtex;
+        if (&depthtex != &nodepthtex) {
+            assert(depthtex.internal_format == GL_DEPTH_COMPONENT16);
+            assert(colortex.width == depthtex.width && colortex.height == depthtex.height);
+            depthtex.make_renderable();
+        }
+
+#ifdef  __MACH__
+        double start = mach_absolute_time();
+#else
+        double start = ({ struct timespec tp; clock_gettime(CLOCK_MONOTONIC, &tp); tp.tv_sec * 1e9 + tp.tv_nsec; });
+#endif
+
+        shaded_rows = 0;
+        shaded_pixels = 0;
+
         Program &p = programs[current_program];
         assert(p.impl);
         vertex_shader.init_batch(p.impl);
         fragment_shader.init_batch(p.impl);
         for (int instance = 0; instance < instancecount; instance++) {
-        if (indices == 0) {
+            if (indices == 0) {
                 Buffer &indices_buf = buffers[current_buffer[GL_ELEMENT_ARRAY_BUFFER]];
-                printf("current_vertex_array %d\n", current_vertex_array);
-                printf("indices size: %d\n", indices_buf.size);
+                //printf("current_vertex_array %d\n", current_vertex_array);
+                //printf("indices size: %d\n", indices_buf.size);
                 VertexArray &v = vertex_arrays[current_vertex_array];
                 for (int i = 0; i < MAX_ATTRS; i++) {
                         if (v.attribs[i].enabled) {
@@ -1912,7 +1908,7 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
                                 Buffer &vertex_buf = buffers[attr.vertex_buffer];
                                 attr.buf = vertex_buf.buf;
                                 attr.buf_size = vertex_buf.size;
-                                printf("%d %x %d %d %d %d\n", i, attr.type, attr.size, attr.stride, attr.offset, attr.divisor);
+                                //printf("%d %x %d %d %d %d\n", i, attr.type, attr.size, attr.stride, attr.offset, attr.divisor);
                         }
                 }
                 if (type == GL_UNSIGNED_SHORT) {
@@ -1920,28 +1916,34 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
                         unsigned short *indices = (unsigned short*)indices_buf.buf;
                         if (mode == GL_QUADS) for (int i = 0; i + 4 <= count; i += 4) {
                                 vertex_shader.load_attribs(p.impl, v.attribs, indices, i, instance, 4);
-                                printf("native quad %d %d %d %d\n", indices[i], indices[i+1], indices[i+2], indices[i+3]);
-                                draw_quad(4);
+                                //printf("native quad %d %d %d %d\n", indices[i], indices[i+1], indices[i+2], indices[i+3]);
+                                draw_quad(4, colortex, depthtex);
                         } else for (int i = 0; i + 3 <= count; i += 3) {
                                 if (i + 6 <= count && indices[i+3] == indices[i+2] && indices[i+4] == indices[i+1]) {
                                     unsigned short quad_indices[4] = { indices[i], indices[i+1], indices[i+5], indices[i+2] };
                                     vertex_shader.load_attribs(p.impl, v.attribs, quad_indices, 0, instance, 4);
-                                    printf("emulate quad %d %d %d %d\n", indices[i], indices[i+1], indices[i+5], indices[i+2]);
-                                    draw_quad(4);
+                                    //printf("emulate quad %d %d %d %d\n", indices[i], indices[i+1], indices[i+5], indices[i+2]);
+                                    draw_quad(4, colortex, depthtex);
                                     i += 3;
                                 } else {
                                     vertex_shader.load_attribs(p.impl, v.attribs, indices, i, instance, 3);
-                                    printf("triangle %d %d %d %d\n", indices[i], indices[i+1], indices[i+2]);
-                                    draw_quad(3);
+                                    //printf("triangle %d %d %d %d\n", indices[i], indices[i+1], indices[i+2]);
+                                    draw_quad(3, colortex, depthtex);
                                 }
                          }
 
                 } else {
                         assert(0);
                 }
+            }
         }
-        }
-        printf("dodraw");
+
+#ifdef  __MACH__
+        double end = mach_absolute_time();
+#else
+        double end = ({ struct timespec tp; clock_gettime(CLOCK_MONOTONIC, &tp); tp.tv_sec * 1e9 + tp.tv_nsec; });
+#endif
+        printf("draw(%d): %fms for %d pixels in %d rows (avg %f pixels/row)\n", instancecount, (end - start)/(1000.*1000.), shaded_pixels, shaded_rows, double(shaded_pixels)/shaded_rows);
 }
 
 void Finish() {
