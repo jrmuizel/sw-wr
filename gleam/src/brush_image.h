@@ -494,10 +494,10 @@ ClipArea fetch_clip_area(I32 index) {
  ClipArea area;
  auto _c6_ = (index)>=(32767);
  {
-  RectWithSize_scalar rect = RectWithSize_scalar(make_vec2(0.), make_vec2(0.));
-  (area).common_data = if_then_else(_c6_,RenderTaskCommonData_scalar(rect, 0.),(area).common_data);
-  (area).device_pixel_scale = if_then_else(_c6_,0.,(area).device_pixel_scale);
-  (area).screen_origin = if_then_else(_c6_,make_vec2(0.),(area).screen_origin);
+  RectWithSize_scalar rect = RectWithSize_scalar(make_vec2(0.f), make_vec2(0.f));
+  (area).common_data = if_then_else(_c6_,RenderTaskCommonData_scalar(rect, 0.f),(area).common_data);
+  (area).device_pixel_scale = if_then_else(_c6_,0.f,(area).device_pixel_scale);
+  (area).screen_origin = if_then_else(_c6_,make_vec2(0.f),(area).screen_origin);
  }
  {
   RenderTaskData task_data = fetch_render_task_data(index);
@@ -529,11 +529,11 @@ vec2 clamp_rect(vec2 pt, RectWithSize rect) {
 VertexInfo write_vertex(RectWithSize instance_rect, RectWithSize local_clip_rect, Float z, Transform transform, PictureTask task, I32 _cond_mask_) {
  vec2 local_pos = ((instance_rect).p0)+(((instance_rect).size)*((aPosition).sel(X, Y)));
  vec2 clamped_local_pos = clamp_rect(local_pos, local_clip_rect);
- vec4 world_pos = ((transform).m)*(make_vec4(clamped_local_pos, 0., 1.));
+ vec4 world_pos = ((transform).m)*(make_vec4(clamped_local_pos, 0.f, 1.f));
  vec2 device_pos = ((world_pos).sel(X, Y))*((task).device_pixel_scale);
  vec2 final_offset = (-((task).content_origin))+((((task).common_data).task_rect).p0);
  gl_Position = if_then_else(_cond_mask_,(uTransform)*(make_vec4((device_pos)+((final_offset)*((world_pos).sel(W))), (z)*((world_pos).sel(W)), (world_pos).sel(W))),gl_Position);
- VertexInfo vi = VertexInfo(clamped_local_pos, make_vec2(0., 0.), world_pos);
+ VertexInfo vi = VertexInfo(clamped_local_pos, make_vec2(0.f, 0.f), world_pos);
  return vi;
 }
 RectWithEndpoint to_rect_with_endpoint(RectWithSize rect) {
@@ -553,17 +553,17 @@ VertexInfo write_transform_vertex(RectWithSize local_segment_rect, RectWithSize 
  RectWithEndpoint prim_rect = to_rect_with_endpoint(local_prim_rect);
  (prim_rect).p0 = if_then_else(_cond_mask_,clamp((prim_rect).p0, (clip_rect).p0, (clip_rect).p1),(prim_rect).p0);
  (prim_rect).p1 = if_then_else(_cond_mask_,clamp((prim_rect).p1, (clip_rect).p0, (clip_rect).p1),(prim_rect).p1);
- float extrude_amount = 2.;
+ float extrude_amount = 2.f;
  vec4 extrude_distance = (make_vec4(extrude_amount))*(clip_edge_mask);
  (local_segment_rect).p0 = if_then_else(_cond_mask_,(local_segment_rect).p0-(extrude_distance).sel(X, Y),(local_segment_rect).p0);
  (local_segment_rect).size = if_then_else(_cond_mask_,(local_segment_rect).size+((extrude_distance).sel(X, Y))+((extrude_distance).sel(Z, W)),(local_segment_rect).size);
  vec2 local_pos = ((local_segment_rect).p0)+(((local_segment_rect).size)*((aPosition).sel(X, Y)));
  vec2 task_offset = ((((task).common_data).task_rect).p0)-((task).content_origin);
- vec4 world_pos = ((transform).m)*(make_vec4(local_pos, 0., 1.));
+ vec4 world_pos = ((transform).m)*(make_vec4(local_pos, 0.f, 1.f));
  vec4 final_pos = make_vec4((((world_pos).sel(X, Y))*((task).device_pixel_scale))+((task_offset)*((world_pos).sel(W))), (z)*((world_pos).sel(W)), (world_pos).sel(W));
  gl_Position = if_then_else(_cond_mask_,(uTransform)*(final_pos),gl_Position);
  init_transform_vs(mix(make_vec4((prim_rect).p0, (prim_rect).p1), make_vec4((segment_rect).p0, (segment_rect).p1), clip_edge_mask), _cond_mask_);
- VertexInfo vi = VertexInfo(local_pos, make_vec2(0.), world_pos);
+ VertexInfo vi = VertexInfo(local_pos, make_vec2(0.f), world_pos);
  return vi;
 }
 std::array<vec4,3> fetch_from_gpu_cache_3(I32 address) {
@@ -588,7 +588,7 @@ void brush_vs(VertexInfo vi, I32 prim_address, RectWithSize prim_rect, RectWithS
  vec2 uv1 = ((res).uv_rect).p1;
  RectWithSize local_rect = prim_rect;
  vec2 stretch_size = (image_data).stretch_size;
- auto _c15_ = ((stretch_size).sel(X))<(0.);
+ auto _c15_ = ((stretch_size).sel(X))<(0.f);
  {
   stretch_size = if_then_else(_c15_,(local_rect).size,stretch_size);
  }
@@ -619,17 +619,17 @@ void brush_vs(VertexInfo vi, I32 prim_address, RectWithSize prim_rect, RectWithS
    }
   }
  }
- Float perspective_interpolate = if_then_else(((brush_flags)&(1))!=(0), 1., 0.);
+ Float perspective_interpolate = if_then_else(((brush_flags)&(1))!=(0), 1.f, 0.f);
  vLayerAndPerspective = force_scalar(make_vec2((res).layer, perspective_interpolate));
  vec2 min_uv = min(uv0, uv1);
  vec2 max_uv = max(uv0, uv1);
- vUvSampleBounds = force_scalar((make_vec4((min_uv)+(make_vec2(0.5)), (max_uv)-(make_vec2(0.5))))/((texture_size).sel(X, Y, X, Y)));
+ vUvSampleBounds = force_scalar((make_vec4((min_uv)+(make_vec2(0.5f)), (max_uv)-(make_vec2(0.5f))))/((texture_size).sel(X, Y, X, Y)));
  vec2 f = (((vi).local_pos)-((local_rect).p0))/((local_rect).size);
  vec2 repeat = ((local_rect).size)/(stretch_size);
  vUv = (mix(uv0, uv1, f))-(min_uv);
  vUv /= texture_size;
  vUv *= (repeat).sel(X, Y);
- auto _c22_ = (perspective_interpolate)==(0.);
+ auto _c22_ = (perspective_interpolate)==(0.f);
  {
   vUv = if_then_else(_c22_,vUv*((vi).world_pos).sel(W),vUv);
  }
@@ -649,7 +649,7 @@ ALWAYS_INLINE void main(void) {
  auto _c3_ = (segment_index)==(65535);
  {
   segment_rect = if_then_else(_c3_,(ph).local_rect,segment_rect);
-  segment_data = if_then_else(_c3_,make_vec4(0.),segment_data);
+  segment_data = if_then_else(_c3_,make_vec4(0.f),segment_data);
  }
  {
   I32 segment_address = ((ph).specific_prim_address)+((3)+((segment_index)*(2)));
@@ -668,7 +668,7 @@ ALWAYS_INLINE void main(void) {
  }
  {
   bvec4 edge_mask = notEqual((edge_flags)&(make_ivec4(1, 2, 4, 8)), make_ivec4(0));
-  vi = if_then_else(~(_c4_),write_transform_vertex(segment_rect, (ph).local_rect, (ph).local_clip_rect, mix(make_vec4(0.), make_vec4(1.), edge_mask), (ph).z, transform, pic_task, ~(_c4_)),vi);
+  vi = if_then_else(~(_c4_),write_transform_vertex(segment_rect, (ph).local_rect, (ph).local_clip_rect, mix(make_vec4(0.f), make_vec4(1.f), edge_mask), (ph).z, transform, pic_task, ~(_c4_)),vi);
  }
  brush_vs(vi, (ph).specific_prim_address, (ph).local_rect, segment_rect, (ph).user_data, segment_user_data, (transform).m, pic_task, brush_flags, segment_data);
 }
@@ -833,7 +833,7 @@ vec2_scalar vLayerAndPerspective;
 vec4_scalar vUvBounds;
 vec4_scalar vUvSampleBounds;
 Fragment brush_fs() {
- Float perspective_divisor = mix((gl_FragCoord).sel(W), 1., (vLayerAndPerspective).sel(Y));
+ Float perspective_divisor = mix((gl_FragCoord).sel(W), 1.f, (vLayerAndPerspective).sel(Y));
  vec2 repeated_uv = ((vUv)*(perspective_divisor))+((vUvBounds).sel(X, Y));
  vec2 uv = clamp(repeated_uv, (vUvSampleBounds).sel(X, Y), (vUvSampleBounds).sel(Z, W));
  vec4 texel = texture(sColor0, make_vec3(uv, (vLayerAndPerspective).sel(X)));

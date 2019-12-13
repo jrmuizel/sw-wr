@@ -544,10 +544,10 @@ ClipArea_scalar fetch_clip_area(int32_t index) {
  ClipArea_scalar area;
  if ((index)>=(32767)) {
   {
-   RectWithSize_scalar rect = RectWithSize_scalar(make_vec2(0.), make_vec2(0.));
-   (area).common_data = RenderTaskCommonData_scalar(rect, 0.);
-   (area).device_pixel_scale = 0.;
-   (area).screen_origin = make_vec2(0.);
+   RectWithSize_scalar rect = RectWithSize_scalar(make_vec2(0.f), make_vec2(0.f));
+   (area).common_data = RenderTaskCommonData_scalar(rect, 0.f);
+   (area).device_pixel_scale = 0.f;
+   (area).screen_origin = make_vec2(0.f);
   }
  } else  {
   RenderTaskData_scalar task_data = fetch_render_task_data(index);
@@ -591,8 +591,8 @@ vec2 clamp_rect(vec2 pt, RectWithSize_scalar rect) {
  return clamp(pt, (rect).p0, ((rect).p0)+((rect).size));
 }
 VertexInfo write_text_vertex(RectWithSize_scalar local_clip_rect, float z, int32_t raster_space, Transform_scalar transform, PictureTask_scalar task, vec2_scalar text_offset, vec2_scalar glyph_offset, RectWithSize glyph_rect, vec2_scalar snap_bias) {
- vec2_scalar snap_offset = make_vec2(0.);
- mat2_scalar glyph_transform_inv = make_mat2(1.);
+ vec2_scalar snap_offset = make_vec2(0.f);
+ mat2_scalar glyph_transform_inv = make_mat2(1.f);
  bool remove_subpx_offset = (transform).is_axis_aligned;
  if (remove_subpx_offset) {
   {
@@ -602,7 +602,7 @@ VertexInfo write_text_vertex(RectWithSize_scalar local_clip_rect, float z, int32
       float device_scale = ((task).device_pixel_scale)/(((transform).m[3]).sel(W));
       mat2_scalar glyph_transform = (make_mat2((transform).m))*(device_scale);
       vec2_scalar device_text_pos = ((glyph_transform)*(text_offset))+((((transform).m[3]).sel(X, Y))*(device_scale));
-      snap_offset = (floor((device_text_pos)+(0.5)))-(device_text_pos);
+      snap_offset = (floor((device_text_pos)+(0.5f)))-(device_text_pos);
       vec2_scalar device_glyph_offset = (glyph_transform)*(glyph_offset);
       snap_offset += (floor((device_glyph_offset)+(snap_bias)))-(device_glyph_offset);
       glyph_transform_inv = inverse(glyph_transform);
@@ -611,7 +611,7 @@ VertexInfo write_text_vertex(RectWithSize_scalar local_clip_rect, float z, int32
      }
     default:
      {
-      snap_offset = (floor((text_offset)+(0.5)))-(text_offset);
+      snap_offset = (floor((text_offset)+(0.5f)))-(text_offset);
       snap_offset += (floor((glyph_offset)+(snap_bias)))-(glyph_offset);
       break;
      }
@@ -621,7 +621,7 @@ VertexInfo write_text_vertex(RectWithSize_scalar local_clip_rect, float z, int32
  (glyph_rect).p0 += snap_offset;
  vec2 local_pos = ((glyph_rect).p0)+(((glyph_rect).size)*((aPosition).sel(X, Y)));
  local_pos = clamp_rect(local_pos, local_clip_rect);
- vec4 world_pos = ((transform).m)*(make_vec4(local_pos, 0., 1.));
+ vec4 world_pos = ((transform).m)*(make_vec4(local_pos, 0.f, 1.f));
  vec2 device_pos = ((world_pos).sel(X, Y))*((task).device_pixel_scale);
  vec2_scalar final_offset = (-((task).content_origin))+((((task).common_data).task_rect).p0);
  gl_Position = (uTransform)*(make_vec4((device_pos)+((final_offset)*((world_pos).sel(W))), (z)*((world_pos).sel(W)), (world_pos).sel(W)));
@@ -646,7 +646,7 @@ ALWAYS_INLINE void main(void) {
  ClipArea_scalar clip_area = fetch_clip_area(((ph).user_data).sel(W));
  PictureTask_scalar task = fetch_picture_task(render_task_index);
  TextRun_scalar text = fetch_text_run((ph).specific_prim_address);
- vec2_scalar text_offset = (make_vec2(((ph).user_data).sel(X, Y)))/(256.);
+ vec2_scalar text_offset = (make_vec2(((ph).user_data).sel(X, Y)))/(256.f);
  if ((color_mode)==(0)) {
   {
    color_mode = uMode;
@@ -655,23 +655,23 @@ ALWAYS_INLINE void main(void) {
  Glyph_scalar glyph = fetch_glyph((ph).specific_prim_address, glyph_index);
  (glyph).offset += (((ph).local_rect).p0)-(text_offset);
  GlyphResource_scalar res = fetch_glyph_resource(resource_address);
- float raster_scale = (make_float(((ph).user_data).sel(Z)))/(65535.);
+ float raster_scale = (make_float(((ph).user_data).sel(Z)))/(65535.f);
  float scale = ((res).scale)/((raster_scale)*((task).device_pixel_scale));
  RectWithSize glyph_rect = RectWithSize_scalar(((scale)*((res).offset))+((text_offset)+((glyph).offset)), (scale)*((((res).uv_rect).sel(Z, W))-(((res).uv_rect).sel(X, Y))));
  vec2_scalar snap_bias;
  switch (subpx_dir) {
   case 0:
   default:
-   snap_bias = make_vec2(0.5);
+   snap_bias = make_vec2(0.5f);
    break;
   case 1:
-   snap_bias = make_vec2(0.125, 0.5);
+   snap_bias = make_vec2(0.125f, 0.5f);
    break;
   case 2:
-   snap_bias = make_vec2(0.5, 0.125);
+   snap_bias = make_vec2(0.5f, 0.125f);
    break;
   case 3:
-   snap_bias = make_vec2(0.125);
+   snap_bias = make_vec2(0.125f);
    break;
  }
  VertexInfo vi = write_text_vertex((ph).local_clip_rect, (ph).z, raster_space, transform, task, text_offset, (glyph).offset, glyph_rect, snap_bias);
@@ -681,33 +681,33 @@ ALWAYS_INLINE void main(void) {
  switch (color_mode) {
   case 1:
   case 7:
-   vMaskSwizzle = make_vec2(0., 1.);
+   vMaskSwizzle = make_vec2(0.f, 1.f);
    vColor = (text).color;
    break;
   case 5:
   case 6:
-   vMaskSwizzle = make_vec2(1., 0.);
+   vMaskSwizzle = make_vec2(1.f, 0.f);
    vColor = (text).color;
    break;
   case 2:
   case 3:
   case 8:
-   vMaskSwizzle = make_vec2(1., 0.);
+   vMaskSwizzle = make_vec2(1.f, 0.f);
    vColor = make_vec4(((text).color).sel(A));
    break;
   case 4:
-   vMaskSwizzle = make_vec2(-(1.), 1.);
+   vMaskSwizzle = make_vec2(-(1.f), 1.f);
    vColor = (make_vec4(((text).color).sel(A)))*((text).bg_color);
    break;
   default:
-   vMaskSwizzle = make_vec2(0.);
-   vColor = make_vec4(1.);
+   vMaskSwizzle = make_vec2(0.f);
+   vColor = make_vec4(1.f);
  }
  vec2_scalar texture_size = make_vec2(textureSize(sColor0, 0));
  vec2_scalar st0 = (((res).uv_rect).sel(X, Y))/(texture_size);
  vec2_scalar st1 = (((res).uv_rect).sel(Z, W))/(texture_size);
  vUv = make_vec3(mix(st0, st1, f), (res).layer);
- vUvBorder = (((res).uv_rect)+(make_vec4(0.5, 0.5, -(0.5), -(0.5))))/((texture_size).sel(X, Y, X, Y));
+ vUvBorder = (((res).uv_rect)+(make_vec4(0.5f, 0.5f, -(0.5f), -(0.5f))))/((texture_size).sel(X, Y, X, Y));
 }
 static void run(Self *self, char* flats, char* interps, size_t interp_stride) {
  self->main();
@@ -861,7 +861,7 @@ Float do_clip() {
  Float ret;
  if (((vClipMaskUvBounds).sel(X, Y))==((vClipMaskUvBounds).sel(Z, W))) {
   {
-   return 1.;
+   return 1.f;
   }
  }
  vec2 mask_uv = ((vClipMaskUv).sel(X, Y))*((gl_FragCoord).sel(W));
@@ -869,10 +869,10 @@ Float do_clip() {
  bvec2 right = greaterThan((vClipMaskUvBounds).sel(Z, W), mask_uv);
  auto _c2_ = !(all(make_bvec4(left, right)));
  {
-  ret = 0.;
+  ret = 0.f;
   ret_mask = ~I32(_c2_);
  }
- ivec3 tc = make_ivec3(mask_uv, ((vClipMaskUv).sel(Z))+(0.5));
+ ivec3 tc = make_ivec3(mask_uv, ((vClipMaskUv).sel(Z))+(0.5f));
  ret = if_then_else(ret_mask, (texelFetch(sPrevPassAlpha, tc, 0)).sel(R), ret);
  return ret;
 }

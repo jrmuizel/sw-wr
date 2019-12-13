@@ -90,15 +90,6 @@ SI Float if_then_else(I32 c, float t, float e) {
     return _mm_or_ps(_mm_and_ps(c, Float(t)), _mm_andnot_ps(c, Float(e)));
 }
 
-SI Float if_then_else(I32 c, double t, float e) {
-    return _mm_or_ps(_mm_and_ps(c, Float(t)), _mm_andnot_ps(c, Float(e)));
-}
-
-SI Float if_then_else(I32 c, double t, double e) {
-    return _mm_or_ps(_mm_and_ps(c, Float(t)), _mm_andnot_ps(c, Float(e)));
-}
-
-
 SI I32 if_then_else(I32 c, int32_t t, int32_t e) {
     return _mm_or_ps(_mm_and_ps(c, I32(t)), _mm_andnot_ps(c, I32(e)));
 }
@@ -134,6 +125,8 @@ SI Float   max(Float a, Float b)       { return _mm_max_ps(a,b);    }
 SI Float clamp(Float a, Float minVal, Float maxVal) {
         return min(max(a, minVal), maxVal);
 }
+
+#define sqrt __glsl_sqrt
 
 SI float sqrt(float x) {
     return sqrtf(x);
@@ -236,7 +229,6 @@ struct vec2_scalar {
         float y;
 
         vec2_scalar() : vec2_scalar(0.0f) {}
-        vec2_scalar(double a): x(a), y(a) {}
         vec2_scalar(float a): x(a), y(a) {}
         vec2_scalar(int a): x(a), y(a) {}
         constexpr vec2_scalar(float x, float y): x(x), y(y) {}
@@ -426,17 +418,8 @@ vec2_scalar make_vec2(float n) {
     return vec2_scalar{ n, n };
 }
 
-vec2_scalar make_vec2(double n) {
-    float f = float(n);
-    return vec2_scalar{ f, f };
-}
-
 vec2_scalar make_vec2(float x, float y) {
     return vec2_scalar{ x, y };
-}
-
-vec2_scalar make_vec2(double x, double y) {
-    return vec2_scalar{ float(x), float(y) };
 }
 
 template<typename N> vec2 make_vec2(const N& n) {
@@ -1129,11 +1112,6 @@ vec3_scalar make_vec3(float n) {
     return vec3_scalar{ n, n, n };
 }
 
-vec3_scalar make_vec3(double n) {
-    float f = float(n);
-    return vec3_scalar{ f, f, f };
-}
-
 vec3_scalar make_vec3(const vec2_scalar& v, float z) {
     return vec3_scalar{ v.x, v.y, z };
 }
@@ -1142,12 +1120,8 @@ vec3_scalar make_vec3(float x, float y, float z) {
     return vec3_scalar{ x, y, z };
 }
 
-vec3_scalar make_vec3(int32_t x, int32_t y, double z) {
-    return vec3_scalar{ float(x), float(y), float(z) };
-}
-
-vec3_scalar make_vec3(double x, double y, double z) {
-    return vec3_scalar{ float(x), float(y), float(z) };
+vec3_scalar make_vec3(int32_t x, int32_t y, float z) {
+    return vec3_scalar{ float(x), float(y), z };
 }
 
 template<typename N> vec3 make_vec3(const N& n) {
@@ -1435,11 +1409,6 @@ vec4_scalar make_vec4(float n) {
     return vec4_scalar{ n, n, n, n };
 }
 
-vec4_scalar make_vec4(double n) {
-    float f = float(n);
-    return vec4_scalar{ f, f, f, f };
-}
-
 vec4_scalar make_vec4(const vec2_scalar& v, float z, float w) {
     return vec4_scalar{ v.x, v.y, z, w };
 }
@@ -1454,10 +1423,6 @@ vec4_scalar make_vec4(const vec3_scalar& v, float w) {
 
 vec4_scalar make_vec4(float x, float y, float z, float w) {
     return vec4_scalar{ x, y, z, w };
-}
-
-vec4_scalar make_vec4(double x, double y, double z, double w) {
-    return vec4_scalar{ float(x), float(y), float(z), float(w) };
 }
 
 template<typename N> vec4 make_vec4(const N& n) {
@@ -1714,10 +1679,6 @@ struct mat2 {
 
 mat2_scalar make_mat2(float n) {
     return mat2_scalar{{{n, n}, {n, n}}};
-}
-
-mat2_scalar make_mat2(double n) {
-    return make_mat2(float(n));
 }
 
 mat2_scalar make_mat2(const mat2_scalar& m) {

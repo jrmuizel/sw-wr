@@ -7,10 +7,9 @@
 #endif
 
 #include <map>
+#include <string>
 #include "minpng.h"
 #include "glsl.h"
-#include <cmath>
-#include <string>
 
 using namespace std;
 using namespace glsl;
