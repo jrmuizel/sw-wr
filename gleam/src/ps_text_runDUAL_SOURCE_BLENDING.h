@@ -165,7 +165,7 @@ static void set_uniform_matrix4fv(Self *self, int index, const float *value) {
 }
 static void load_attribs(Self *self, ps_text_runDUAL_SOURCE_BLENDING_program *prog, VertexAttrib *attribs, unsigned short *indices, int start, int instance, int count) {
  load_attrib(self->aPosition, attribs[prog->attrib_locations.aPosition], indices, start, instance, count);
- load_attrib(self->aData, attribs[prog->attrib_locations.aData], indices, start, instance, count);
+ load_flat_attrib(self->aData, attribs[prog->attrib_locations.aData], indices, start, instance, count);
 }
 struct FlatOutputs {
 vec4_scalar vTransformBounds;
@@ -392,7 +392,7 @@ vec4_scalar vClipMaskUvBounds;
 vec4 vClipMaskUv;
 sampler2D sPrimitiveHeadersF;
 isampler2D sPrimitiveHeadersI;
-ivec4 aData;
+ivec4_scalar aData;
 struct PrimitiveHeader_scalar {
 RectWithSize_scalar local_rect;
 RectWithSize_scalar local_clip_rect;
@@ -499,28 +499,28 @@ TextRun(TextRun_scalar s):color(s.color),bg_color(s.bg_color){
 friend TextRun if_then_else(I32 c, TextRun t, TextRun e) { return TextRun(
 if_then_else(c, t.color, e.color), if_then_else(c, t.bg_color, e.bg_color));
 }};
-PrimitiveHeader fetch_prim_header(I32 index) {
- PrimitiveHeader ph;
- ivec2 uv_f = make_ivec2(make_int((2u)*((make_uint(index))%((1024u)/(2u)))), make_int((make_uint(index))/((1024u)/(2u))));
- vec4 local_rect = texelFetch(sPrimitiveHeadersF, (uv_f)+(make_ivec2(0, 0)), 0);
- vec4 local_clip_rect = texelFetch(sPrimitiveHeadersF, (uv_f)+(make_ivec2(1, 0)), 0);
- (ph).local_rect = RectWithSize((local_rect).sel(X, Y), (local_rect).sel(Z, W));
- (ph).local_clip_rect = RectWithSize((local_clip_rect).sel(X, Y), (local_clip_rect).sel(Z, W));
- ivec2 uv_i = make_ivec2(make_int((2u)*((make_uint(index))%((1024u)/(2u)))), make_int((make_uint(index))/((1024u)/(2u))));
- ivec4 data0 = texelFetch(sPrimitiveHeadersI, (uv_i)+(make_ivec2(0, 0)), 0);
- ivec4 data1 = texelFetch(sPrimitiveHeadersI, (uv_i)+(make_ivec2(1, 0)), 0);
+PrimitiveHeader_scalar fetch_prim_header(int32_t index) {
+ PrimitiveHeader_scalar ph;
+ ivec2_scalar uv_f = make_ivec2(make_int((2u)*((make_uint(index))%((1024u)/(2u)))), make_int((make_uint(index))/((1024u)/(2u))));
+ vec4_scalar local_rect = texelFetch(sPrimitiveHeadersF, (uv_f)+(make_ivec2(0, 0)), 0);
+ vec4_scalar local_clip_rect = texelFetch(sPrimitiveHeadersF, (uv_f)+(make_ivec2(1, 0)), 0);
+ (ph).local_rect = RectWithSize_scalar((local_rect).sel(X, Y), (local_rect).sel(Z, W));
+ (ph).local_clip_rect = RectWithSize_scalar((local_clip_rect).sel(X, Y), (local_clip_rect).sel(Z, W));
+ ivec2_scalar uv_i = make_ivec2(make_int((2u)*((make_uint(index))%((1024u)/(2u)))), make_int((make_uint(index))/((1024u)/(2u))));
+ ivec4_scalar data0 = texelFetch(sPrimitiveHeadersI, (uv_i)+(make_ivec2(0, 0)), 0);
+ ivec4_scalar data1 = texelFetch(sPrimitiveHeadersI, (uv_i)+(make_ivec2(1, 0)), 0);
  (ph).z = make_float((data0).sel(X));
  (ph).specific_prim_address = (data0).sel(Y);
  (ph).transform_id = (data0).sel(Z);
  (ph).user_data = data1;
  return ph;
 }
-Transform fetch_transform(I32 id) {
- Transform transform;
+Transform_scalar fetch_transform(int32_t id) {
+ Transform_scalar transform;
  (transform).is_axis_aligned = ((id)>>(24))==(0);
- I32 index = (id)&(16777215);
- ivec2 uv = make_ivec2(make_int((8u)*((make_uint(index))%((1024u)/(8u)))), make_int((make_uint(index))/((1024u)/(8u))));
- ivec2 uv0 = make_ivec2(((uv).sel(X))+(0), (uv).sel(Y));
+ int32_t index = (id)&(16777215);
+ ivec2_scalar uv = make_ivec2(make_int((8u)*((make_uint(index))%((1024u)/(8u)))), make_int((make_uint(index))/((1024u)/(8u))));
+ ivec2_scalar uv0 = make_ivec2(((uv).sel(X))+(0), (uv).sel(Y));
  (transform).m[0] = texelFetch(sTransformPalette, (uv0)+(make_ivec2(0, 0)), 0);
  (transform).m[1] = texelFetch(sTransformPalette, (uv0)+(make_ivec2(1, 0)), 0);
  (transform).m[2] = texelFetch(sTransformPalette, (uv0)+(make_ivec2(2, 0)), 0);
@@ -531,88 +531,90 @@ Transform fetch_transform(I32 id) {
  (transform).inv_m[3] = texelFetch(sTransformPalette, (uv0)+(make_ivec2(7, 0)), 0);
  return transform;
 }
-RenderTaskData fetch_render_task_data(I32 index) {
- ivec2 uv = make_ivec2(make_int((2u)*((make_uint(index))%((1024u)/(2u)))), make_int((make_uint(index))/((1024u)/(2u))));
- vec4 texel0 = texelFetch(sRenderTasks, (uv)+(make_ivec2(0, 0)), 0);
- vec4 texel1 = texelFetch(sRenderTasks, (uv)+(make_ivec2(1, 0)), 0);
- RectWithSize task_rect = RectWithSize((texel0).sel(X, Y), (texel0).sel(Z, W));
- RenderTaskCommonData common_data = RenderTaskCommonData(task_rect, (texel1).sel(X));
- RenderTaskData data = RenderTaskData(common_data, (texel1).sel(Y, Z, W));
+RenderTaskData_scalar fetch_render_task_data(int32_t index) {
+ ivec2_scalar uv = make_ivec2(make_int((2u)*((make_uint(index))%((1024u)/(2u)))), make_int((make_uint(index))/((1024u)/(2u))));
+ vec4_scalar texel0 = texelFetch(sRenderTasks, (uv)+(make_ivec2(0, 0)), 0);
+ vec4_scalar texel1 = texelFetch(sRenderTasks, (uv)+(make_ivec2(1, 0)), 0);
+ RectWithSize_scalar task_rect = RectWithSize_scalar((texel0).sel(X, Y), (texel0).sel(Z, W));
+ RenderTaskCommonData_scalar common_data = RenderTaskCommonData_scalar(task_rect, (texel1).sel(X));
+ RenderTaskData_scalar data = RenderTaskData_scalar(common_data, (texel1).sel(Y, Z, W));
  return data;
 }
-ClipArea fetch_clip_area(I32 index) {
- ClipArea area;
- auto _c28_ = (index)>=(32767);
- {
-  RectWithSize_scalar rect = RectWithSize_scalar(make_vec2(0.), make_vec2(0.));
-  (area).common_data = if_then_else(_c28_,RenderTaskCommonData_scalar(rect, 0.),(area).common_data);
-  (area).device_pixel_scale = if_then_else(_c28_,0.,(area).device_pixel_scale);
-  (area).screen_origin = if_then_else(_c28_,make_vec2(0.),(area).screen_origin);
- }
- {
-  RenderTaskData task_data = fetch_render_task_data(index);
-  (area).common_data = if_then_else(~(_c28_),(task_data).common_data,(area).common_data);
-  (area).device_pixel_scale = if_then_else(~(_c28_),((task_data).user_data).sel(X),(area).device_pixel_scale);
-  (area).screen_origin = if_then_else(~(_c28_),((task_data).user_data).sel(Y, Z),(area).screen_origin);
+ClipArea_scalar fetch_clip_area(int32_t index) {
+ ClipArea_scalar area;
+ if ((index)>=(32767)) {
+  {
+   RectWithSize_scalar rect = RectWithSize_scalar(make_vec2(0.), make_vec2(0.));
+   (area).common_data = RenderTaskCommonData_scalar(rect, 0.);
+   (area).device_pixel_scale = 0.;
+   (area).screen_origin = make_vec2(0.);
+  }
+ } else  {
+  RenderTaskData_scalar task_data = fetch_render_task_data(index);
+  (area).common_data = (task_data).common_data;
+  (area).device_pixel_scale = ((task_data).user_data).sel(X);
+  (area).screen_origin = ((task_data).user_data).sel(Y, Z);
  }
  return area;
 }
-PictureTask fetch_picture_task(I32 address) {
- RenderTaskData task_data = fetch_render_task_data(address);
- PictureTask task = PictureTask((task_data).common_data, ((task_data).user_data).sel(X), ((task_data).user_data).sel(Y, Z));
+PictureTask_scalar fetch_picture_task(int32_t address) {
+ RenderTaskData_scalar task_data = fetch_render_task_data(address);
+ PictureTask_scalar task = PictureTask_scalar((task_data).common_data, ((task_data).user_data).sel(X), ((task_data).user_data).sel(Y, Z));
  return task;
 }
-ivec2 get_gpu_cache_uv(I32 address) {
+ivec2_scalar get_gpu_cache_uv(int32_t address) {
  return make_ivec2((make_uint(address))%(1024u), (make_uint(address))/(1024u));
 }
-std::array<vec4,2> fetch_from_gpu_cache_2(I32 address) {
- ivec2 uv = get_gpu_cache_uv(address);
- return std::array<vec4,2>{texelFetch(sGpuCache, (uv)+(make_ivec2(0, 0)), 0), texelFetch(sGpuCache, (uv)+(make_ivec2(1, 0)), 0)};
+std::array<vec4_scalar,2> fetch_from_gpu_cache_2(int32_t address) {
+ ivec2_scalar uv = get_gpu_cache_uv(address);
+ return std::array<vec4_scalar,2>{texelFetch(sGpuCache, (uv)+(make_ivec2(0, 0)), 0), texelFetch(sGpuCache, (uv)+(make_ivec2(1, 0)), 0)};
 }
-TextRun fetch_text_run(I32 address) {
- std::array<vec4,2> data = fetch_from_gpu_cache_2(address);
- return TextRun(data[0], data[1]);
+TextRun_scalar fetch_text_run(int32_t address) {
+ std::array<vec4_scalar,2> data = fetch_from_gpu_cache_2(address);
+ return TextRun_scalar(data[0], data[1]);
 }
-vec4 fetch_from_gpu_cache_1(I32 address) {
- ivec2 uv = get_gpu_cache_uv(address);
+vec4_scalar fetch_from_gpu_cache_1(int32_t address) {
+ ivec2_scalar uv = get_gpu_cache_uv(address);
  return texelFetch(sGpuCache, uv, 0);
 }
-Glyph fetch_glyph(I32 specific_prim_address, I32 glyph_index) {
- I32 glyph_address = (specific_prim_address)+((2)+(make_int((make_uint(glyph_index))/(2u))));
- vec4 data = fetch_from_gpu_cache_1(glyph_address);
- vec2 glyph = mix((data).sel(X, Y), (data).sel(Z, W), make_bvec2(((make_uint(glyph_index))%(2u))!=(0u)));
- return Glyph(glyph);
+Glyph_scalar fetch_glyph(int32_t specific_prim_address, int32_t glyph_index) {
+ int32_t glyph_address = (specific_prim_address)+((2)+(make_int((make_uint(glyph_index))/(2u))));
+ vec4_scalar data = fetch_from_gpu_cache_1(glyph_address);
+ vec2_scalar glyph = mix((data).sel(X, Y), (data).sel(Z, W), make_bvec2(((make_uint(glyph_index))%(2u))!=(0u)));
+ return Glyph_scalar(glyph);
 }
-GlyphResource fetch_glyph_resource(I32 address) {
- std::array<vec4,2> data = fetch_from_gpu_cache_2(address);
- return GlyphResource(data[0], (data[1]).sel(X), (data[1]).sel(Y, Z), (data[1]).sel(W));
+GlyphResource_scalar fetch_glyph_resource(int32_t address) {
+ std::array<vec4_scalar,2> data = fetch_from_gpu_cache_2(address);
+ return GlyphResource_scalar(data[0], (data[1]).sel(X), (data[1]).sel(Y, Z), (data[1]).sel(W));
 }
-vec2 clamp_rect(vec2 pt, RectWithSize rect) {
+vec2 clamp_rect(vec2 pt, RectWithSize_scalar rect) {
  return clamp(pt, (rect).p0, ((rect).p0)+((rect).size));
 }
-VertexInfo write_text_vertex(RectWithSize local_clip_rect, Float z, I32 raster_space, Transform transform, PictureTask task, vec2 text_offset, vec2 glyph_offset, RectWithSize glyph_rect, vec2 snap_bias) {
- vec2 snap_offset = make_vec2(0.);
- mat2 glyph_transform_inv = make_mat2(1.);
- Bool remove_subpx_offset = (transform).is_axis_aligned;
- auto _c32_ = remove_subpx_offset;
- {
-  auto _c33_ = (raster_space)==(1);
-  auto _c34_ = (_c32_)&(_c33_);
+VertexInfo write_text_vertex(RectWithSize_scalar local_clip_rect, float z, int32_t raster_space, Transform_scalar transform, PictureTask_scalar task, vec2_scalar text_offset, vec2_scalar glyph_offset, RectWithSize glyph_rect, vec2_scalar snap_bias) {
+ vec2_scalar snap_offset = make_vec2(0.);
+ mat2_scalar glyph_transform_inv = make_mat2(1.);
+ bool remove_subpx_offset = (transform).is_axis_aligned;
+ if (remove_subpx_offset) {
   {
-   Float device_scale = ((task).device_pixel_scale)/(((transform).m[3]).sel(W));
-   mat2 glyph_transform = (make_mat2((transform).m))*(device_scale);
-   vec2 device_text_pos = ((glyph_transform)*(text_offset))+((((transform).m[3]).sel(X, Y))*(device_scale));
-   snap_offset = if_then_else(_c34_,(floor((device_text_pos)+(0.5)))-(device_text_pos),snap_offset);
-   vec2 device_glyph_offset = (glyph_transform)*(glyph_offset);
-   snap_offset = if_then_else(_c34_,snap_offset+(floor((device_glyph_offset)+(snap_bias)))-(device_glyph_offset),snap_offset);
-   glyph_transform_inv = if_then_else(_c34_,inverse(glyph_transform),glyph_transform_inv);
-   snap_offset = if_then_else(_c34_,(glyph_transform_inv)*(snap_offset),snap_offset);
-  }
-  _c33_ = (_c32_)&(~(_c33_));
-  if (true) {
-   {
-    snap_offset = if_then_else(_c33_,(floor((text_offset)+(0.5)))-(text_offset),snap_offset);
-    snap_offset = if_then_else(_c33_,snap_offset+(floor((glyph_offset)+(snap_bias)))-(glyph_offset),snap_offset);
+   switch (raster_space) {
+    case 1:
+     {
+      float device_scale = ((task).device_pixel_scale)/(((transform).m[3]).sel(W));
+      mat2_scalar glyph_transform = (make_mat2((transform).m))*(device_scale);
+      vec2_scalar device_text_pos = ((glyph_transform)*(text_offset))+((((transform).m[3]).sel(X, Y))*(device_scale));
+      snap_offset = (floor((device_text_pos)+(0.5)))-(device_text_pos);
+      vec2_scalar device_glyph_offset = (glyph_transform)*(glyph_offset);
+      snap_offset += (floor((device_glyph_offset)+(snap_bias)))-(device_glyph_offset);
+      glyph_transform_inv = inverse(glyph_transform);
+      snap_offset = (glyph_transform_inv)*(snap_offset);
+      break;
+     }
+    default:
+     {
+      snap_offset = (floor((text_offset)+(0.5)))-(text_offset);
+      snap_offset += (floor((glyph_offset)+(snap_bias)))-(glyph_offset);
+      break;
+     }
    }
   }
  }
@@ -621,101 +623,91 @@ VertexInfo write_text_vertex(RectWithSize local_clip_rect, Float z, I32 raster_s
  local_pos = clamp_rect(local_pos, local_clip_rect);
  vec4 world_pos = ((transform).m)*(make_vec4(local_pos, 0., 1.));
  vec2 device_pos = ((world_pos).sel(X, Y))*((task).device_pixel_scale);
- vec2 final_offset = (-((task).content_origin))+((((task).common_data).task_rect).p0);
+ vec2_scalar final_offset = (-((task).content_origin))+((((task).common_data).task_rect).p0);
  gl_Position = (uTransform)*(make_vec4((device_pos)+((final_offset)*((world_pos).sel(W))), (z)*((world_pos).sel(W)), (world_pos).sel(W)));
  VertexInfo vi = VertexInfo(local_pos, snap_offset, world_pos);
  return vi;
 }
-void write_clip(vec4 world_pos, vec2 snap_offset, ClipArea area) {
+void write_clip(vec4 world_pos, vec2 snap_offset, ClipArea_scalar area) {
  vec2 uv = (((world_pos).sel(X, Y))*((area).device_pixel_scale))+(((world_pos).sel(W))*((snap_offset)+(((((area).common_data).task_rect).p0)-((area).screen_origin))));
- vClipMaskUvBounds = force_scalar(make_vec4((((area).common_data).task_rect).p0, ((((area).common_data).task_rect).p0)+((((area).common_data).task_rect).size)));
+ vClipMaskUvBounds = make_vec4((((area).common_data).task_rect).p0, ((((area).common_data).task_rect).p0)+((((area).common_data).task_rect).size));
  vClipMaskUv = make_vec4(uv, ((area).common_data).texture_layer_index, (world_pos).sel(W));
 }
 ALWAYS_INLINE void main(void) {
- I32 prim_header_address = (aData).sel(X);
- I32 glyph_index = ((aData).sel(Y))&(65535);
- I32 render_task_index = ((aData).sel(Y))>>(16);
- I32 resource_address = (aData).sel(Z);
- I32 raster_space = ((aData).sel(W))>>(16);
- I32 subpx_dir = (((aData).sel(W))>>(8))&(255);
- I32 color_mode = ((aData).sel(W))&(255);
- PrimitiveHeader ph = fetch_prim_header(prim_header_address);
- Transform transform = fetch_transform((ph).transform_id);
- ClipArea clip_area = fetch_clip_area(((ph).user_data).sel(W));
- PictureTask task = fetch_picture_task(render_task_index);
- TextRun text = fetch_text_run((ph).specific_prim_address);
- vec2 text_offset = (make_vec2(((ph).user_data).sel(X, Y)))/(256.);
- auto _c14_ = (color_mode)==(0);
- {
-  color_mode = if_then_else(_c14_,uMode,color_mode);
+ int32_t prim_header_address = (aData).sel(X);
+ int32_t glyph_index = ((aData).sel(Y))&(65535);
+ int32_t render_task_index = ((aData).sel(Y))>>(16);
+ int32_t resource_address = (aData).sel(Z);
+ int32_t raster_space = ((aData).sel(W))>>(16);
+ int32_t subpx_dir = (((aData).sel(W))>>(8))&(255);
+ int32_t color_mode = ((aData).sel(W))&(255);
+ PrimitiveHeader_scalar ph = fetch_prim_header(prim_header_address);
+ Transform_scalar transform = fetch_transform((ph).transform_id);
+ ClipArea_scalar clip_area = fetch_clip_area(((ph).user_data).sel(W));
+ PictureTask_scalar task = fetch_picture_task(render_task_index);
+ TextRun_scalar text = fetch_text_run((ph).specific_prim_address);
+ vec2_scalar text_offset = (make_vec2(((ph).user_data).sel(X, Y)))/(256.);
+ if ((color_mode)==(0)) {
+  {
+   color_mode = uMode;
+  }
  }
- Glyph glyph = fetch_glyph((ph).specific_prim_address, glyph_index);
+ Glyph_scalar glyph = fetch_glyph((ph).specific_prim_address, glyph_index);
  (glyph).offset += (((ph).local_rect).p0)-(text_offset);
- GlyphResource res = fetch_glyph_resource(resource_address);
- Float raster_scale = (make_float(((ph).user_data).sel(Z)))/(65535.);
- Float scale = ((res).scale)/((raster_scale)*((task).device_pixel_scale));
- RectWithSize glyph_rect = RectWithSize(((scale)*((res).offset))+((text_offset)+((glyph).offset)), (scale)*((((res).uv_rect).sel(Z, W))-(((res).uv_rect).sel(X, Y))));
- vec2 snap_bias;
- auto _c15_ = (subpx_dir)==(1);
- {
-  snap_bias = if_then_else(_c15_,make_vec2(0.125, 0.5),snap_bias);
- }
- auto _c16_ = (subpx_dir)==(2);
- auto _c17_ = (~(_c15_))&(_c16_);
- {
-  snap_bias = if_then_else(_c17_,make_vec2(0.5, 0.125),snap_bias);
- }
- _c16_ = (~(_c15_))&(~(_c16_));
- auto _c18_ = (subpx_dir)==(3);
- auto _c19_ = (_c16_)&(_c18_);
- {
-  snap_bias = if_then_else(_c19_,make_vec2(0.125),snap_bias);
- }
- _c18_ = (_c16_)&(~(_c18_));
- {
-  snap_bias = if_then_else(_c18_,make_vec2(0.5),snap_bias);
+ GlyphResource_scalar res = fetch_glyph_resource(resource_address);
+ float raster_scale = (make_float(((ph).user_data).sel(Z)))/(65535.);
+ float scale = ((res).scale)/((raster_scale)*((task).device_pixel_scale));
+ RectWithSize glyph_rect = RectWithSize_scalar(((scale)*((res).offset))+((text_offset)+((glyph).offset)), (scale)*((((res).uv_rect).sel(Z, W))-(((res).uv_rect).sel(X, Y))));
+ vec2_scalar snap_bias;
+ switch (subpx_dir) {
+  case 0:
+  default:
+   snap_bias = make_vec2(0.5);
+   break;
+  case 1:
+   snap_bias = make_vec2(0.125, 0.5);
+   break;
+  case 2:
+   snap_bias = make_vec2(0.5, 0.125);
+   break;
+  case 3:
+   snap_bias = make_vec2(0.125);
+   break;
  }
  VertexInfo vi = write_text_vertex((ph).local_clip_rect, (ph).z, raster_space, transform, task, text_offset, (glyph).offset, glyph_rect, snap_bias);
  (glyph_rect).p0 += (vi).snap_offset;
  vec2 f = (((vi).local_pos)-((glyph_rect).p0))/((glyph_rect).size);
  write_clip((vi).world_pos, (vi).snap_offset, clip_area);
- auto _c20_ = ((color_mode)==(1))||((color_mode)==(7));
- {
-  if (_c20_[0]) { vMaskSwizzle = make_vec2(0., 1.); };
-  if (_c20_[0]) { vColor = force_scalar((text).color); };
- }
- auto _c21_ = ((color_mode)==(5))||((color_mode)==(6));
- auto _c22_ = (~(_c20_))&(_c21_);
- {
-  if (_c22_[0]) { vMaskSwizzle = make_vec2(1., 0.); };
-  if (_c22_[0]) { vColor = force_scalar((text).color); };
- }
- _c21_ = (~(_c20_))&(~(_c21_));
- auto _c23_ = (((color_mode)==(2))||((color_mode)==(3)))||((color_mode)==(8));
- auto _c24_ = (_c21_)&(_c23_);
- {
-  if (_c24_[0]) { vMaskSwizzle = make_vec2(1., 0.); };
-  if (_c24_[0]) { vColor = force_scalar(make_vec4(((text).color).sel(A))); };
- }
- _c23_ = (_c21_)&(~(_c23_));
- auto _c25_ = (color_mode)==(4);
- auto _c26_ = (_c23_)&(_c25_);
- {
-  if (_c26_[0]) { vMaskSwizzle = make_vec2(-(1.), 1.); };
-  if (_c26_[0]) { vColor = force_scalar((make_vec4(((text).color).sel(A)))*((text).bg_color)); };
- }
- _c25_ = (_c23_)&(~(_c25_));
- if (true) {
-  {
-   if (_c25_[0]) { vMaskSwizzle = make_vec2(0.); };
-   if (_c25_[0]) { vColor = make_vec4(1.); };
-  }
+ switch (color_mode) {
+  case 1:
+  case 7:
+   vMaskSwizzle = make_vec2(0., 1.);
+   vColor = (text).color;
+   break;
+  case 5:
+  case 6:
+   vMaskSwizzle = make_vec2(1., 0.);
+   vColor = (text).color;
+   break;
+  case 2:
+  case 3:
+  case 8:
+   vMaskSwizzle = make_vec2(1., 0.);
+   vColor = make_vec4(((text).color).sel(A));
+   break;
+  case 4:
+   vMaskSwizzle = make_vec2(-(1.), 1.);
+   vColor = (make_vec4(((text).color).sel(A)))*((text).bg_color);
+   break;
+  default:
+   vMaskSwizzle = make_vec2(0.);
+   vColor = make_vec4(1.);
  }
  vec2_scalar texture_size = make_vec2(textureSize(sColor0, 0));
- vec2 st0 = (((res).uv_rect).sel(X, Y))/(texture_size);
- vec2 st1 = (((res).uv_rect).sel(Z, W))/(texture_size);
+ vec2_scalar st0 = (((res).uv_rect).sel(X, Y))/(texture_size);
+ vec2_scalar st1 = (((res).uv_rect).sel(Z, W))/(texture_size);
  vUv = make_vec3(mix(st0, st1, f), (res).layer);
- vUvBorder = force_scalar((((res).uv_rect)+(make_vec4(0.5, 0.5, -(0.5), -(0.5))))/((texture_size).sel(X, Y, X, Y)));
+ vUvBorder = (((res).uv_rect)+(make_vec4(0.5, 0.5, -(0.5), -(0.5))))/((texture_size).sel(X, Y, X, Y));
 }
 static void run(Self *self, char* flats, char* interps, size_t interp_stride) {
  self->main();

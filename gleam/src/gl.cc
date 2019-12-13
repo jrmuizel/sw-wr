@@ -557,6 +557,25 @@ void load_attrib(T& attrib, VertexAttrib &va, unsigned short *indices, int start
     }
 }
 
+template<typename T>
+void load_flat_attrib(T& attrib, VertexAttrib &va, unsigned short *indices, int start, int instance, int count) {
+    char* src;
+    if (va.divisor == 1) {
+        src = (char*)va.buf + va.stride * instance + va.offset;
+    } else if (va.divisor == 0) {
+        src = (char*)va.buf + va.stride * indices[start] + va.offset;
+    } else {
+        assert(false);
+    }
+    assert(src + va.size <= va.buf + va.buf_size);
+    if (sizeof(T) > va.size) {
+        attrib = T{0};
+        memcpy(&attrib, src, va.size);
+    } else {
+        attrib = *reinterpret_cast<T*>(src);
+    }
+}
+
 #include "brush_solid.h"
 #include "brush_image.h"
 #include "ps_text_run.h"
@@ -1457,6 +1476,7 @@ static inline __m128i blend_pixels(__m128i dst) {
     #define alpha_mask _mm_set1_epi64x(0xFFFF000000000000ULL)
     switch (blend_key) {
     case BLEND_KEY_NONE:
+        r = _mm_packus_epi16(slo, shi);
         break;
     case BLEND_KEY(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE):
         r = _mm_packus_epi16(

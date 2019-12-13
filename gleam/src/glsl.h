@@ -36,6 +36,10 @@ float make_float(int32_t n) {
     return float(n);
 }
 
+int32_t make_int(uint32_t n) {
+    return n;
+}
+
 Float make_float(I32 v) {
         // Float(v) seems to just convert the bits
         return _mm_cvtepi32_ps(v);
@@ -281,6 +285,16 @@ struct vec2_scalar {
         friend vec2_scalar operator+(vec2_scalar a, vec2_scalar b) {
                 return vec2_scalar(a.x+b.x, a.y+b.y);
         }
+
+        vec2_scalar operator-() {
+                return vec2_scalar(-x, -y);
+        }
+
+        vec2_scalar operator+=(vec2_scalar a) {
+                x += a.x;
+                y += a.y;
+                return *this;
+        }
 };
 
 struct vec2_scalar_ref {
@@ -307,8 +321,8 @@ struct vec2_scalar_ref {
 struct vec2 {
         typedef struct vec2 vector_type;
 
-        vec2() : vec2(0) {}
-        vec2(Float a): x(a), y(a) {}
+        constexpr vec2() : vec2(0) {}
+        constexpr vec2(Float a): x(a), y(a) {}
         vec2(Float x, Float y): x(x), y(y) {}
         constexpr vec2(vec2_scalar s) : x(s.x), y(s.y) {}
         constexpr vec2(vec2_scalar s0, vec2_scalar s1, vec2_scalar s2, vec2_scalar s3)
@@ -516,6 +530,10 @@ I32   cast  (Float v) { return      __builtin_convertvector(v,   I32); }
 
 vec2 floor(vec2 v) {
         return vec2(floor(v.x), floor(v.y));
+}
+
+vec2_scalar floor(vec2_scalar v) {
+        return vec2_scalar{floorf(v.x), floorf(v.y)};
 }
 
 Float ceil(Float v) {
@@ -870,6 +888,13 @@ SI ivec4 if_then_else(int32_t c, ivec4 t, ivec4 e) {
 ivec4 operator&(I32 a, ivec4_scalar b) {
     return ivec4(a&b.x, a&b.y, a&b.z, a&b.w);
 }
+
+struct bvec3_scalar {
+    bool x;
+    bool y;
+    bool z;
+    bool w;
+};
 
 struct bvec3 {
         bvec3() : bvec3(0) {}
@@ -1229,6 +1254,9 @@ struct vec4_scalar {
                 return vec2_scalar_ref(select(c1), select(c2));
         }
 
+        friend vec4_scalar operator*(vec4_scalar a, vec4_scalar b) {
+                return vec4_scalar{a.x*b.x, a.y*b.y, a.z*b.z, a.w*b.w};
+        }
         friend vec4_scalar operator*(vec4_scalar a, float b) {
                 return vec4_scalar{a.x*b, a.y*b, a.z*b, a.w*b};
         }
@@ -1240,6 +1268,9 @@ struct vec4_scalar {
                 return vec4_scalar{a.x+b.x, a.y+b.y, a.z+b.z, a.w+b.w};
         }
 
+        friend vec4_scalar operator/(vec4_scalar a, vec4_scalar b) {
+                return vec4_scalar{a.x/b.x, a.y/b.y, a.z/b.z, a.w/b.w};
+        }
         vec4_scalar& operator/=(vec4_scalar a) {
                 x /= a.x;
                 y /= a.y;
@@ -1413,12 +1444,20 @@ vec4_scalar make_vec4(const vec2_scalar& v, float z, float w) {
     return vec4_scalar{ v.x, v.y, z, w };
 }
 
+vec4_scalar make_vec4(const vec2_scalar& a, const vec2_scalar& b) {
+    return vec4_scalar{ a.x, a.y, b.x, b.y };
+}
+
 vec4_scalar make_vec4(const vec3_scalar& v, float w) {
     return vec4_scalar{ v.x, v.y, v.z, w };
 }
 
 vec4_scalar make_vec4(float x, float y, float z, float w) {
     return vec4_scalar{ x, y, z, w };
+}
+
+vec4_scalar make_vec4(double x, double y, double z, double w) {
+    return vec4_scalar{ float(x), float(y), float(z), float(w) };
 }
 
 template<typename N> vec4 make_vec4(const N& n) {
@@ -1600,6 +1639,29 @@ typedef isampler2DRGBA32I_impl *isampler2DRGBA32I;
 
 struct mat2_scalar {
         vec2_scalar data[2];
+
+        vec2_scalar& operator[](int index) {
+                return data[index];
+        }
+        const vec2_scalar& operator[](int index) const {
+                return data[index];
+        }
+
+        friend vec2_scalar operator*(mat2_scalar m, vec2_scalar v) {
+                vec2_scalar u;
+                u.x = m[0].x * v.x + m[1].x * v.y;
+                u.y = m[0].y * v.x + m[1].y * v.y;
+                return u;
+        }
+
+        friend mat2_scalar operator*(mat2_scalar m, float f) {
+                mat2_scalar u = m;
+                u[0].x *= f;
+                u[0].y *= f;
+                u[1].x *= f;
+                u[1].y *= f;
+                return u;
+        }
 };
 
 struct mat4;
@@ -1628,6 +1690,11 @@ struct mat2 {
                 data[1] = b;
         }
         mat2(const mat4 &mat);
+        constexpr mat2(mat2_scalar s) {
+                data[0] = vec2(s.data[0]);
+                data[1] = vec2(s.data[1]);
+        }
+
         friend vec2 operator*(mat2 m, vec2 v) {
                 vec2 u;
                 u.x = m[0].x * v.x + m[1].x * v.y;
@@ -1647,6 +1714,10 @@ struct mat2 {
 
 mat2_scalar make_mat2(float n) {
     return mat2_scalar{{{n, n}, {n, n}}};
+}
+
+mat2_scalar make_mat2(double n) {
+    return make_mat2(float(n));
 }
 
 mat2_scalar make_mat2(const mat2_scalar& m) {
@@ -1842,6 +1913,10 @@ mat2::mat2(const mat4 &mat) : mat2(vec2(mat[0].x, mat[0].y),
                     vec2(mat[1].x, mat[1].y)) {
 }
 
+mat2_scalar make_mat2(const mat4_scalar &m) {
+    return mat2_scalar{{{m[0].x, m[0].y}, {m[1].x, m[1].y}}};
+}
+
 SI mat3 if_then_else(I32 c, mat3 t, mat3 e) {
     return mat3{if_then_else(c, t[0], e[0]),
                 if_then_else(c, t[1], e[1]),
@@ -1904,13 +1979,13 @@ ivec4 pixel_int_to_ivec4(I32 a, I32 b, I32 c, I32 d) {
 }
 
 
-
 vec4_scalar pixel_to_vec4(uint32_t p) {
     return vec4_scalar{to_float((p >> 16) & 0xFF),
                        to_float((p >> 8) & 0xFF),
                        to_float((p >> 0) & 0xFF),
                        to_float((p >> 24) & 0xFF)};
 }
+
 vec4 texelFetchByte(sampler2D sampler, ivec2 P, int lod) {
         I32 offset = P.x + P.y*sampler->stride;
         return pixel_to_vec4(
@@ -1973,7 +2048,12 @@ vec4 texelFetchRGBA8(sampler2D sampler, ivec2 P, int lod) {
 
 vec4_scalar texelFetch(sampler2D sampler, ivec2_scalar P, int lod) {
         P = clamp2D(P, sampler);
-        return pixel_to_vec4(sampler->buf[P.x + P.y * sampler->stride]);
+        if (sampler->format == TextureFormat::RGBA32F) {
+            return *(vec4_scalar*)&sampler->buf[P.x*4 + P.y*sampler->stride];
+        } else {
+            assert(sampler->format == TextureFormat::RGBA8);
+            return pixel_to_vec4(sampler->buf[P.x + P.y*sampler->stride]);
+        }
 }
 
 vec4 texelFetch(sampler2DArray sampler, ivec3 P, int lod) {
@@ -2007,6 +2087,12 @@ ivec4 texelFetch(isampler2D sampler, ivec2 P, int lod) {
                       *(I32*)&sampler->buf[offset.y],
                       *(I32*)&sampler->buf[offset.z],
                       *(I32*)&sampler->buf[offset.w]);
+}
+
+ivec4_scalar texelFetch(isampler2D sampler, ivec2_scalar P, int lod) {
+        P = clamp2D(P, sampler);
+        assert(sampler->format == TextureFormat::RGBA32I);
+        return *(ivec4_scalar*)&sampler->buf[P.x*4 + P.y*sampler->stride];
 }
 
 template <typename T, typename U, typename A, typename R = typename T::vector_type>
@@ -2091,7 +2177,7 @@ vec4 textureLinearRGBA32F(S sampler, vec2 P, I32 zoffset = 0) {
     ivec2 c = clamp2D(i, sampler);
     r.x = if_then_else(i.x < 0 || i.x > sampler->width-2, 0.0f, r.x);
     I32 offset0 = c.x*4 + c.y*sampler->stride + zoffset;
-    I32 offset1 = offset1 + if_then_else(r.y < 0 || r.y > sampler->height-2, 0, sampler->stride);
+    I32 offset1 = offset0 + if_then_else(r.y < 0 || r.y > sampler->height-2, 0, sampler->stride);
 
     Float c0 = mix(mix(*(Float*)&sampler->buf[offset0.x], *(Float*)&sampler->buf[offset0.x+4], r.x),
                    mix(*(Float*)&sampler->buf[offset1.x], *(Float*)&sampler->buf[offset1.x+4], r.x),
@@ -2227,6 +2313,27 @@ SI R mix(T x, T y, bvec2 a) {
         return if_then_else(a, y, x);
 }
 
+template <typename T>
+SI T mix(T x, T y, bvec4_scalar a) {
+        return T{a.x ? y.x : x.x,
+                 a.y ? y.y : x.y,
+                 a.z ? y.z : x.z,
+                 a.w ? y.w : x.w};
+}
+
+template <typename T>
+SI T mix(T x, T y, bvec3_scalar a) {
+        return T{a.x ? y.x : x.x,
+                 a.y ? y.y : x.y,
+                 a.z ? y.z : x.z};
+}
+
+template <typename T>
+SI T mix(T x, T y, bvec2_scalar a) {
+        return T{a.x ? y.x : x.x,
+                 a.y ? y.y : x.y};
+}
+
 template <typename T, typename U, typename R = typename T::vector_type>
 SI R mix(T x, T y, U a) {
         return (y - x) * a + x;
@@ -2273,8 +2380,7 @@ vec2 abs(vec2 v) {
 }
 
 Float mod(Float a, Float b) {
-        assert(0);
-        return a;
+        return a - b * floor(a/b);
 }
 
 vec2 mod(vec2 a, vec2 b) {
@@ -2288,6 +2394,11 @@ vec3 abs(vec3 v) {
 mat2 inverse(mat2 v) {
         Float det = v[0].x*v[1].y - v[0].y * v[1].x;
         return mat2(vec2(v[1].y, -v[0].y), vec2(-v[1].x, v[0].x))* (1./det);
+}
+
+mat2_scalar inverse(mat2_scalar v) {
+        float det = v[0].x*v[1].y - v[0].y * v[1].x;
+        return mat2_scalar{{{v[1].y, -v[0].y}, {-v[1].x, v[0].x}}}* (1./det);
 }
 
 int32_t get_nth(I32 a, int n) {
