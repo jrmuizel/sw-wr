@@ -1642,7 +1642,6 @@ void draw_quad(int nump) {
             for (int k = 1; k < nump; k++) {
                 if (p[k].y < p[top].y) {
                     top = k;
-                    break;
                 }
             }
             int next = (top+1)%nump;
