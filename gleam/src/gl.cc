@@ -462,7 +462,8 @@ GLdouble cleardepth = 1;
 GLenum active_texture;
 GLuint texture_slots[16];
 
-sampler2D lookup_sampler(sampler2D_impl *s, int texture) {
+template<typename S>
+S *lookup_sampler(S *s, int texture) {
         if (!texture_slots[texture]) {
             s->width = 0;
             s->height = 0;
@@ -482,7 +483,8 @@ sampler2D lookup_sampler(sampler2D_impl *s, int texture) {
         return s;
 }
 
-isampler2D lookup_isampler(isampler2D_impl *s, int texture) {
+template<typename S>
+S *lookup_isampler(S *s, int texture) {
         if (!texture_slots[texture]) {
             s->width = 0;
             s->height = 0;
@@ -500,7 +502,8 @@ isampler2D lookup_isampler(isampler2D_impl *s, int texture) {
         return s;
 }
 
-sampler2DArray lookup_sampler_array(sampler2DArray_impl *s, int texture) {
+template<typename S>
+S *lookup_sampler_array(S *s, int texture) {
         if (!texture_slots[texture]) {
             s->width = 0;
             s->height = 0;
