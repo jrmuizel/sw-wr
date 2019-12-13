@@ -1959,13 +1959,13 @@ vec4 texelFetch(sampler2D sampler, ivec2 P, int lod) {
         }
 }
 
-vec4 texelFetchRGBA32F(sampler2D sampler, ivec3 P, int lod) {
+vec4 texelFetchRGBA32F(sampler2D sampler, ivec2 P, int lod) {
         P = clamp2D(P, sampler);
         assert(sampler->format == TextureFormat::RGBA32F);
         return texelFetchFloat(sampler, P, lod);
 }
 
-vec4 texelFetchRGBA8(sampler2D sampler, ivec3 P, int lod) {
+vec4 texelFetchRGBA8(sampler2D sampler, ivec2 P, int lod) {
         P = clamp2D(P, sampler);
         assert(sampler->format == TextureFormat::RGBA8);
         return texelFetchByte(sampler, P, lod);
