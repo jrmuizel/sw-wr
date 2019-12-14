@@ -538,19 +538,29 @@ int bytes_per_type(GLenum type) {
 
 template<typename T>
 void load_attrib(T& attrib, VertexAttrib &va, unsigned short *indices, int start, int instance, int count) {
-    assert(sizeof(typename T::element_type) == bytes_per_type(va.type));
     typedef decltype(force_scalar(attrib)) scalar_type;
     if (va.divisor == 1) {
         char* src = (char*)va.buf + va.stride * instance + va.offset;
         assert(src + va.size <= va.buf + va.buf_size);
         if (sizeof(scalar_type) > va.size) {
             scalar_type scalar = {0};
-            memcpy(&scalar, src, va.size);
+            if (va.type == GL_UNSIGNED_SHORT) {
+                for (int i = 0; i < va.size/sizeof(short); i++) {
+                    short s;
+                    memcpy(&s, src + i, sizeof(short));
+                    typename ElementType<T>::ty x = s;
+                    put_nth_component(scalar, i, x);
+                }
+            } else {
+                assert(sizeof(typename ElementType<T>::ty) == bytes_per_type(va.type));
+                memcpy(&scalar, src, va.size);
+            }
             attrib = T(scalar);
         } else {
             attrib = T(*reinterpret_cast<scalar_type*>(src));
         }
     } else if (va.divisor == 0) {
+        assert(sizeof(typename ElementType<T>::ty) == bytes_per_type(va.type));
         for (int n = 0; n < count; n++) {
             char* src = (char*)va.buf + va.stride * indices[start + n] + va.offset;
             assert(src + va.size <= va.buf + va.buf_size);
