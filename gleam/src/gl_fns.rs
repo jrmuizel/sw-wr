@@ -138,6 +138,7 @@ extern "C" {
     fn ClearColor(r: GLfloat, g: GLfloat, b: GLfloat, a: GLfloat);
     fn ClearDepth(depth: GLdouble);
     fn Clear(mask: GLbitfield);
+    fn PixelStorei(name: GLenum, param: GLint);
     fn ReadPixels(
         x: GLint,
         y: GLint,
@@ -444,9 +445,7 @@ impl Gl for GlFns {
         println!("pixel_store_i {:x} {}", name, param);
         unsafe {
             if SW {
-                if !(name == 0xcf5 && param == 1) {
-                    panic!()
-                }
+                PixelStorei(name, param);
             } else {
                 self.ffi_gl_.PixelStorei(name, param);
             }

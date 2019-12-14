@@ -1387,6 +1387,15 @@ void BlitFramebuffer(
 #define GL_TRIANGLE_FAN                   0x0006
 #define GL_QUADS                          0x0007
 
+#define GL_UNPACK_ALIGNMENT               0x0CF5
+void PixelStorei(GLenum name, GLint param) {
+    if (name == GL_UNPACK_ALIGNMENT) {
+        assert(param == 1);
+    } else {
+        assert(0);
+    }
+}
+
 } // extern "C"
 
 struct Point {
