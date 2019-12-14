@@ -1963,7 +1963,7 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
 #else
         double end = ({ struct timespec tp; clock_gettime(CLOCK_MONOTONIC, &tp); tp.tv_sec * 1e9 + tp.tv_nsec; });
 #endif
-        printf("draw(%d): %fms for %d pixels in %d rows (avg %f pixels/row)\n", instancecount, (end - start)/(1000.*1000.), shaded_pixels, shaded_rows, double(shaded_pixels)/shaded_rows);
+        printf("draw(%d): %fms for %d pixels in %d rows (avg %f pixels/row, %f ns/pixel)\n", instancecount, (end - start)/(1000.*1000.), shaded_pixels, shaded_rows, double(shaded_pixels)/shaded_rows, (end - start)/std::max(shaded_pixels, 1));
 }
 
 void Finish() {

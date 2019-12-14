@@ -287,6 +287,12 @@ struct vec2_scalar {
                 y += a.y;
                 return *this;
         }
+
+        vec2_scalar operator-=(vec2_scalar a) {
+                x += a.x;
+                y += a.y;
+                return *this;
+        }
 };
 
 struct vec2_scalar_ref {
@@ -776,6 +782,10 @@ struct ivec4_scalar {
         }
         ivec2_scalar sel(XYZW c1, XYZW c2) {
                 return ivec2_scalar{select(c1), select(c2)};
+        }
+
+        friend ivec4_scalar operator&(int32_t a, ivec4_scalar b) {
+                return ivec4_scalar{a&b.x, a&b.y, a&b.z, a&b.w};
         }
 };
 
@@ -1461,6 +1471,11 @@ SI vec2 clamp(vec2 a, vec2 minVal, vec2 maxVal) {
                 clamp(a.y, minVal.y, maxVal.y));
 }
 
+SI vec2_scalar clamp(vec2_scalar a, vec2_scalar minVal, vec2_scalar maxVal) {
+    return vec2_scalar{clamp(a.x, minVal.x, maxVal.x),
+                       clamp(a.y, minVal.y, maxVal.y)};
+}
+
 SI I32 clamp(I32 a, I32 minVal, I32 maxVal) {
     assert(0); // does this work?
     a = if_then_else(a < minVal, minVal, a);
@@ -1640,10 +1655,7 @@ struct mat2 {
         const vec2& operator[](int index) const {
                 return data[index];
         }
-        mat2() {
-                data[0] = vec2();
-                data[1] = vec2();
-        }
+        mat2() = default;
 
         mat2(float a) {
                 data[0] = vec2(a);
@@ -1734,11 +1746,7 @@ struct mat3 {
         const vec3& operator[](int index) const {
                 return data[index];
         }
-        mat3() {
-                data[0] = vec3();
-                data[1] = vec3();
-                data[2] = vec3();
-        }
+        mat3() = default;
         mat3(vec3 a, vec3 b, vec3 c) {
                 data[0] = a;
                 data[1] = b;
@@ -1995,13 +2003,13 @@ vec4 texelFetch(sampler2D sampler, ivec2 P, int lod) {
         }
 }
 
-vec4 texelFetchRGBA32F(sampler2D sampler, ivec2 P, int lod) {
+vec4 texelFetch(sampler2DRGBA32F sampler, ivec2 P, int lod) {
         P = clamp2D(P, sampler);
         assert(sampler->format == TextureFormat::RGBA32F);
         return texelFetchFloat(sampler, P, lod);
 }
 
-vec4 texelFetchRGBA8(sampler2D sampler, ivec2 P, int lod) {
+vec4 texelFetch(sampler2DRGBA8 sampler, ivec2 P, int lod) {
         P = clamp2D(P, sampler);
         assert(sampler->format == TextureFormat::RGBA8);
         return texelFetchByte(sampler, P, lod);
@@ -2017,6 +2025,18 @@ vec4_scalar texelFetch(sampler2D sampler, ivec2_scalar P, int lod) {
         }
 }
 
+vec4_scalar texelFetch(sampler2DRGBA32F sampler, ivec2_scalar P, int lod) {
+        P = clamp2D(P, sampler);
+        assert(sampler->format == TextureFormat::RGBA32F);
+        return *(vec4_scalar*)&sampler->buf[P.x*4 + P.y*sampler->stride];
+}
+
+vec4_scalar texelFetch(sampler2DRGBA8 sampler, ivec2_scalar P, int lod) {
+        P = clamp2D(P, sampler);
+        assert(sampler->format == TextureFormat::RGBA8);
+        return pixel_to_vec4(sampler->buf[P.x + P.y*sampler->stride]);
+}
+
 vec4 texelFetch(sampler2DArray sampler, ivec3 P, int lod) {
         P = clamp2DArray(P, sampler);
         if (sampler->format == TextureFormat::RGBA32F) {
@@ -2027,13 +2047,13 @@ vec4 texelFetch(sampler2DArray sampler, ivec3 P, int lod) {
         }
 }
 
-vec4 texelFetchRGBA32F(sampler2DArray sampler, ivec3 P, int lod) {
+vec4 texelFetch(sampler2DArrayRGBA32F sampler, ivec3 P, int lod) {
         P = clamp2DArray(P, sampler);
         assert(sampler->format == TextureFormat::RGBA32F);
         return texelFetchFloat(sampler, P, lod);
 }
 
-vec4 texelFetchRGBA8(sampler2DArray sampler, ivec3 P, int lod) {
+vec4 texelFetch(sampler2DArrayRGBA8 sampler, ivec3 P, int lod) {
         P = clamp2DArray(P, sampler);
         assert(sampler->format == TextureFormat::RGBA8);
         return texelFetchByte(sampler, P, lod);
@@ -2063,6 +2083,19 @@ SI R mix(T x, U y, A a) {
 
 SI Float mix(Float x, Float y, Float a) {
         return (y - x) * a + x;
+}
+
+template<typename T>
+SI T mix(T x, T y, float a) {
+        return (y - x) * a + x;
+}
+
+template <typename T>
+SI T mix(T x, T y, vec4_scalar a) {
+        return T{mix(x.x, y.x, a.x),
+                 mix(x.y, y.y, a.y),
+                 mix(x.z, y.z, a.z),
+                 mix(x.w, y.w, a.w)};
 }
 
 template<typename S>
@@ -2328,6 +2361,10 @@ Float cos(Float x) {
 
 bvec4 notEqual(ivec4 a, ivec4 b) {
         return bvec4(a.x != b.x, a.y != b.y, a.z != b.z, a.w != b.w);
+}
+
+bvec4_scalar notEqual(ivec4_scalar a, ivec4_scalar b) {
+        return bvec4_scalar{a.x != b.x, a.y != b.y, a.z != b.z, a.w != b.w};
 }
 
 mat3 transpose(mat3 m) {

@@ -26,9 +26,9 @@ int get_uniform(const char *name) const override {
  return -1;
 }
 struct Samplers {
- sampler2DArray_impl sColor0_impl;
+ sampler2DArrayRGBA8_impl sColor0_impl;
  int sColor0_slot;
- sampler2D_impl sGpuCache_impl;
+ sampler2DRGBA32F_impl sGpuCache_impl;
  int sGpuCache_slot;
  sampler2DArray_impl sPrevPassAlpha_impl;
  int sPrevPassAlpha_slot;
@@ -205,7 +205,7 @@ static void bind_textures(Self *self, ps_text_runDUAL_SOURCE_BLENDING_program *p
 int32_t uMode;
 mat4_scalar uTransform;
 vec3 aPosition;
-sampler2DArray sColor0;
+sampler2DArrayRGBA8 sColor0;
 sampler2DArray sColor1;
 sampler2DArray sColor2;
 struct RectWithSize_scalar {
@@ -321,7 +321,7 @@ ClipArea(ClipArea_scalar s):common_data(s.common_data),device_pixel_scale(s.devi
 friend ClipArea if_then_else(I32 c, ClipArea t, ClipArea e) { return ClipArea(
 if_then_else(c, t.common_data, e.common_data), if_then_else(c, t.device_pixel_scale, e.device_pixel_scale), if_then_else(c, t.screen_origin, e.screen_origin));
 }};
-sampler2D sGpuCache;
+sampler2DRGBA32F sGpuCache;
 struct ImageResource_scalar {
 RectWithEndpoint_scalar uv_rect;
 float layer;
@@ -807,7 +807,7 @@ static void bind_textures(Self *self, ps_text_runDUAL_SOURCE_BLENDING_program *p
 // vec4 oFragColor;
 #define oFragBlend gl_SecondaryFragColor
 // vec4 oFragBlend;
-sampler2DArray sColor0;
+sampler2DArrayRGBA8 sColor0;
 sampler2DArray sColor1;
 sampler2DArray sColor2;
 struct RectWithSize_scalar {
@@ -846,7 +846,7 @@ RectWithEndpoint(RectWithEndpoint_scalar s):p0(s.p0),p1(s.p1){
 friend RectWithEndpoint if_then_else(I32 c, RectWithEndpoint t, RectWithEndpoint e) { return RectWithEndpoint(
 if_then_else(c, t.p0, e.p0), if_then_else(c, t.p1, e.p1));
 }};
-sampler2D sGpuCache;
+sampler2DRGBA32F sGpuCache;
 vec4_scalar vTransformBounds;
 sampler2DArray sPrevPassAlpha;
 sampler2DArray sPrevPassColor;
