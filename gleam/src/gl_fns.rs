@@ -1357,7 +1357,7 @@ impl Gl for GlFns {
     }
 
     fn invalidate_framebuffer(&self, target: GLenum, attachments: &[GLenum]) {
-        panic!();
+        if SW { return }
         if self.ffi_gl_.InvalidateFramebuffer.is_loaded() {
             unsafe {
                 self.ffi_gl_.InvalidateFramebuffer(
