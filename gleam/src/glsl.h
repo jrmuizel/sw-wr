@@ -790,6 +790,8 @@ struct ivec4_scalar {
 };
 
 struct ivec4 {
+        typedef int32_t element_type;
+
         ivec4() : ivec4(0) {}
         ivec4(I32 a): x(a), y(a), z(a), w(a) {}
         ivec4(I32 x, I32 y, I32 z, I32 w): x(x), y(y), z(z), w(w) {}
@@ -1037,6 +1039,7 @@ struct vec3_scalar {
 
 struct vec3 {
         typedef struct vec3 vector_type;
+        typedef float element_type;
 
         constexpr vec3() : vec3(0) {  }
         constexpr vec3(Float a): x(a), y(a), z(a) {}

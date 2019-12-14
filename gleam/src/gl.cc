@@ -526,8 +526,19 @@ S *lookup_sampler_array(S *s, int texture) {
         return s;
 }
 
+int bytes_per_type(GLenum type) {
+        switch (type) {
+                case GL_INT: return 4;
+                case GL_FLOAT: return 4;
+                case GL_UNSIGNED_SHORT: return 2;
+                case GL_UNSIGNED_BYTE: return 1;
+                default: assert(0);
+        }
+}
+
 template<typename T>
 void load_attrib(T& attrib, VertexAttrib &va, unsigned short *indices, int start, int instance, int count) {
+    assert(sizeof(typename T::element_type) == bytes_per_type(va.type));
     typedef decltype(force_scalar(attrib)) scalar_type;
     if (va.divisor == 1) {
         char* src = (char*)va.buf + va.stride * instance + va.offset;
@@ -986,16 +997,6 @@ void RenderbufferStorage(
             break;
     }
     TexStorage2D(target, 1, internalformat, width, height);
-}
-
-int bytes_per_type(GLenum type) {
-        switch (type) {
-                case GL_INT: return 4;
-                case GL_FLOAT: return 4;
-                case GL_UNSIGNED_SHORT: return 2;
-                case GL_UNSIGNED_BYTE: return 1;
-                default: assert(0);
-        }
 }
 
 void VertexAttribPointer(GLuint index,
