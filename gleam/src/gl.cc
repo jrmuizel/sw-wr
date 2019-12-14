@@ -1550,6 +1550,7 @@ static inline __m128i blend_pixels(__m128i dst) {
 
 static const size_t MAX_FLATS = 64;
 typedef float Flats[MAX_FLATS];
+
 static const size_t MAX_INTERPOLANTS = 16;
 typedef float Interpolants __attribute__((ext_vector_type(MAX_INTERPOLANTS)));
 
@@ -1599,7 +1600,7 @@ static int shaded_pixels = 0;
 
 void draw_quad(int nump, Texture& colortex, Texture& depthtex) {
         Flats flat_outs;
-        Interpolants interp_outs[4];
+        Interpolants interp_outs[4] = { 0 };
         vertex_shader.run((char *)flat_outs, (char *)interp_outs, sizeof(Interpolants));
         Float w = 1.0f / vertex_shader.gl_Position.w;
         vec3 clip = vertex_shader.gl_Position.sel(X, Y, Z) * w;
