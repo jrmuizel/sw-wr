@@ -85,6 +85,10 @@ int bytes_for_internal_format(GLenum internal_format) {
         }
 }
 
+static inline int aligned_stride(int row_bytes) {
+    return (row_bytes + 3) & ~3;
+}
+
 glsl::TextureFormat gl_format_to_texture_format(int type) {
         switch (type) {
                 case GL_RGBA32F: return glsl::TextureFormat::RGBA32F;
@@ -155,7 +159,7 @@ struct Texture {
 
     void allocate() {
         if (!buf) {
-            size_t size = bytes_for_internal_format(internal_format) * width * height * std::max(depth, 1) * levels;
+            size_t size = aligned_stride(bytes_for_internal_format(internal_format) * width) * height * std::max(depth, 1) * levels;
             buf = (char*)malloc(size + sizeof(__m128i));
         }
     }
@@ -474,7 +478,7 @@ S *lookup_sampler(S *s, int texture) {
             Texture &t = textures[texture_slots[texture]];
             s->width = t.width;
             s->height = t.height;
-            s->stride = bytes_for_internal_format(t.internal_format) * t.width / 4;
+            s->stride = aligned_stride(bytes_for_internal_format(t.internal_format) * t.width) / 4;
             s->buf = (uint32_t*)t.buf; //XXX: wrong
             s->format = gl_format_to_texture_format(t.internal_format);
             s->filter = gl_filter_to_texture_filter(t.mag_filter);
@@ -494,7 +498,7 @@ S *lookup_isampler(S *s, int texture) {
             Texture &t = textures[texture_slots[texture]];
             s->width = t.width;
             s->height = t.height;
-            s->stride = bytes_for_internal_format(t.internal_format) * t.width / 4;
+            s->stride = aligned_stride(bytes_for_internal_format(t.internal_format) * t.width) / 4;
             s->buf = (uint32_t*)t.buf; //XXX: wrong
             s->format = gl_format_to_texture_format(t.internal_format);
         }
@@ -517,8 +521,8 @@ S *lookup_sampler_array(S *s, int texture) {
             s->width = t.width;
             s->height = t.height;
             s->depth = t.depth;
-            s->stride = bytes_for_internal_format(t.internal_format) * t.width / 4;
-            s->height_stride = bytes_for_internal_format(t.internal_format) * t.width * t.height / 4;
+            s->stride = aligned_stride(bytes_for_internal_format(t.internal_format) * t.width) / 4;
+            s->height_stride = aligned_stride(bytes_for_internal_format(t.internal_format) * t.width) * t.height / 4;
             s->buf = (uint32_t*)t.buf; //XXX: wrong
             s->format = gl_format_to_texture_format(t.internal_format);
             s->filter = gl_filter_to_texture_filter(t.mag_filter);
@@ -891,11 +895,12 @@ void TexSubImage2D(
         int bpp = bytes_for_internal_format(t.internal_format);
         if (!bpp) return;
         t.allocate();
-        char *dest = t.buf + (yoffset * t.width + xoffset) * bpp;
+        int dest_stride = aligned_stride(bpp * t.width);
+        char *dest = t.buf + yoffset * dest_stride + xoffset * bpp;
         char *src = (char*)data;
         for (int y = 0; y < height; y++) {
                 memcpy(dest, src, width * bpp);
-                dest += t.width * bpp;
+                dest += dest_stride;
                 src += width * bpp;
         }
 }
@@ -921,11 +926,12 @@ void TexSubImage3D(
         assert(xoffset + width <= t.width);
         assert(yoffset + height <= t.height);
         assert(zoffset + depth <= t.depth);
+        int dest_stride = aligned_stride(bpp * t.width);
         for (int z = 0; z < depth; z++) {
-                char *dest = t.buf + ((zoffset + z) * t.width * t.height + yoffset * t.width + xoffset) * bpp;
+                char *dest = t.buf + ((zoffset + z) * t.height + yoffset) * dest_stride + xoffset * bpp;
                 for (int y = 0; y < height; y++) {
                         memcpy(dest, src, width * bpp);
-                        dest += t.width * bpp;
+                        dest += dest_stride;
                         src += width * bpp;
                 }
         }
@@ -1197,16 +1203,18 @@ static void clear_buffer(Texture& t, __m128i chunk, T value, int layer = 0) {
         y1 = std::min(y1, scissor.y + scissor.height);
     }
     const int chunk_size = sizeof(chunk) / sizeof(T);
-    T* buf = (T*)t.buf + t.width * t.height * layer + t.width * y0 + x0;
+    int stride = aligned_stride(sizeof(T) * t.width);
+    char* buf = t.buf + stride * (t.height * layer + y0) + x0 * sizeof(T);
     for (int y = y0; y < y1; y++) {
-        T* end = buf + (x1 - x0);
-        for (; buf + chunk_size <= end; buf += chunk_size) {
-            _mm_storeu_si128((__m128i*)buf, chunk);
+        T* cur = (T*)buf;
+        T* end = cur + (x1 - x0);
+        for (; cur + chunk_size <= end; cur += chunk_size) {
+            _mm_storeu_si128((__m128i*)cur, chunk);
         }
-        for (; buf < end; buf++) {
-            *buf = value;
+        for (; cur < end; cur++) {
+            *cur = value;
         }
-        buf += t.width - (x1 - x0);
+        buf += stride;
     }
 }
 
@@ -1257,11 +1265,12 @@ void ReadPixels(GLint x, GLint y, GLsizei width, GLsizei height, GLenum format, 
     }
     int bpp = bytes_for_internal_format(t.internal_format);
     char *dest = (char *)data;
-    char *src = t.buf + (t.width * t.height * fb->layer + t.width * y + x) * bpp;
+    int src_stride = aligned_stride(bpp * t.width);
+    char *src = t.buf + (t.height * fb->layer + y) * src_stride + x * bpp;
     for (; height > 0; height--) {
         memcpy(dest, src, width * bpp);
         dest += width * bpp;
-        src += t.width * bpp;
+        src += src_stride;
     }
 }
 
@@ -1302,13 +1311,15 @@ void CopyImageSubData(
     assert(dstZ + srcDepth <= std::max(dsttex.depth, 1));
     dsttex.allocate();
     int bpp = bytes_for_internal_format(srctex.internal_format);
+    int src_stride = aligned_stride(bpp * srctex.width);
+    int dest_stride = aligned_stride(bpp * dsttex.width);
     for (int z = 0; z < srcDepth; z++) {
-        char *dest = dsttex.buf + (dsttex.width * dsttex.height * (dstZ + z) + dsttex.width * dstY + dstX) * bpp;
-        char *src = srctex.buf + (srctex.width * srctex.height * (srcZ + z) + srctex.width * srcY + srcX) * bpp;
+        char *dest = dsttex.buf + (dsttex.height * (dstZ + z) + dstY) * dest_stride + dstX * bpp;
+        char *src = srctex.buf + (srctex.height * (srcZ + z) + srcY) * src_stride + srcX * bpp;
         for (int y = 0; y < srcHeight; y++) {
             memcpy(dest, src, srcWidth * bpp);
-            dest += dsttex.width * bpp;
-            src += srctex.width * bpp;
+            dest += dest_stride;
+            src += src_stride;
         }
     }
 }
@@ -1705,8 +1716,8 @@ void draw_quad(int nump, Texture& colortex, Texture& depthtex) {
         Interpolants ro = interp_outs[r0i];
         Interpolants rom = (interp_outs[r1i] - ro) * (1.0f / (r1.y - r0.y));
         ro = ro + rom * (y - r0.y);
-        fbuf += int(y) * colortex.width;
-        fdepth += int(y) * depthtex.width;
+        fbuf += int(y) * aligned_stride(sizeof(uint32_t) * colortex.width) / sizeof(uint32_t);
+        fdepth += int(y) * aligned_stride(sizeof(uint16_t) * depthtex.width) / sizeof(uint16_t);
         while (y < fy1) {
             if (y > l1.y) {
                 l0i = l1i;
@@ -1803,8 +1814,8 @@ void draw_quad(int nump, Texture& colortex, Texture& depthtex) {
             y++;
             lo += lom;
             ro += rom;
-            fbuf += colortex.width;
-            fdepth += depthtex.width;
+            fbuf += aligned_stride(sizeof(uint32_t) * colortex.width) / sizeof(uint32_t);
+            fdepth += aligned_stride(sizeof(uint16_t) * depthtex.width) / sizeof(uint16_t);
         }
 }
 
