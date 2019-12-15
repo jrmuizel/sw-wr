@@ -478,7 +478,9 @@ S *lookup_sampler(S *s, int texture) {
             Texture &t = textures[texture_slots[texture]];
             s->width = t.width;
             s->height = t.height;
-            s->stride = aligned_stride(bytes_for_internal_format(t.internal_format) * t.width) / 4;
+            int bpp = bytes_for_internal_format(t.internal_format);
+            s->stride = aligned_stride(bpp * t.width);
+            if(bpp >= 4) s->stride /= 4;
             s->buf = (uint32_t*)t.buf; //XXX: wrong
             s->format = gl_format_to_texture_format(t.internal_format);
             s->filter = gl_filter_to_texture_filter(t.mag_filter);
@@ -498,7 +500,9 @@ S *lookup_isampler(S *s, int texture) {
             Texture &t = textures[texture_slots[texture]];
             s->width = t.width;
             s->height = t.height;
-            s->stride = aligned_stride(bytes_for_internal_format(t.internal_format) * t.width) / 4;
+            int bpp = bytes_for_internal_format(t.internal_format);
+            s->stride = aligned_stride(bpp * t.width);
+            if(bpp >= 4) s->stride /= 4;
             s->buf = (uint32_t*)t.buf; //XXX: wrong
             s->format = gl_format_to_texture_format(t.internal_format);
         }
@@ -521,8 +525,10 @@ S *lookup_sampler_array(S *s, int texture) {
             s->width = t.width;
             s->height = t.height;
             s->depth = t.depth;
-            s->stride = aligned_stride(bytes_for_internal_format(t.internal_format) * t.width) / 4;
-            s->height_stride = aligned_stride(bytes_for_internal_format(t.internal_format) * t.width) * t.height / 4;
+            int bpp = bytes_for_internal_format(t.internal_format);
+            s->stride = aligned_stride(bpp * t.width);
+            if(bpp >= 4) s->stride /= 4;
+            s->height_stride = s->stride * t.height;
             s->buf = (uint32_t*)t.buf; //XXX: wrong
             s->format = gl_format_to_texture_format(t.internal_format);
             s->filter = gl_filter_to_texture_filter(t.mag_filter);

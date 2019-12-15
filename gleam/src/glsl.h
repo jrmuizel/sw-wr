@@ -1975,7 +1975,7 @@ vec4 texelFetchRGBA8(sampler2D sampler, ivec2 P, int lod) {
 }
 
 vec4 texelFetchR8(sampler2D sampler, ivec2 P, int lod) {
-        I32 offset = P.x + P.y*sampler->stride*4;
+        I32 offset = P.x + P.y*sampler->stride;
         return vec4((Float){
                 to_float(((uint8_t*)sampler->buf)[offset.x]),
                 to_float(((uint8_t*)sampler->buf)[offset.y]),
