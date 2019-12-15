@@ -702,8 +702,6 @@ ivec2_scalar force_scalar(const ivec2& v) {
     return ivec2_scalar{ force_scalar(v.x), force_scalar(v.y) };
 }
 
-
-
 struct ivec3_scalar {
         int32_t x;
         int32_t y;
@@ -1975,10 +1973,10 @@ vec4 texelFetchRGBA8(sampler2D sampler, ivec2 P, int lod) {
 vec4 texelFetchR8(sampler2D sampler, ivec2 P, int lod) {
         I32 offset = P.x + P.y*sampler->stride*4;
         return vec4((Float){
-                to_float(((char*)sampler->buf)[offset.x]),
-                to_float(((char*)sampler->buf)[offset.y]),
-                to_float(((char*)sampler->buf)[offset.z]),
-                to_float(((char*)sampler->buf)[offset.w])
+                to_float(((uint8_t*)sampler->buf)[offset.x]),
+                to_float(((uint8_t*)sampler->buf)[offset.y]),
+                to_float(((uint8_t*)sampler->buf)[offset.z]),
+                to_float(((uint8_t*)sampler->buf)[offset.w])
         });
 }
 
