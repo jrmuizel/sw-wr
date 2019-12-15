@@ -1,4 +1,3 @@
-extern crate gl_generator;
 extern crate cc;
 
 fn main() {
