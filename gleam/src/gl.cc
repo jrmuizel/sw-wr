@@ -24,6 +24,8 @@ typedef int16_t GLshort;
 typedef uint16_t GLushort;
 typedef int32_t GLint;
 typedef uint32_t GLuint;
+typedef int64_t GLint64;
+typedef uint64_t GLuint64;
 
 typedef float GLfloat;
 typedef double GLdouble;
@@ -98,6 +100,15 @@ glsl::TextureFormat gl_format_to_texture_format(int type) {
                 defaut: assert(0);
         }
 }
+
+#define GL_QUERY_RESULT                   0x8866
+#define GL_QUERY_RESULT_AVAILABLE         0x8867
+#define GL_TIME_ELAPSED                   0x88BF
+#define GL_SAMPLES_PASSED                 0x8914
+
+struct Query {
+        uint64_t value = 0;
+};
 
 struct Buffer {
         char *buf;
@@ -323,6 +334,7 @@ struct FragmentShader : ShaderCommon<FragmentShaderImpl> {
     }
 } fragment_shader;
 
+map<GLuint, Query> queries;
 map<GLuint, Buffer> buffers;
 map<GLuint, Texture> textures;
 map<GLuint, VertexArray> vertex_arrays;
@@ -330,6 +342,9 @@ map<GLuint, Framebuffer> framebuffers;
 map<GLuint, Renderbuffer> renderbuffers;
 map<GLuint, Shader> shaders;
 map<GLuint, Program> programs;
+
+GLuint query_count = 1;
+map<GLenum, GLuint> current_query;
 
 GLuint buffer_count = 1;
 map<GLenum, GLuint> current_buffer;
@@ -739,6 +754,14 @@ void ActiveTexture(GLenum texture) {
         active_texture = texture - GL_TEXTURE0;
 }
 
+void GenQueries(GLsizei n, GLuint *result) {
+        for (int i = 0; i < n; i++) {
+                Query q;
+                queries.insert(pair<GLuint, Query>(query_count, q));
+                result[i] = query_count++;
+        }
+}
+
 void GenBuffers(int n, int *result) {
         for (int i = 0; i < n; i++) {
                 Buffer b;
@@ -821,6 +844,58 @@ GLint GetUniformLocation(GLuint program, char* name) {
     GLint loc = p.impl->get_uniform(name);
     printf("location: %d\n", loc);
     return loc;
+}
+
+static uint64_t get_time_value() {
+#ifdef  __MACH__
+        return mach_absolute_time();
+#else
+        return ({ struct timespec tp; clock_gettime(CLOCK_MONOTONIC, &tp); tp.tv_sec * 1000000000ULL + tp.tv_nsec; });
+#endif
+}
+
+void BeginQuery(GLenum target, GLuint id) {
+    current_query[target] = id;
+    Query &q = queries[id];
+    switch (target) {
+    case GL_SAMPLES_PASSED:
+        q.value = 0;
+        break;
+    case GL_TIME_ELAPSED:
+        q.value = get_time_value();
+        break;
+    default:
+        printf("unknown query target %x for query %d\n", target, id);
+        assert(false);
+    }
+}
+
+void EndQuery(GLenum target) {
+    Query &q = queries[current_query[target]];
+    switch (target) {
+    case GL_SAMPLES_PASSED:
+        break;
+    case GL_TIME_ELAPSED:
+        q.value = get_time_value() - q.value;
+        break;
+    default:
+        printf("unknown query target %x for query %d\n", target, current_query[target]);
+        assert(false);
+    }
+    current_query[target] = 0;
+}
+
+void GetQueryObjectui64v(GLuint id, GLenum pname, GLuint64 *params)
+{
+    Query &q = queries[id];
+    switch (pname) {
+    case GL_QUERY_RESULT:
+        assert(params);
+        params[0] = q.value;
+        break;
+    default:
+        assert(false);
+    }
 }
 
 void BindVertexArray(GLuint vertex_array) {
@@ -1941,11 +2016,7 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
             depthtex.make_renderable();
         }
 
-#ifdef  __MACH__
-        double start = mach_absolute_time();
-#else
-        double start = ({ struct timespec tp; clock_gettime(CLOCK_MONOTONIC, &tp); tp.tv_sec * 1e9 + tp.tv_nsec; });
-#endif
+        uint64_t start = get_time_value();
 
         shaded_rows = 0;
         shaded_pixels = 0;
@@ -1997,12 +2068,14 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
             }
         }
 
-#ifdef  __MACH__
-        double end = mach_absolute_time();
-#else
-        double end = ({ struct timespec tp; clock_gettime(CLOCK_MONOTONIC, &tp); tp.tv_sec * 1e9 + tp.tv_nsec; });
-#endif
-        printf("draw(%d): %fms for %d pixels in %d rows (avg %f pixels/row, %f ns/pixel)\n", instancecount, (end - start)/(1000.*1000.), shaded_pixels, shaded_rows, double(shaded_pixels)/shaded_rows, (end - start)/std::max(shaded_pixels, 1));
+        auto qid = current_query.find(GL_SAMPLES_PASSED);
+        if (qid != current_query.end() && qid->second) {
+            Query &q = queries[qid->second];
+            q.value += shaded_pixels;
+        }
+
+        uint64_t end = get_time_value();
+        printf("draw(%d): %fms for %d pixels in %d rows (avg %f pixels/row, %f ns/pixel)\n", instancecount, double(end - start)/(1000.*1000.), shaded_pixels, shaded_rows, double(shaded_pixels)/shaded_rows, double(end - start)/std::max(shaded_pixels, 1));
 }
 
 void Finish() {

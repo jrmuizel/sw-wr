@@ -29,6 +29,10 @@ extern "C" {
     fn BlendEquation(mode: GLenum);
     fn Enable(cap: GLenum);
     fn Disable(cap: GLenum);
+    fn GenQueries(n: GLsizei, result: *mut GLuint);
+    fn BeginQuery(target: GLenum, id: GLuint);
+    fn EndQuery(target: GLenum);
+    fn GetQueryObjectui64v(id: GLuint, pname: GLenum, params: *mut GLuint64);
     fn GenBuffers(n: i32, result: *mut u32);
     fn GenTextures(n: i32, result: *mut u32);
     fn GenFramebuffers(n: i32, result: *mut u32);
@@ -520,25 +524,34 @@ impl Gl for GlFns {
     }
 
     fn gen_queries(&self, n: GLsizei) -> Vec<GLuint> {
-        panic!();
         let mut result = vec![0 as GLuint; n as usize];
         unsafe {
-            self.ffi_gl_.GenQueries(n, result.as_mut_ptr());
+            if SW {
+                GenQueries(n, result.as_mut_ptr());
+            } else {
+                self.ffi_gl_.GenQueries(n, result.as_mut_ptr());
+            }
         }
         result
     }
 
     fn begin_query(&self, target: GLenum, id: GLuint) {
-        panic!();
         unsafe {
-            self.ffi_gl_.BeginQuery(target, id);
+            if SW {
+                BeginQuery(target, id);
+            } else {
+                self.ffi_gl_.BeginQuery(target, id);
+            }
         }
     }
 
     fn end_query(&self, target: GLenum) {
-        panic!();
         unsafe {
-            self.ffi_gl_.EndQuery(target);
+            if SW {
+                EndQuery(target);
+            } else {
+                self.ffi_gl_.EndQuery(target);
+            }
         }
     }
 
@@ -577,19 +590,24 @@ impl Gl for GlFns {
     }
 
     fn get_query_object_ui64v(&self, id: GLuint, pname: GLenum) -> u64 {
-        panic!();
         let mut result = 0;
         unsafe {
-            self.ffi_gl_.GetQueryObjectui64v(id, pname, &mut result);
+            if SW {
+                GetQueryObjectui64v(id, pname, &mut result);
+            } else {
+                self.ffi_gl_.GetQueryObjectui64v(id, pname, &mut result);
+            }
         }
         result
     }
 
     fn delete_queries(&self, queries: &[GLuint]) {
-        panic!();
         unsafe {
+            if SW {
+            } else {
             self.ffi_gl_
                 .DeleteQueries(queries.len() as GLsizei, queries.as_ptr());
+            }
         }
     }
 
