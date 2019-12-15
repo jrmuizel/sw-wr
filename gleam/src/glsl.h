@@ -1480,7 +1480,6 @@ SI vec2_scalar clamp(vec2_scalar a, vec2_scalar minVal, vec2_scalar maxVal) {
 }
 
 SI I32 clamp(I32 a, I32 minVal, I32 maxVal) {
-    assert(0); // does this work?
     a = if_then_else(a < minVal, minVal, a);
     return if_then_else(a > maxVal, maxVal, a);
 }
