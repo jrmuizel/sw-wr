@@ -115,6 +115,9 @@ struct Buffer {
         size_t size;
 };
 
+#define GL_READ_FRAMEBUFFER               0x8CA8
+#define GL_DRAW_FRAMEBUFFER               0x8CA9
+
 struct Framebuffer {
         GLint color_attachment;
         GLint layer;
@@ -636,6 +639,87 @@ void Disable(GLenum cap) {
     case GL_BLEND: blend = false; break;
     case GL_DEPTH_TEST: depthtest = false; break;
     case GL_SCISSOR_TEST: scissortest = false; break;
+    }
+}
+
+#define GL_VENDOR                   0x1F00
+#define GL_RENDERER                 0x1F01
+#define GL_VERSION                  0x1F02
+#define GL_EXTENSIONS               0x1F03
+#define GL_NUM_EXTENSIONS           0x821D
+#define GL_MAX_TEXTURE_SIZE         0x0D33
+#define GL_MAX_ARRAY_TEXTURE_LAYERS 0x88FF
+#define GL_DRAW_FRAMEBUFFER_BINDING 0x8CA6
+#define GL_READ_FRAMEBUFFER_BINDING 0x8CAA
+#define GL_DEPTH_WRITEMASK          0x0B72
+
+static const char * const extensions[] = {
+};
+
+void GetIntegerv(GLenum pname, GLint *params) {
+    assert(params);
+    switch (pname) {
+    case GL_MAX_TEXTURE_SIZE:
+        params[0] = 1 << 15;
+        break;
+    case GL_MAX_ARRAY_TEXTURE_LAYERS:
+        params[0] = 1 << 15;
+        break;
+    case GL_READ_FRAMEBUFFER_BINDING: {
+        auto i = current_framebuffer.find(GL_READ_FRAMEBUFFER);
+        params[0] = i != current_framebuffer.end() ? i->second : 0;
+        break;
+    }
+    case GL_DRAW_FRAMEBUFFER_BINDING: {
+        auto i = current_framebuffer.find(GL_DRAW_FRAMEBUFFER);
+        params[0] = i != current_framebuffer.end() ? i->second : 0;
+        break;
+    }
+    case GL_NUM_EXTENSIONS:
+        params[0] = sizeof(extensions) / sizeof(extensions[0]);
+        break;
+    default:
+        printf("unhandled glGetIntegerv parameter %x", pname);
+        assert(false);
+    }
+}
+
+void GetBooleanv(GLenum pname, GLboolean *params) {
+    assert(params);
+    switch (pname) {
+    case GL_DEPTH_WRITEMASK:
+        params[0] = depthmask;
+        break;
+    default:
+        printf("unhandled glGetBooleanv parameter %x\n", pname);
+        assert(false);
+    }
+}
+
+const char *GetString(GLenum name) {
+    switch (name) {
+    case GL_VENDOR:
+        return "Mozilla Gfx";
+    case GL_RENDERER:
+        return "Software WebRender";
+    case GL_VERSION:
+        return "3.0";
+    default:
+        printf("unhandled glGetString parameter %x\n", name);
+        assert(false);
+    }
+}
+
+const char *GetStringi(GLenum name, GLuint index) {
+    switch (name) {
+    case GL_EXTENSIONS:
+        if (index >= sizeof(extensions) / sizeof(extensions[0])) {
+            return nullptr;
+        }
+        return extensions[index];
+    default:
+        printf("unhandled glGetStringi parameter %x\n", name);
+        assert(false);
     }
 }
 
@@ -1184,9 +1268,6 @@ void FramebufferTexture2D(
                 assert(0);
         }
 }
-
-#define GL_READ_FRAMEBUFFER               0x8CA8
-#define GL_DRAW_FRAMEBUFFER               0x8CA9
 
 void FramebufferTextureLayer(
         GLenum target,

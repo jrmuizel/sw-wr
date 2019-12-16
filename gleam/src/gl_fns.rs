@@ -205,6 +205,10 @@ extern "C" {
         mask: GLbitfield,
         filter: GLenum,
     );
+    fn GetIntegerv(pname: GLenum, params: *mut GLint);
+    fn GetBooleanv(pname: GLenum, params: *mut GLboolean);
+    fn GetString(name: GLenum) -> *const c_char;
+    fn GetStringi(name: GLenum, index: GLuint) -> *const c_char;
 }
 
 impl GlFns {
@@ -1416,7 +1420,11 @@ impl Gl for GlFns {
     unsafe fn get_integer_v(&self, name: GLenum, result: &mut [GLint]) {
         //panic!();
         assert!(!result.is_empty());
-        self.ffi_gl_.GetIntegerv(name, result.as_mut_ptr());
+        if SW {
+            GetIntegerv(name, result.as_mut_ptr());
+        } else {
+            self.ffi_gl_.GetIntegerv(name, result.as_mut_ptr());
+        }
     }
 
     #[inline]
@@ -1446,7 +1454,11 @@ impl Gl for GlFns {
         println!("get_boolean_v {}", name);
         //panic!();
         assert!(!result.is_empty());
-        self.ffi_gl_.GetBooleanv(name, result.as_mut_ptr());
+        if SW {
+            GetBooleanv(name, result.as_mut_ptr());
+        } else {
+            self.ffi_gl_.GetBooleanv(name, result.as_mut_ptr());
+        }
     }
 
     #[inline]
@@ -2502,9 +2514,13 @@ impl Gl for GlFns {
     fn get_string(&self, which: GLenum) -> String {
         // panic!();
         unsafe {
-            let llstr = self.ffi_gl_.GetString(which);
+            let llstr = if SW {
+                GetString(which)
+            } else {
+                self.ffi_gl_.GetString(which) as *const c_char
+            };
             if !llstr.is_null() {
-                return str::from_utf8_unchecked(CStr::from_ptr(llstr as *const c_char).to_bytes())
+                return str::from_utf8_unchecked(CStr::from_ptr(llstr).to_bytes())
                     .to_string();
             } else {
                 return "".to_string();
@@ -2515,9 +2531,13 @@ impl Gl for GlFns {
     fn get_string_i(&self, which: GLenum, index: GLuint) -> String {
         //panic!();
         unsafe {
-            let llstr = self.ffi_gl_.GetStringi(which, index);
+            let llstr = if SW {
+                GetStringi(which, index)
+            } else {
+                self.ffi_gl_.GetStringi(which, index) as *const c_char
+            };
             if !llstr.is_null() {
-                str::from_utf8_unchecked(CStr::from_ptr(llstr as *const c_char).to_bytes())
+                str::from_utf8_unchecked(CStr::from_ptr(llstr).to_bytes())
                     .to_string()
             } else {
                 "".to_string()
