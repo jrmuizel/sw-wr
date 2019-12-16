@@ -1472,6 +1472,21 @@ static void clear_buffer(Texture& t, __m128i chunk, T value, int layer = 0) {
 
 extern "C" {
 
+#define GL_FRAMEBUFFER_COMPLETE                      0x8CD5
+#define GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT         0x8CD6
+#define GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT 0x8CD7
+#define GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER        0x8CDB
+#define GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER        0x8CDC
+#define GL_FRAMEBUFFER_UNSUPPORTED                   0x8CDD
+
+GLenum CheckFramebufferStatus(GLenum target) {
+    Framebuffer *fb = get_framebuffer(target);
+    if (!fb || !fb->color_attachment) {
+        return GL_FRAMEBUFFER_UNSUPPORTED;
+    }
+    return GL_FRAMEBUFFER_COMPLETE;
+}
+
 #define GL_COLOR_BUFFER_BIT         0x00004000
 #define GL_DEPTH_BUFFER_BIT         0x00000100
 #define GL_STENCIL_BUFFER_BIT       0x00000400

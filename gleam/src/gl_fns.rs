@@ -54,6 +54,7 @@ extern "C" {
         textarget: GLenum,
         texture: GLuint,
         level: GLint);
+    fn CheckFramebufferStatus(target: GLenum) -> GLenum;
     fn TexStorage3D(
         target: GLenum,
         levels: GLint,
@@ -1992,7 +1993,13 @@ impl Gl for GlFns {
     fn check_frame_buffer_status(&self, target: GLenum) -> GLenum {
         println!("check_frame_buffer_status {}", target);
         //panic!();
-        unsafe { self.ffi_gl_.CheckFramebufferStatus(target) }
+        unsafe {
+            if SW {
+                CheckFramebufferStatus(target)
+            } else {
+                self.ffi_gl_.CheckFramebufferStatus(target)
+            }
+        }
     }
 
     fn enable_vertex_attrib_array(&self, index: GLuint) {
