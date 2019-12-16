@@ -540,6 +540,9 @@ int bytes_per_type(GLenum type) {
 
 template<typename S>
 static inline S load_attrib_scalar(const char *src, size_t size, GLenum type, bool normalized) {
+    if (sizeof(S) == size) {
+        return *reinterpret_cast<const S*>(src);
+    }
     S scalar = {0};
     if (type == GL_UNSIGNED_SHORT) {
         if (normalized) {
@@ -566,21 +569,13 @@ void load_attrib(T& attrib, VertexAttrib &va, unsigned short *indices, int start
     if (va.divisor == 1) {
         char* src = (char*)va.buf + va.stride * instance + va.offset;
         assert(src + va.size <= va.buf + va.buf_size);
-        if (sizeof(scalar_type) > va.size) {
-            attrib = T(load_attrib_scalar<scalar_type>(src, va.size, va.type, va.normalized));
-        } else {
-            attrib = T(*reinterpret_cast<scalar_type*>(src));
-        }
+        attrib = T(load_attrib_scalar<scalar_type>(src, va.size, va.type, va.normalized));
     } else if (va.divisor == 0) {
         assert(sizeof(typename ElementType<T>::ty) == bytes_per_type(va.type));
         for (int n = 0; n < count; n++) {
             char* src = (char*)va.buf + va.stride * indices[start + n] + va.offset;
             assert(src + va.size <= va.buf + va.buf_size);
-            if (sizeof(scalar_type) > va.size) {
-                put_nth(attrib, n, load_attrib_scalar<scalar_type>(src, va.size, va.type, va.normalized));
-            } else {
-                put_nth(attrib, n, *reinterpret_cast<scalar_type*>(src));
-            }
+            put_nth(attrib, n, load_attrib_scalar<scalar_type>(src, va.size, va.type, va.normalized));
         }
     } else {
         assert(false);
