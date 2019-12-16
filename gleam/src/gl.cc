@@ -145,6 +145,10 @@ struct Renderbuffer {
 #define GL_TEXTURE_MAG_FILTER       0x2800
 #define GL_TEXTURE_MIN_FILTER       0x2801
 #define GL_CLAMP_TO_EDGE            0x812F
+#define GL_TEXTURE_SWIZZLE_R        0x8E42
+#define GL_TEXTURE_SWIZZLE_G        0x8E43
+#define GL_TEXTURE_SWIZZLE_B        0x8E44
+#define GL_TEXTURE_SWIZZLE_A        0x8E45
 
 glsl::TextureFilter gl_filter_to_texture_filter(int type) {
         switch (type) {
@@ -656,6 +660,11 @@ void Disable(GLenum cap) {
 #define GL_DEPTH_WRITEMASK          0x0B72
 
 static const char * const extensions[] = {
+    "GL_ARB_blend_func_extended",
+    "GL_ARB_copy_image",
+    "GL_ARB_explicit_attrib_location",
+    "GL_ARB_texture_storage",
+    "GL_ARB_texture_swizzle",
 };
 
 void GetIntegerv(GLenum pname, GLint *params) {
@@ -705,7 +714,7 @@ const char *GetString(GLenum name) {
     case GL_RENDERER:
         return "Software WebRender";
     case GL_VERSION:
-        return "3.0";
+        return "3.2";
     default:
         printf("unhandled glGetString parameter %x\n", name);
         assert(false);
@@ -1019,6 +1028,10 @@ void TexStorage2D(
 }
 
 #define GL_RED                            0x1903
+#define GL_GREEN                          0x1904
+#define GL_BLUE                           0x1905
+#define GL_ALPHA                          0x1906
+#define GL_RGB                            0x1907
 #define GL_RGBA                           0x1908
 #define GL_RGBA_INTEGER                   0x8D99
 #define GL_BGRA                           0x80E1
@@ -1180,6 +1193,18 @@ void TexParameteri(GLenum target, GLenum pname, GLint param) {
         case GL_TEXTURE_MAG_FILTER:
             assert(param == GL_NEAREST || param == GL_LINEAR);
             t.mag_filter = param;
+            break;
+        case GL_TEXTURE_SWIZZLE_R:
+            assert(param == (t.internal_format == GL_RGBA8 ? GL_BLUE : GL_RED));
+            break;
+        case GL_TEXTURE_SWIZZLE_G:
+            assert(param == GL_GREEN);
+            break;
+        case GL_TEXTURE_SWIZZLE_B:
+            assert(param == (t.internal_format == GL_RGBA8 ? GL_RED : GL_BLUE));
+            break;
+        case GL_TEXTURE_SWIZZLE_A:
+            assert(param == GL_ALPHA);
             break;
         default:
             break;
