@@ -717,7 +717,7 @@ const char *GetString(GLenum name) {
     case GL_RENDERER:
         return "Software WebRender";
     case GL_VERSION:
-        return "3.3";
+        return "3.2";
     default:
         printf("unhandled glGetString parameter %x\n", name);
         assert(false);
