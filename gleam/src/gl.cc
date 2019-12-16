@@ -1869,8 +1869,8 @@ static inline void draw_quad_spans(int nump, Point p[4], uint16_t z, Interpolant
                                 commit_output<false>(buf + 4);
                                 break;
                             default:
-                                commit_output<false>(buf, _mm_unpacklo_epi16(zmask, zmask));
-                                commit_output<false>(buf + 4, _mm_unpackhi_epi16(zmask, zmask));
+                                commit_output<false>(buf, sizeof(P) == sizeof(uint32_t) ? _mm_unpacklo_epi16(zmask, zmask) : zmask);
+                                commit_output<false>(buf + 4, sizeof(P) == sizeof(uint32_t) ? _mm_unpackhi_epi16(zmask, zmask) : _mm_shuffle_epi32(zmask, _MM_SHUFFLE(3, 2, 3, 2)));
                                 break;
                             }
                         }
