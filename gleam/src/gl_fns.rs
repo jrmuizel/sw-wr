@@ -232,6 +232,7 @@ extern "C" {
     fn GetBooleanv(pname: GLenum, params: *mut GLboolean);
     fn GetString(name: GLenum) -> *const c_char;
     fn GetStringi(name: GLenum, index: GLuint) -> *const c_char;
+    fn GetError() -> GLenum;
 }
 
 impl GlFns {
@@ -2759,7 +2760,13 @@ impl Gl for GlFns {
 
     fn get_error(&self) -> GLenum {
         //panic!();
-        unsafe { self.ffi_gl_.GetError() }
+        unsafe {
+            if SW {
+                GetError()
+            } else {
+                self.ffi_gl_.GetError()
+            }
+        }
     }
 
     fn stencil_mask(&self, mask: GLuint) {

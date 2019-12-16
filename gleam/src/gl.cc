@@ -648,6 +648,12 @@ void Disable(GLenum cap) {
     }
 }
 
+#define GL_NO_ERROR                 0
+
+GLenum GetError() {
+    return GL_NO_ERROR;
+}
+
 #define GL_VENDOR                   0x1F00
 #define GL_RENDERER                 0x1F01
 #define GL_VERSION                  0x1F02
