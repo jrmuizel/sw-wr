@@ -538,6 +538,28 @@ int bytes_per_type(GLenum type) {
         }
 }
 
+template<typename S>
+static inline S load_attrib_scalar(const char *src, size_t size, GLenum type, bool normalized) {
+    S scalar = {0};
+    if (type == GL_UNSIGNED_SHORT) {
+        if (normalized) {
+            for (int i = 0; i < size/sizeof(uint16_t); i++) {
+                typename ElementType<S>::ty x = *reinterpret_cast<const uint16_t*>(src + i);
+                put_nth_component(scalar, i, x * (1.0f / 0xFFFF));
+            }
+        } else {
+            for (int i = 0; i < size/sizeof(uint16_t); i++) {
+                typename ElementType<S>::ty x = *reinterpret_cast<const uint16_t*>(src + i);
+                put_nth_component(scalar, i, x);
+            }
+        }
+    } else {
+        assert(sizeof(typename ElementType<S>::ty) == bytes_per_type(type));
+        memcpy(&scalar, src, size);
+    }
+    return scalar;
+}
+
 template<typename T>
 void load_attrib(T& attrib, VertexAttrib &va, unsigned short *indices, int start, int instance, int count) {
     typedef decltype(force_scalar(attrib)) scalar_type;
@@ -545,19 +567,7 @@ void load_attrib(T& attrib, VertexAttrib &va, unsigned short *indices, int start
         char* src = (char*)va.buf + va.stride * instance + va.offset;
         assert(src + va.size <= va.buf + va.buf_size);
         if (sizeof(scalar_type) > va.size) {
-            scalar_type scalar = {0};
-            if (va.type == GL_UNSIGNED_SHORT) {
-                for (int i = 0; i < va.size/sizeof(short); i++) {
-                    short s;
-                    memcpy(&s, src + i, sizeof(short));
-                    typename ElementType<T>::ty x = s;
-                    put_nth_component(scalar, i, x);
-                }
-            } else {
-                assert(sizeof(typename ElementType<T>::ty) == bytes_per_type(va.type));
-                memcpy(&scalar, src, va.size);
-            }
-            attrib = T(scalar);
+            attrib = T(load_attrib_scalar<scalar_type>(src, va.size, va.type, va.normalized));
         } else {
             attrib = T(*reinterpret_cast<scalar_type*>(src));
         }
@@ -567,9 +577,7 @@ void load_attrib(T& attrib, VertexAttrib &va, unsigned short *indices, int start
             char* src = (char*)va.buf + va.stride * indices[start + n] + va.offset;
             assert(src + va.size <= va.buf + va.buf_size);
             if (sizeof(scalar_type) > va.size) {
-                scalar_type scalar = {0};
-                memcpy(&scalar, src, va.size);
-                put_nth(attrib, n, scalar);
+                put_nth(attrib, n, load_attrib_scalar<scalar_type>(src, va.size, va.type, va.normalized));
             } else {
                 put_nth(attrib, n, *reinterpret_cast<scalar_type*>(src));
             }

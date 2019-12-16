@@ -224,6 +224,7 @@ struct vec4_scalar;
 
 struct vec2_scalar {
         typedef struct vec2 vector_type;
+        typedef float element_type;
 
         float x;
         float y;
@@ -584,6 +585,8 @@ Float exp(Float y) {
 struct ivec4;
 
 struct ivec2_scalar {
+        typedef int32_t element_type;
+
         int32_t x;
         int32_t y;
 
@@ -771,6 +774,8 @@ template<typename X, typename Y, typename Z> ivec3 make_ivec3(const X& x, const 
 }
 
 struct ivec4_scalar {
+        typedef int32_t element_type;
+
         int32_t x;
         int32_t y;
         int32_t z;
@@ -1009,6 +1014,7 @@ struct vec2_ref {
 
 struct vec3_scalar {
         typedef struct vec3 vector_type;
+        typedef float element_type;
 
         float x;
         float y;
@@ -1221,6 +1227,7 @@ struct vec3_ref {
 
 struct vec4_scalar {
         typedef struct vec4 vector_type;
+        typedef float element_type;
 
         float x;
         float y;
