@@ -174,29 +174,6 @@ struct Texture {
             buf = (char*)malloc(size + sizeof(__m128i));
         }
     }
-
-    void make_renderable() {
-        switch (internal_format) {
-        case GL_DEPTH_COMPONENT:
-        case GL_DEPTH_COMPONENT24:
-        case GL_DEPTH_COMPONENT32:
-            assert(!buf);
-            internal_format = GL_DEPTH_COMPONENT16;
-            break;
-        case GL_DEPTH_COMPONENT16:
-            break;
-        case GL_R8:
-            assert(!buf);
-            internal_format = GL_RGBA8;
-            break;
-        case GL_RGBA8:
-            break;
-        default:
-            printf("non-renderable texture format %x\n", internal_format);
-            assert(false);
-        }
-        allocate();
-    }
 };
 
 #define MAX_ATTRS 16
@@ -706,7 +683,7 @@ void BlendFunc(GLenum srgb, GLenum drgb, GLenum sa, GLenum da) {
 }
 
 void BlendColor(GLfloat r, GLfloat g, GLfloat b, GLfloat a) {
-        __m128i c32 = _mm_cvtps_epi32(_mm_mul_ps(_mm_set_ps(a, b, g, r), _mm_set1_ps(255.5f)));
+        __m128i c32 = _mm_cvtps_epi32(_mm_mul_ps(_mm_set_ps(a, b, g, r), _mm_set1_ps(255.49f)));
         blendcolor = _mm_packs_epi32(c32, c32);
 }
 
@@ -929,12 +906,12 @@ void TexStorage3D(
         GLsizei depth
     ) {
     Texture &t = textures[current_texture[target]];
-
     t.levels = levels;
     t.internal_format = internal_format;
     t.width = width;
     t.height = height;
     t.depth = depth;
+    t.allocate();
 }
 
 void TexStorage2D(
@@ -949,6 +926,7 @@ void TexStorage2D(
     t.internal_format = internal_format;
     t.width = width;
     t.height = height;
+    t.allocate();
 }
 
 #define GL_RED                            0x1903
@@ -985,7 +963,6 @@ void TexSubImage2D(
         assert(t.internal_format == internal_format_for_data(format, ty));
         int bpp = bytes_for_internal_format(t.internal_format);
         if (!bpp) return;
-        t.allocate();
         int dest_stride = aligned_stride(bpp * t.width);
         char *dest = t.buf + yoffset * dest_stride + xoffset * bpp;
         char *src = (char*)data;
@@ -1012,7 +989,6 @@ void TexSubImage3D(
         assert(t.internal_format == internal_format_for_data(format, ty));
         int bpp = bytes_for_internal_format(t.internal_format);
         if (!bpp) return;
-        t.allocate();
         char *src = (char*)data;
         assert(xoffset + width <= t.width);
         assert(yoffset + height <= t.height);
@@ -1087,10 +1063,6 @@ void RenderbufferStorage(
         case GL_DEPTH_COMPONENT32:
             // Force depth format to 16 bits...
             internalformat = GL_DEPTH_COMPONENT16;
-            break;
-        case GL_R8:
-            // Force color format to 32 bits...
-            internalformat = GL_RGBA8;
             break;
     }
     TexStorage2D(target, 1, internalformat, width, height);
@@ -1319,21 +1291,23 @@ void Clear(GLbitfield mask) {
     Framebuffer& fb = get_draw_framebuffer();
     if ((mask & GL_COLOR_BUFFER_BIT) && fb.color_attachment) {
         Texture& t = textures[fb.color_attachment];
-        t.make_renderable();
         if (t.internal_format == GL_RGBA8) {
             __m128 colorf = _mm_loadu_ps(clearcolor);
-            __m128i colori = _mm_cvtps_epi32(_mm_mul_ps(colorf, _mm_set1_ps(255.5f)));
+            __m128i colori = _mm_cvtps_epi32(_mm_mul_ps(colorf, _mm_set1_ps(255.49f)));
             colori = _mm_packs_epi32(colori, colori);
             colori = _mm_packus_epi16(colori, colori);
             uint32_t color = _mm_cvtsi128_si32(colori);
             clear_buffer<uint32_t>(t, colori, color, fb.layer);
+        } else if (t.internal_format == GL_R8) {
+            uint8_t color = uint8_t(clearcolor[0] * 255.49f);
+            __m128i colori = _mm_set1_epi8(color);
+            clear_buffer<uint8_t>(t, colori, color, fb.layer);
         } else {
             assert(false);
         }
     }
     if ((mask & GL_DEPTH_BUFFER_BIT) && fb.depth_attachment) {
         Texture& t = textures[fb.depth_attachment];
-        t.make_renderable();
         assert(t.internal_format == GL_DEPTH_COMPONENT16);
         uint16_t depth = uint16_t(0xFFFF * cleardepth) - 0x8000;
         __m128i depthi = _mm_set1_epi16(depth);
@@ -1400,7 +1374,6 @@ void CopyImageSubData(
     assert(dstX + srcWidth <= dsttex.width);
     assert(dstY + srcHeight <= dsttex.height);
     assert(dstZ + srcDepth <= std::max(dsttex.depth, 1));
-    dsttex.allocate();
     int bpp = bytes_for_internal_format(srctex.internal_format);
     int src_stride = aligned_stride(bpp * srctex.width);
     int dest_stride = aligned_stride(bpp * dsttex.width);
@@ -1555,13 +1528,13 @@ static inline int check_depth(uint16_t z, uint16_t* zbuf, __m128i& outmask, int 
                 _mm_or_si128(_mm_and_si128(mask, dest),
                              _mm_andnot_si128(mask, src)));
         }
-        outmask = _mm_unpacklo_epi16(mask, mask);
+        outmask = mask;
     }
     return 1;
 }
 
-static inline __m128i pack_pixels() {
-    auto output = fragment_shader.gl_FragColor * 255.5f;
+static inline __m128i pack_pixels_RGBA8() {
+    auto output = fragment_shader.gl_FragColor * 255.49f;
     __m128i rxz = _mm_packs_epi32(_mm_cvtps_epi32(output.x), _mm_cvtps_epi32(output.z));
     __m128i ryw = _mm_packs_epi32(_mm_cvtps_epi32(output.y), _mm_cvtps_epi32(output.w));
     __m128i rxy = _mm_unpacklo_epi16(rxz, ryw);
@@ -1571,8 +1544,8 @@ static inline __m128i pack_pixels() {
     return _mm_packus_epi16(rlo, rhi);
 }
 
-static inline __m128i blend_pixels(__m128i dst) {
-    auto output = fragment_shader.gl_FragColor * 255.5f;
+static inline __m128i blend_pixels_RGBA8(__m128i dst) {
+    auto output = fragment_shader.gl_FragColor * 255.49f;
     __m128i sxz = _mm_packs_epi32(_mm_cvtps_epi32(output.x), _mm_cvtps_epi32(output.z));
     __m128i syw = _mm_packs_epi32(_mm_cvtps_epi32(output.y), _mm_cvtps_epi32(output.w));
     __m128i sxy = _mm_unpacklo_epi16(sxz, syw);
@@ -1643,7 +1616,7 @@ static inline __m128i blend_pixels(__m128i dst) {
                 _mm_add_epi16(dhi, muldiv255(_mm_sub_epi16(blendcolor, dhi), shi)));
         break;
     case BLEND_KEY(GL_ONE, GL_ONE_MINUS_SRC1_COLOR): {
-        auto secondary = fragment_shader.gl_SecondaryFragColor * 255.5f;
+        auto secondary = fragment_shader.gl_SecondaryFragColor * 255.49f;
         __m128i s1xz = _mm_packs_epi32(_mm_cvtps_epi32(secondary.x), _mm_cvtps_epi32(secondary.z));
         __m128i s1yw = _mm_packs_epi32(_mm_cvtps_epi32(secondary.y), _mm_cvtps_epi32(secondary.w));
         __m128i s1xy = _mm_unpacklo_epi16(s1xz, s1yw);
@@ -1662,17 +1635,11 @@ static inline __m128i blend_pixels(__m128i dst) {
     return r;
 }
 
-static const size_t MAX_FLATS = 64;
-typedef float Flats[MAX_FLATS];
-
-static const size_t MAX_INTERPOLANTS = 16;
-typedef float Interpolants __attribute__((ext_vector_type(MAX_INTERPOLANTS)));
-
 template<bool DISCARD>
 static inline void commit_output(uint32_t* buf, __m128i mask = _mm_setzero_si128()) {
     fragment_shader.run();
     __m128i dst = _mm_loadu_si128((__m128i*)buf);
-    __m128i r = blend ? blend_pixels(dst) : pack_pixels();
+    __m128i r = blend ? blend_pixels_RGBA8(dst) : pack_pixels_RGBA8();
     if (DISCARD) mask = _mm_or_si128(mask, fragment_shader.isPixelDiscarded);
     _mm_storeu_si128((__m128i*)buf,
         _mm_or_si128(_mm_and_si128(mask, dst),
@@ -1682,7 +1649,7 @@ static inline void commit_output(uint32_t* buf, __m128i mask = _mm_setzero_si128
 template<>
 static inline void commit_output<false>(uint32_t* buf, __m128i mask) {
     fragment_shader.run();
-    __m128i r = blend ? blend_pixels(_mm_loadu_si128((__m128i*)buf)) : pack_pixels();
+    __m128i r = blend ? blend_pixels_RGBA8(_mm_loadu_si128((__m128i*)buf)) : pack_pixels_RGBA8();
     _mm_storeu_si128((__m128i*)buf, r);
 }
 
@@ -1690,7 +1657,7 @@ template<bool DISCARD>
 static inline void commit_output(uint32_t* buf, uint16_t z, uint16_t* zbuf) {
     __m128i mask;
     if (check_depth<1>(z, zbuf, mask)) {
-        commit_output<DISCARD>(buf, mask);
+        commit_output<DISCARD>(buf, _mm_unpacklo_epi16(mask, mask));
     } else {
         fragment_shader.skip();
     }
@@ -1700,7 +1667,7 @@ template<bool DISCARD>
 static inline void commit_output(uint32_t* buf, uint16_t z, uint16_t* zbuf, int span) {
     __m128i mask;
     if (check_depth<0>(z, zbuf, mask, span)) {
-        commit_output<DISCARD>(buf, mask);
+        commit_output<DISCARD>(buf, _mm_unpacklo_epi16(mask, mask));
     }
 }
 
@@ -1709,59 +1676,86 @@ static inline void commit_output(uint32_t* buf, int span) {
     commit_output<DISCARD>(buf, _mm_cmplt_epi32(_mm_set1_epi32(span), _mm_set_epi32(4, 3, 2, 1)));
 }
 
+static inline __m128i pack_pixels_R8() {
+    auto output = fragment_shader.gl_FragColor * 255.49f;
+    return _mm_packs_epi32(_mm_cvtps_epi32(output.x), _mm_setzero_si128());
+}
+
+static inline __m128i blend_pixels_R8(__m128i dst) {
+    auto output = fragment_shader.gl_FragColor * 255.49f;
+    __m128i src = _mm_packs_epi32(_mm_cvtps_epi32(output.x), _mm_setzero_si128());
+    __m128i r;
+    switch (blend_key) {
+    case BLEND_KEY_NONE:
+        r = src;
+        break;
+    case BLEND_KEY(GL_ZERO, GL_SRC_COLOR):
+        r = muldiv255(src, dst);
+        break;
+    case BLEND_KEY(GL_ONE, GL_ONE):
+        r = _mm_add_epi16(src, dst);
+        break;
+    case BLEND_KEY(GL_ONE, GL_ZERO):
+        r = src;
+        break;
+    default:
+        UNREACHABLE;
+        break;
+    }
+    return r;
+}
+
+template<bool DISCARD>
+static inline void commit_output(uint8_t* buf, __m128i mask = _mm_setzero_si128()) {
+    fragment_shader.run();
+    __m128i dst = _mm_unpacklo_epi8(_mm_loadu_si32(buf), _mm_setzero_si128());
+    __m128i r = blend ? blend_pixels_R8(dst) : pack_pixels_R8();
+    if (DISCARD) mask = _mm_or_si128(mask, _mm_packs_epi32(fragment_shader.isPixelDiscarded, _mm_setzero_si128()));
+    r = _mm_or_si128(_mm_and_si128(mask, dst), _mm_andnot_si128(mask, r));
+    _mm_storeu_si32(buf, _mm_packus_epi16(r, r));
+}
+
+template<>
+static inline void commit_output<false>(uint8_t* buf, __m128i mask) {
+    fragment_shader.run();
+    __m128i r = blend ? blend_pixels_R8(_mm_unpacklo_epi8(_mm_loadu_si32(buf), _mm_setzero_si128())) : pack_pixels_R8();
+    _mm_storeu_si32(buf, _mm_packus_epi16(r, r));
+}
+
+template<bool DISCARD>
+static inline void commit_output(uint8_t* buf, uint16_t z, uint16_t* zbuf) {
+    __m128i mask;
+    if (check_depth<1>(z, zbuf, mask)) {
+        commit_output<DISCARD>(buf, mask);
+    } else {
+        fragment_shader.skip();
+    }
+}
+
+template<bool DISCARD>
+static inline void commit_output(uint8_t* buf, uint16_t z, uint16_t* zbuf, int span) {
+    __m128i mask;
+    if (check_depth<0>(z, zbuf, mask, span)) {
+        commit_output<DISCARD>(buf, mask);
+    }
+}
+
+template<bool DISCARD>
+static inline void commit_output(uint8_t* buf, int span) {
+    commit_output<DISCARD>(buf, _mm_cmplt_epi16(_mm_set1_epi16(span), _mm_set_epi16(8, 7, 6, 5, 4, 3, 2, 1)));
+}
+
+static const size_t MAX_FLATS = 64;
+typedef float Flats[MAX_FLATS];
+
+static const size_t MAX_INTERPOLANTS = 16;
+typedef float Interpolants __attribute__((ext_vector_type(MAX_INTERPOLANTS)));
+
 static int shaded_rows = 0;
 static int shaded_pixels = 0;
 
-void draw_quad(int nump, Texture& colortex, Texture& depthtex) {
-        Flats flat_outs;
-        Interpolants interp_outs[4] = { 0 };
-        vertex_shader.run((char *)flat_outs, (char *)interp_outs, sizeof(Interpolants));
-        Float w = 1.0f / vertex_shader.gl_Position.w;
-        vec3 clip = vertex_shader.gl_Position.sel(X, Y, Z) * w;
-        Point p[4];
-        vec3 screen = (clip + 1)*vec3(viewport.width/2, viewport.height/2, 0.5f) + vec3(viewport.x, viewport.y, 0);
-        for (int k = 0; k < 4; k++)
-        {
-        //        vec4 pos = vertex_shader.gl_Position;
-        //        printf("%f %f %f %f\n", pos.x[k], pos.y[k], pos.z[k], pos.y[k]);
-                p[k] = Point { screen.x[k], screen.y[k] };
-        //        printf("%f %f\n", p[k].x, p[k].y);
-        }
-
-        auto top_left = p[0];
-        auto bot_right = p[0];
-        for (int i = 1; i < nump; i++) {
-            top_left.x = std::min(top_left.x, p[i].x);
-            top_left.y = std::min(top_left.y, p[i].y);
-            bot_right.x = std::max(bot_right.x, p[i].x);
-            bot_right.y = std::max(bot_right.y, p[i].y);
-        }
-        //printf("bbox: %f %f %f %f\n", top_left.x, top_left.y, bot_right.x, bot_right.y);
-
-        float fx0 = 0;
-        float fy0 = 0;
-        float fx1 = colortex.width;
-        float fy1 = colortex.height;
-        uint32_t *fbuf = (uint32_t*)colortex.buf;
-        uint16_t *fdepth = (uint16_t*)depthtex.buf;
-        if (scissortest) {
-            fx0 = std::max(fx0, float(scissor.x));
-            fy0 = std::max(fy0, float(scissor.y));
-            fx1 = std::min(fx1, float(scissor.x + scissor.width));
-            fy1 = std::min(fy1, float(scissor.y + scissor.height));
-        }
-
-        if (top_left.x >= fx1 || top_left.y >= fy1 || bot_right.x <= fx0 || bot_right.y <= fy0) {
-            return;
-        }
-
-        // SSE2 does not support unsigned comparison, so bias Z to be negative.
-        uint16_t z = uint16_t(0xFFFF * screen.z.x) - 0x8000;
-        fragment_shader.gl_FragCoord.z = screen.z.x;
-        fragment_shader.gl_FragCoord.w = w.x;
-
-        fragment_shader.init_primitive(flat_outs);
-
+template<typename P>
+static inline void draw_quad_spans(int nump, Point p[4], uint16_t z, Interpolants interp_outs[4], Texture& colortex, Texture& depthtex, float fx0, float fy0, float fx1, float fy1) {
         Point l0, r0, l1, r1;
         int l0i, r0i, l1i, r1i;
         {
@@ -1809,8 +1803,8 @@ void draw_quad(int nump, Texture& colortex, Texture& depthtex) {
         Interpolants ro = interp_outs[r0i];
         Interpolants rom = (interp_outs[r1i] - ro) * (1.0f / (r1.y - r0.y));
         ro = ro + rom * (y - r0.y);
-        fbuf += int(y) * aligned_stride(sizeof(uint32_t) * colortex.width) / sizeof(uint32_t);
-        fdepth += int(y) * aligned_stride(sizeof(uint16_t) * depthtex.width) / sizeof(uint16_t);
+        P *fbuf = (P*)colortex.buf + int(y) * aligned_stride(sizeof(P) * colortex.width) / sizeof(P);
+        uint16_t *fdepth = (uint16_t*)depthtex.buf + int(y) * aligned_stride(sizeof(uint16_t) * depthtex.width) / sizeof(uint16_t);
         while (y < fy1) {
             if (y > l1.y) {
                 l0i = l1i;
@@ -1849,7 +1843,7 @@ void draw_quad(int nump, Texture& colortex, Texture& depthtex) {
                     Interpolants o = lo + step * (startx + 0.5f - lx);
                     fragment_shader.init_span(&o, &step, 4.0f);
                 }
-                uint32_t* buf = fbuf + startx;
+                P* buf = fbuf + startx;
                 uint16_t* depth = fdepth + startx;
                 if (!fragment_shader.use_discard()) {
                     if (fdepth) {
@@ -1907,8 +1901,65 @@ void draw_quad(int nump, Texture& colortex, Texture& depthtex) {
             y++;
             lo += lom;
             ro += rom;
-            fbuf += aligned_stride(sizeof(uint32_t) * colortex.width) / sizeof(uint32_t);
+            fbuf += aligned_stride(sizeof(P) * colortex.width) / sizeof(P);
             fdepth += aligned_stride(sizeof(uint16_t) * depthtex.width) / sizeof(uint16_t);
+        }
+}
+
+void draw_quad(int nump, Texture& colortex, Texture& depthtex) {
+        Flats flat_outs;
+        Interpolants interp_outs[4] = { 0 };
+        vertex_shader.run((char *)flat_outs, (char *)interp_outs, sizeof(Interpolants));
+        Float w = 1.0f / vertex_shader.gl_Position.w;
+        vec3 clip = vertex_shader.gl_Position.sel(X, Y, Z) * w;
+        Point p[4];
+        vec3 screen = (clip + 1)*vec3(viewport.width/2, viewport.height/2, 0.5f) + vec3(viewport.x, viewport.y, 0);
+        for (int k = 0; k < 4; k++)
+        {
+        //        vec4 pos = vertex_shader.gl_Position;
+        //        printf("%f %f %f %f\n", pos.x[k], pos.y[k], pos.z[k], pos.y[k]);
+                p[k] = Point { screen.x[k], screen.y[k] };
+        //        printf("%f %f\n", p[k].x, p[k].y);
+        }
+
+        auto top_left = p[0];
+        auto bot_right = p[0];
+        for (int i = 1; i < nump; i++) {
+            top_left.x = std::min(top_left.x, p[i].x);
+            top_left.y = std::min(top_left.y, p[i].y);
+            bot_right.x = std::max(bot_right.x, p[i].x);
+            bot_right.y = std::max(bot_right.y, p[i].y);
+        }
+        //printf("bbox: %f %f %f %f\n", top_left.x, top_left.y, bot_right.x, bot_right.y);
+
+        float fx0 = 0;
+        float fy0 = 0;
+        float fx1 = colortex.width;
+        float fy1 = colortex.height;
+        if (scissortest) {
+            fx0 = std::max(fx0, float(scissor.x));
+            fy0 = std::max(fy0, float(scissor.y));
+            fx1 = std::min(fx1, float(scissor.x + scissor.width));
+            fy1 = std::min(fy1, float(scissor.y + scissor.height));
+        }
+
+        if (top_left.x >= fx1 || top_left.y >= fy1 || bot_right.x <= fx0 || bot_right.y <= fy0) {
+            return;
+        }
+
+        // SSE2 does not support unsigned comparison, so bias Z to be negative.
+        uint16_t z = uint16_t(0xFFFF * screen.z.x) - 0x8000;
+        fragment_shader.gl_FragCoord.z = screen.z.x;
+        fragment_shader.gl_FragCoord.w = w.x;
+
+        fragment_shader.init_primitive(flat_outs);
+
+        if (colortex.internal_format == GL_RGBA8) {
+            draw_quad_spans<uint32_t>(nump, p, z, interp_outs, colortex, depthtex, fx0, fy0, fx1, fy1);
+        } else if (colortex.internal_format == GL_R8) {
+            draw_quad_spans<uint8_t>(nump, p, z, interp_outs, colortex, depthtex, fx0, fy0, fx1, fy1);
+        } else {
+            assert(false);
         }
 }
 
@@ -2006,14 +2057,12 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
 
         Framebuffer& fb = get_draw_framebuffer();
         Texture& colortex = textures[fb.color_attachment];
-        colortex.make_renderable();
-        assert(colortex.internal_format == GL_RGBA8);
+        assert(colortex.internal_format == GL_RGBA8 || colortex.internal_format == GL_R8);
         static Texture nodepthtex;
         Texture& depthtex = depthtest && fb.depth_attachment ? textures[fb.depth_attachment] : nodepthtex;
         if (&depthtex != &nodepthtex) {
             assert(depthtex.internal_format == GL_DEPTH_COMPONENT16);
             assert(colortex.width == depthtex.width && colortex.height == depthtex.height);
-            depthtex.make_renderable();
         }
 
         uint64_t start = get_time_value();
@@ -2081,7 +2130,6 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
 void Finish() {
         Framebuffer& fb = get_draw_framebuffer();
         Texture& t = textures[fb.color_attachment];
-        t.make_renderable();
         //writetga("out.tga", t.width, t.height, t.buf);
         write_png("out.png", t.buf, t.width, t.height);
 }
