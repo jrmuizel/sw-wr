@@ -1038,6 +1038,23 @@ GLenum internal_format_for_data(GLenum format, GLenum ty) {
     }
 }
 
+static inline void copy_bgra8_to_rgba8(uint32_t *dest, uint32_t *src, int width) {
+        for (; width >= 4; width -= 4, dest += 4, src += 4) {
+            const __m128i rbmask = _mm_set1_epi32(0x00FF00FF);
+            __m128i p = _mm_loadu_si128((__m128i*)src);
+            __m128i rb = _mm_and_si128(rbmask, p);
+            __m128i ga = _mm_andnot_si128(rbmask, p);
+            rb = _mm_shufflelo_epi16(rb, _MM_SHUFFLE(2, 3, 0, 1));
+            rb = _mm_shufflehi_epi16(rb, _MM_SHUFFLE(2, 3, 0, 1));
+            _mm_storeu_si128((__m128i*)dest, _mm_or_si128(rb, ga));
+        }
+        for (; width > 0; width--, dest++, src++) {
+            uint32_t p = *src;
+            *dest = (p & 0xFF00FF00) | ((p & 0x00FF0000) >> 16) | ((p & 0x000000FF) << 16);
+        }
+
+}
+
 void TexSubImage2D(
         GLenum target,
         GLint level,
@@ -1051,14 +1068,23 @@ void TexSubImage2D(
         Texture &t = textures[current_texture[target]];
         assert(xoffset + width <= t.width);
         assert(yoffset + height <= t.height);
-        assert(t.internal_format == internal_format_for_data(format, ty));
+        if (format == GL_BGRA) {
+            assert(ty == GL_UNSIGNED_BYTE);
+            assert(t.internal_format == GL_RGBA8);
+        } else {
+            assert(t.internal_format == internal_format_for_data(format, ty));
+        }
         int bpp = bytes_for_internal_format(t.internal_format);
         if (!bpp) return;
         int dest_stride = aligned_stride(bpp * t.width);
         char *dest = t.buf + yoffset * dest_stride + xoffset * bpp;
         char *src = (char*)data;
         for (int y = 0; y < height; y++) {
-                memcpy(dest, src, width * bpp);
+                if (format == GL_BGRA) {
+                    copy_bgra8_to_rgba8((uint32_t*)dest, (uint32_t*)src, width);
+                } else {
+                    memcpy(dest, src, width * bpp);
+                }
                 dest += dest_stride;
                 src += width * bpp;
         }
@@ -1095,7 +1121,12 @@ void TexSubImage3D(
         GLenum ty,
         void *data) {
         Texture &t = textures[current_texture[target]];
-        assert(t.internal_format == internal_format_for_data(format, ty));
+        if (format == GL_BGRA) {
+            assert(ty == GL_UNSIGNED_BYTE);
+            assert(t.internal_format == GL_RGBA8);
+        } else {
+            assert(t.internal_format == internal_format_for_data(format, ty));
+        }
         int bpp = bytes_for_internal_format(t.internal_format);
         if (!bpp) return;
         char *src = (char*)data;
@@ -1106,7 +1137,11 @@ void TexSubImage3D(
         for (int z = 0; z < depth; z++) {
                 char *dest = t.buf + ((zoffset + z) * t.height + yoffset) * dest_stride + xoffset * bpp;
                 for (int y = 0; y < height; y++) {
-                        memcpy(dest, src, width * bpp);
+                        if (format == GL_BGRA) {
+                            copy_bgra8_to_rgba8((uint32_t*)dest, (uint32_t*)src, width);
+                        } else {
+                            memcpy(dest, src, width * bpp);
+                        }
                         dest += dest_stride;
                         src += width * bpp;
                 }
