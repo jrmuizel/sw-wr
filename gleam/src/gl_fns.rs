@@ -62,6 +62,29 @@ extern "C" {
         height: GLsizei,
         depth: GLsizei,
     );
+    fn TexImage2D(
+        target: GLenum,
+        level: GLint,
+        internal_format: GLint,
+        width: GLsizei,
+        height: GLsizei,
+        border: GLint,
+        format: GLenum,
+        ty: GLenum,
+        data: *const c_void,
+    );
+    fn TexImage3D(
+        target: GLenum,
+        level: GLint,
+        internal_format: GLint,
+        width: GLsizei,
+        height: GLsizei,
+        depth: GLsizei,
+        border: GLint,
+        format: GLenum,
+        ty: GLenum,
+        data: *const c_void,
+    );
     fn TexSubImage2D(
         target: GLenum,
         level: GLint,
@@ -914,9 +937,24 @@ impl Gl for GlFns {
         ty: GLenum,
         opt_data: Option<&[u8]>,
     ) {
-        panic!();
-        match opt_data {
-            Some(data) => unsafe {
+        unsafe {
+            let pdata = match opt_data {
+                Some(data) => data.as_ptr() as *const GLvoid,
+                None => ptr::null(),
+            };
+            if SW {
+                TexImage2D(
+                    target,
+                    level,
+                    internal_format,
+                    width,
+                    height,
+                    border,
+                    format,
+                    ty,
+                    pdata,
+                );
+            } else {
                 self.ffi_gl_.TexImage2D(
                     target,
                     level,
@@ -926,22 +964,9 @@ impl Gl for GlFns {
                     border,
                     format,
                     ty,
-                    data.as_ptr() as *const GLvoid,
+                    pdata,
                 );
-            },
-            None => unsafe {
-                self.ffi_gl_.TexImage2D(
-                    target,
-                    level,
-                    internal_format,
-                    width,
-                    height,
-                    border,
-                    format,
-                    ty,
-                    ptr::null(),
-                );
-            },
+            };
         }
     }
 
@@ -1011,24 +1036,38 @@ impl Gl for GlFns {
         ty: GLenum,
         opt_data: Option<&[u8]>,
     ) {
-        panic!();
         unsafe {
             let pdata = match opt_data {
-                Some(data) => mem::transmute(data.as_ptr()),
+                Some(data) => data.as_ptr() as *const GLvoid,
                 None => ptr::null(),
             };
-            self.ffi_gl_.TexImage3D(
-                target,
-                level,
-                internal_format,
-                width,
-                height,
-                depth,
-                border,
-                format,
-                ty,
-                pdata,
-            );
+            if SW {
+                TexImage3D(
+                    target,
+                    level,
+                    internal_format,
+                    width,
+                    height,
+                    depth,
+                    border,
+                    format,
+                    ty,
+                    pdata,
+                );
+            } else {
+                self.ffi_gl_.TexImage3D(
+                    target,
+                    level,
+                    internal_format,
+                    width,
+                    height,
+                    depth,
+                    border,
+                    format,
+                    ty,
+                    pdata,
+                );
+            }
         }
     }
 

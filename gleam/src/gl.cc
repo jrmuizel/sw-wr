@@ -54,6 +54,7 @@ struct VertexAttrib {
 #define GL_RGBA8                          0x8058
 #define GL_R8                             0x8229
 #define GL_RGBA32I                        0x8D82
+#define GL_BGRA8                          0x93A1
 
 #define GL_UNSIGNED_BYTE                  0x1401
 #define GL_UNSIGNED_SHORT                 0x1403
@@ -72,6 +73,7 @@ int bytes_for_internal_format(GLenum internal_format) {
                 case GL_RGBA32I:
                         return 4*4;
                 case GL_RGBA8:
+                case GL_BGRA8:
                         return 4;
                 case GL_R8:
                         return 1;
@@ -1019,6 +1021,7 @@ void TexStorage2D(
 #define GL_RED                            0x1903
 #define GL_RGBA                           0x1908
 #define GL_RGBA_INTEGER                   0x8D99
+#define GL_BGRA                           0x80E1
 GLenum internal_format_for_data(GLenum format, GLenum ty) {
     if (format == GL_RED && ty == GL_UNSIGNED_BYTE) {
         return GL_R8;
@@ -1029,6 +1032,7 @@ GLenum internal_format_for_data(GLenum format, GLenum ty) {
     } else if (format == GL_RGBA_INTEGER && ty == GL_INT) {
         return GL_RGBA32I;
     } else {
+        printf("unknown internal format for format %x, type %x\n", format, ty);
         assert(false);
         return 0;
     }
@@ -1057,6 +1061,24 @@ void TexSubImage2D(
                 memcpy(dest, src, width * bpp);
                 dest += dest_stride;
                 src += width * bpp;
+        }
+}
+
+void TexImage2D(
+        GLenum target,
+        GLint level,
+        GLint internal_format,
+        GLsizei width,
+        GLsizei height,
+        GLint border,
+        GLenum format,
+        GLenum ty,
+        void *data) {
+        assert(level == 0);
+        assert(border == 0);
+        TexStorage2D(target, 1, internal_format, width, height);
+        if (data) {
+            TexSubImage2D(target, 0, 0, 0, width, height, format, ty, data);
         }
 }
 
@@ -1090,6 +1112,25 @@ void TexSubImage3D(
                 }
         }
 
+}
+
+void TexImage3D(
+        GLenum target,
+        GLint level,
+        GLint internal_format,
+        GLsizei width,
+        GLsizei height,
+        GLsizei depth,
+        GLint border,
+        GLenum format,
+        GLenum ty,
+        void *data) {
+        assert(level == 0);
+        assert(border == 0);
+        TexStorage3D(target, 1, internal_format, width, height, depth);
+        if (data) {
+            TexSubImage3D(target, 0, 0, 0, 0, width, height, depth, format, ty, data);
+        }
 }
 
 void TexParameteri(GLenum target, GLenum pname, GLint param) {
@@ -1402,7 +1443,7 @@ void Clear(GLbitfield mask) {
 void ReadPixels(GLint x, GLint y, GLsizei width, GLsizei height, GLenum format, GLenum type, void *data) {
     Framebuffer *fb = get_framebuffer(GL_READ_FRAMEBUFFER);
     if (!fb) return;
-    assert(format == GL_RED || GL_RGBA || GL_RGBA_INTEGER);
+    assert(format == GL_RED || format == GL_RGBA || format == GL_RGBA_INTEGER);
     Texture &t = textures[fb->color_attachment];
     if (!t.buf) return;
     printf("read pixels %d, %d, %d, %d from fb %d with format %x\n", x, y, width, height, current_framebuffer[GL_READ_FRAMEBUFFER], t.internal_format);
