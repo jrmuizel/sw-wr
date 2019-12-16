@@ -1636,7 +1636,7 @@ static inline __m128i blend_pixels_RGBA8(__m128i dst) {
 }
 
 template<bool DISCARD>
-static inline void commit_output(uint32_t* buf, __m128i mask = _mm_setzero_si128()) {
+static inline void commit_output(uint32_t* buf, __m128i mask) {
     fragment_shader.run();
     __m128i dst = _mm_loadu_si128((__m128i*)buf);
     __m128i r = blend ? blend_pixels_RGBA8(dst) : pack_pixels_RGBA8();
@@ -1646,8 +1646,13 @@ static inline void commit_output(uint32_t* buf, __m128i mask = _mm_setzero_si128
                      _mm_andnot_si128(mask, r)));
 }
 
+template<bool DISCARD>
+static inline void commit_output(uint32_t* buf) {
+    commit_output<DISCARD>(buf, _mm_setzero_si128());
+}
+
 template<>
-static inline void commit_output<false>(uint32_t* buf, __m128i mask) {
+static inline void commit_output<false>(uint32_t* buf) {
     fragment_shader.run();
     __m128i r = blend ? blend_pixels_RGBA8(_mm_loadu_si128((__m128i*)buf)) : pack_pixels_RGBA8();
     _mm_storeu_si128((__m128i*)buf, r);
@@ -1706,7 +1711,7 @@ static inline __m128i blend_pixels_R8(__m128i dst) {
 }
 
 template<bool DISCARD>
-static inline void commit_output(uint8_t* buf, __m128i mask = _mm_setzero_si128()) {
+static inline void commit_output(uint8_t* buf, __m128i mask) {
     fragment_shader.run();
     __m128i dst = _mm_unpacklo_epi8(_mm_loadu_si32(buf), _mm_setzero_si128());
     __m128i r = blend ? blend_pixels_R8(dst) : pack_pixels_R8();
@@ -1715,8 +1720,13 @@ static inline void commit_output(uint8_t* buf, __m128i mask = _mm_setzero_si128(
     _mm_storeu_si32(buf, _mm_packus_epi16(r, r));
 }
 
+template<bool DISCARD>
+static inline void commit_output(uint8_t* buf) {
+    commit_output<DISCARD>(buf, _mm_setzero_si128());
+}
+
 template<>
-static inline void commit_output<false>(uint8_t* buf, __m128i mask) {
+static inline void commit_output<false>(uint8_t* buf) {
     fragment_shader.run();
     __m128i r = blend ? blend_pixels_R8(_mm_unpacklo_epi8(_mm_loadu_si32(buf), _mm_setzero_si128())) : pack_pixels_R8();
     _mm_storeu_si32(buf, _mm_packus_epi16(r, r));
