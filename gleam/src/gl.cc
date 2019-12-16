@@ -1041,7 +1041,7 @@ void TexStorage2D(
 GLenum internal_format_for_data(GLenum format, GLenum ty) {
     if (format == GL_RED && ty == GL_UNSIGNED_BYTE) {
         return GL_R8;
-    } else if (format == GL_RGBA && ty == GL_UNSIGNED_BYTE) {
+    } else if ((format == GL_RGBA || format == GL_BGRA) && ty == GL_UNSIGNED_BYTE) {
         return GL_RGBA8;
     } else if (format == GL_RGBA && ty == GL_FLOAT) {
         return GL_RGBA32F;
@@ -1084,12 +1084,7 @@ void TexSubImage2D(
         Texture &t = textures[current_texture[target]];
         assert(xoffset + width <= t.width);
         assert(yoffset + height <= t.height);
-        if (format == GL_BGRA) {
-            assert(ty == GL_UNSIGNED_BYTE);
-            assert(t.internal_format == GL_RGBA8);
-        } else {
-            assert(t.internal_format == internal_format_for_data(format, ty));
-        }
+        assert(t.internal_format == internal_format_for_data(format, ty));
         int bpp = bytes_for_internal_format(t.internal_format);
         if (!bpp) return;
         int dest_stride = aligned_stride(bpp * t.width);
@@ -1506,7 +1501,7 @@ void Clear(GLbitfield mask) {
 void ReadPixels(GLint x, GLint y, GLsizei width, GLsizei height, GLenum format, GLenum type, void *data) {
     Framebuffer *fb = get_framebuffer(GL_READ_FRAMEBUFFER);
     if (!fb) return;
-    assert(format == GL_RED || format == GL_RGBA || format == GL_RGBA_INTEGER);
+    assert(format == GL_RED || format == GL_RGBA || format == GL_RGBA_INTEGER || format == GL_BGRA);
     Texture &t = textures[fb->color_attachment];
     if (!t.buf) return;
     printf("read pixels %d, %d, %d, %d from fb %d with format %x\n", x, y, width, height, current_framebuffer[GL_READ_FRAMEBUFFER], t.internal_format);
@@ -1521,7 +1516,11 @@ void ReadPixels(GLint x, GLint y, GLsizei width, GLsizei height, GLenum format, 
     int src_stride = aligned_stride(bpp * t.width);
     char *src = t.buf + (t.height * fb->layer + y) * src_stride + x * bpp;
     for (; height > 0; height--) {
-        memcpy(dest, src, width * bpp);
+        if (format == GL_BGRA) {
+            copy_bgra8_to_rgba8((uint32_t*)dest, (uint32_t*)src, width);
+        } else {
+            memcpy(dest, src, width * bpp);
+        }
         dest += width * bpp;
         src += src_stride;
     }
