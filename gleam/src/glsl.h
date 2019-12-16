@@ -1991,6 +1991,16 @@ vec4 texelFetchR8(sampler2D sampler, ivec2 P, int lod) {
         });
 }
 
+vec4 texelFetchR8(sampler2DArray sampler, ivec3 P, int lod) {
+        I32 offset = P.x + P.y*sampler->stride + P.z*sampler->height_stride;
+        return vec4((Float){
+                to_float(((uint8_t*)sampler->buf)[offset.x]),
+                to_float(((uint8_t*)sampler->buf)[offset.y]),
+                to_float(((uint8_t*)sampler->buf)[offset.z]),
+                to_float(((uint8_t*)sampler->buf)[offset.w])
+        });
+}
+
 vec4 texelFetchRGBA8(sampler2DArray sampler, ivec3 P, int lod) {
         I32 offset = P.x + P.y*sampler->stride + P.z*sampler->height_stride;
         return pixel_to_vec4(
@@ -2071,6 +2081,8 @@ vec4 texelFetch(sampler2DArray sampler, ivec3 P, int lod) {
         P = clamp2DArray(P, sampler);
         if (sampler->format == TextureFormat::RGBA32F) {
                 return texelFetchFloat(sampler, P, lod);
+        } else if (sampler->format == TextureFormat::R8) {
+                return texelFetchR8(sampler, P, lod);
         } else {
                 assert(sampler->format == TextureFormat::RGBA8);
                 return texelFetchRGBA8(sampler, P, lod);
@@ -2222,8 +2234,13 @@ vec4 texture(sampler2D sampler, vec2 P) {
     if (sampler->filter == TextureFilter::LINEAR) {
         if (sampler->format == TextureFormat::RGBA32F) {
             return textureLinearRGBA32F(sampler, P);
-        } else {
+        } else if (sampler->format == TextureFormat::RGBA8) {
             return textureLinearRGBA8(sampler, P);
+        } else {
+            assert(sampler->format == TextureFormat::R8);
+            // XXX: do LINEAR instead of NEAREST
+            ivec2 coord(round(P.x, sampler->width), round(P.y, sampler->height));
+            return texelFetch(sampler, coord, 0);
         }
     } else {
         ivec2 coord(round(P.x, sampler->width), round(P.y, sampler->height));
@@ -2248,8 +2265,13 @@ vec4 texture(sampler2DArray sampler, vec3 P) {
         I32 zoffset = clampCoord(round(P.z, 1.0f), sampler->depth) * sampler->height_stride;
         if (sampler->format == TextureFormat::RGBA32F) {
             return textureLinearRGBA32F(sampler, vec2(P.x, P.y), zoffset);
-        } else {
+        } else if (sampler->format == TextureFormat::RGBA8) {
             return textureLinearRGBA8(sampler, vec2(P.x, P.y), zoffset);
+        } else {
+            assert(sampler->format == TextureFormat::R8);
+            // XXX: do LINEAR instead of NEAREST
+            ivec3 coord(round(P.x, sampler->width), round(P.y, sampler->height), round(P.z, 1.0f));
+            return texelFetch(sampler, coord, 0);
         }
     } else {
         // just do nearest for now
