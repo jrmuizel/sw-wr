@@ -662,9 +662,12 @@ void Disable(GLenum cap) {
 static const char * const extensions[] = {
     "GL_ARB_blend_func_extended",
     "GL_ARB_copy_image",
+    "GL_ARB_draw_instanced",
     "GL_ARB_explicit_attrib_location",
+    "GL_ARB_instanced_arrays",
     "GL_ARB_texture_storage",
     "GL_ARB_texture_swizzle",
+    "GL_EXT_timer_query",
 };
 
 void GetIntegerv(GLenum pname, GLint *params) {
@@ -714,7 +717,7 @@ const char *GetString(GLenum name) {
     case GL_RENDERER:
         return "Software WebRender";
     case GL_VERSION:
-        return "3.2";
+        return "3.3";
     default:
         printf("unhandled glGetString parameter %x\n", name);
         assert(false);
