@@ -1918,6 +1918,11 @@ static inline __m128i blend_pixels_R8(__m128i dst) {
     return r;
 }
 
+#ifdef __MACH__
+#define _mm_loadu_si32(ptr) (_mm_cvtsi32_si128(*(const uint32_t*)(ptr)))
+#define _mm_storeu_si32(ptr, val) (*(uint32_t*)(ptr) = _mm_cvtsi128_si32(val))
+#endif
+
 template<bool DISCARD>
 static inline void commit_output(uint8_t* buf, __m128i mask) {
     fragment_shader.run();
