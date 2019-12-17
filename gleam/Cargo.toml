@@ -11,4 +11,4 @@ description = "Generated OpenGL bindings and wrapper for Servo."
 [build-dependencies]
 gl_generator = "0.11"
 cc = "1.0.46"
-
+glsl-to-cxx = { git = "https://github.com/jrmuizel/glsl-to-cxx" }
