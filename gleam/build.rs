@@ -6,8 +6,6 @@ fn main() {
     for s in &["ps_text_run", "brush_image", "brush_solid", "ps_text_runDUAL_SOURCE_BLENDING"] {
         let v = "shaders/".to_string() + s + ".vert.pp";
         let f = "shaders/".to_string() + s + ".frag.pp";
-        println!("cargo:rerun-if-changed={}", v);
-        println!("cargo:rerun-if-changed={}", f);
         let n = "gl_to_cxx".to_string();
         let mut args = vec![n, v, f].into_iter();
         let result = glsl_to_cxx::translate(&mut args);
