@@ -272,7 +272,7 @@ fn make_window(
                         .expect("unable to make context current!")
                 };
 
-                let gl = match windowed_context.get_api() {
+                let gl = if true { gl::SwGlFns::load() } else { match windowed_context.get_api() {
                     glutin::Api::OpenGl => unsafe {
                         gl::GlFns::load_with(
                             |symbol| windowed_context.get_proc_address(symbol) as *const _
@@ -284,7 +284,7 @@ fn make_window(
                         )
                     },
                     glutin::Api::WebGl => unimplemented!(),
-                };
+                }};
 
                 WindowWrapper::WindowedContext(windowed_context, gl)
             }

@@ -662,3 +662,4 @@ pub fn buffer_sub_data<T>(gl_: &Gl, target: GLenum, offset: isize, data: &[T]) {
 
 include!("gl_fns.rs");
 include!("gles_fns.rs");
+include!("swgl_fns.rs");
