@@ -41,6 +41,11 @@ extern "C" {
         size: GLsizeiptr,
         data: *const GLvoid,
         usage: GLenum);
+    fn BufferSubData(
+        target: GLenum,
+        offset: GLintptr,
+        size: GLsizeiptr,
+        data: *const GLvoid);
     fn TexStorage2D(
         target: GLenum,
         levels: GLint,
@@ -280,7 +285,11 @@ impl Gl for GlFns {
                 target, offset, size, data);
         //panic!();
         unsafe {
-            self.ffi_gl_.BufferSubData(target, offset, size, data);
+            if SW {
+                BufferSubData(target, offset, size, data);
+            } else {
+                self.ffi_gl_.BufferSubData(target, offset, size, data);
+            }
         }
     }
 
@@ -2828,7 +2837,7 @@ impl Gl for GlFns {
 
     fn push_group_marker_ext(&self, message: &str) {
         println!("push group {}", message);
-        //panic!();
+        panic!();
         if self.ffi_gl_.PushGroupMarkerEXT.is_loaded() {
             unsafe {
                 self.ffi_gl_
@@ -2839,7 +2848,7 @@ impl Gl for GlFns {
 
     fn pop_group_marker_ext(&self) {
         println!("pop group");
-        //panic!();
+        panic!();
         if self.ffi_gl_.PopGroupMarkerEXT.is_loaded() {
             unsafe {
                 self.ffi_gl_.PopGroupMarkerEXT();
@@ -2858,22 +2867,20 @@ impl Gl for GlFns {
     }
 
     fn push_debug_group_khr(&self, source: GLenum, id: GLuint, message: &str) {
+        panic!();
         if self.ffi_gl_.PushDebugGroupKHR.is_loaded() {
             unsafe {
-                if SW {} else {
                 self.ffi_gl_
                     .PushDebugGroupKHR(source, id, message.len() as GLsizei, message.as_ptr() as *const _);
-                }
             }
         }
     }
 
     fn pop_debug_group_khr(&self) {
+        panic!();
         if self.ffi_gl_.PopDebugGroupKHR.is_loaded() {
             unsafe {
-                if SW {} else {
                 self.ffi_gl_.PopDebugGroupKHR();
-                }
             }
         }
     }

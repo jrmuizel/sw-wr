@@ -36,6 +36,7 @@ typedef uint32_t GLbitfield;
 
 typedef int32_t GLsizei;
 typedef size_t GLsizeiptr;
+typedef intptr_t GLintptr;
 
 struct VertexAttrib {
         size_t size; // in bytes
@@ -1330,6 +1331,16 @@ void BufferData(GLenum target,
     b.buf = (char*)malloc(size);
     memcpy(b.buf, data, size);
     b.size = size;
+}
+
+void BufferSubData(GLenum target,
+        GLintptr offset,
+        GLsizeiptr size,
+        void *data)
+{
+    Buffer &b = buffers[current_buffer[target]];
+    assert(offset + size <= b.size);
+    memcpy(&b.buf[offset], data, size);
 }
 
 void Uniform1i(GLint location, GLint V0) {
