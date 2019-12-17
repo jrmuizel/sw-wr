@@ -1566,7 +1566,7 @@ impl Device {
         let feat = feat.trim_start_matches(char::is_numeric);
         let feat = feat.trim_start_matches('U');
         let feat = feat.trim();
-        let features: Vec<_> = feat.split("#define WR_FEATURE_").skip(1).collect();
+        let features: Vec<_> = feat.split("#define WR_FEATURE_").skip(1).map(|x| x.trim()).collect();
         let features = features.join(".");
         println!("feat {}", feat);
         println!("name: {}", &(name.to_owned() + &features));
