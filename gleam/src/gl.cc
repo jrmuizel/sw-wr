@@ -613,6 +613,7 @@ void load_flat_attrib(T& attrib, VertexAttrib &va, unsigned short *indices, int 
 
 #include "brush_solid.h"
 #include "brush_image.h"
+#include "cs_blurALPHA_TARGET.h"
 #include "cs_clip_rectangle.h"
 #include "ps_text_run.h"
 #include "ps_text_runDUAL_SOURCE_BLENDING.h"
@@ -902,6 +903,9 @@ void LinkProgram(GLuint program) {
         p.impl = &impl;
     } else if (p.vs_name == "brush_image") {
         static brush_image_program impl;
+        p.impl = &impl;
+    } else if (p.vs_name == "cs_blurALPHA_TARGET") {
+        static cs_blurALPHA_TARGET_program impl;
         p.impl = &impl;
     } else if (p.vs_name == "cs_clip_rectangle") {
         static cs_clip_rectangle_program impl;
