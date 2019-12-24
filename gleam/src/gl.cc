@@ -1005,6 +1005,20 @@ void BindRenderbuffer(GLenum target, GLuint rb) {
     current_renderbuffer[target] = rb;
 }
 
+#define GL_UNPACK_ROW_LENGTH              0x0CF2
+#define GL_UNPACK_ALIGNMENT               0x0CF5
+
+int unpack_row_length;
+
+void PixelStorei(GLenum name, GLint param) {
+    if (name == GL_UNPACK_ALIGNMENT) {
+        assert(param == 1);
+    } else if (name == GL_UNPACK_ROW_LENGTH) {
+        unpack_row_length = param;
+    }
+}
+
+
 void TexStorage3D(
         GLenum target,
         GLint levels,
@@ -1091,6 +1105,7 @@ void TexSubImage2D(
         Texture &t = textures[current_texture[target]];
         assert(xoffset + width <= t.width);
         assert(yoffset + height <= t.height);
+        assert(unpack_row_length == 0 || unpack_row_length == width);
         assert(t.internal_format == internal_format_for_data(format, ty));
         int bpp = bytes_for_internal_format(t.internal_format);
         if (!bpp) return;
@@ -1139,6 +1154,7 @@ void TexSubImage3D(
         GLenum ty,
         void *data) {
         Texture &t = textures[current_texture[target]];
+        assert(unpack_row_length == 0 || unpack_row_length == width);
         if (format == GL_BGRA) {
             assert(ty == GL_UNSIGNED_BYTE);
             assert(t.internal_format == GL_RGBA8);
@@ -1680,17 +1696,6 @@ void BlitFramebuffer(
 #define GL_TRIANGLE_STRIP                 0x0005
 #define GL_TRIANGLE_FAN                   0x0006
 #define GL_QUADS                          0x0007
-
-#define GL_UNPACK_ROW_LENGTH              0x0CF2
-#define GL_UNPACK_ALIGNMENT               0x0CF5
-void PixelStorei(GLenum name, GLint param) {
-    if (name == GL_UNPACK_ALIGNMENT) {
-        assert(param == 1);
-    } else if (name == GL_UNPACK_ROW_LENGTH) {
-        printf("row length: %d\n", param);
-        assert(param == 16);
-    }
-}
 
 } // extern "C"
 
