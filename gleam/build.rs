@@ -3,7 +3,7 @@ extern crate glsl_to_cxx;
 
 fn main() {
 
-    for s in &["ps_text_run", "brush_image", "brush_solid", "ps_text_runDUAL_SOURCE_BLENDING"] {
+    for s in &["ps_text_run", "brush_image", "brush_solid", "cs_clip_rectangle", "ps_text_runDUAL_SOURCE_BLENDING"] {
         let v = "shaders/".to_string() + s + ".vert.pp";
         let f = "shaders/".to_string() + s + ".frag.pp";
         let n = "gl_to_cxx".to_string();

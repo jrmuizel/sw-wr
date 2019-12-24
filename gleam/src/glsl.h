@@ -2508,6 +2508,16 @@ struct ElementType {
 };
 
 template<>
+struct ElementType<float> {
+    typedef float ty;
+};
+
+template<>
+struct ElementType<int> {
+    typedef float ty;
+};
+
+template<>
 struct ElementType<Float> {
     typedef float ty;
 };
