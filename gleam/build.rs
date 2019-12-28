@@ -7,6 +7,7 @@ fn main() {
         "ps_text_run",
         "brush_image",
         "brush_imageALPHA_PASS",
+        "brush_linear_gradientDITHERING.ALPHA_PASS",
         "brush_solid",
         "brush_solidALPHA_PASS",
         "cs_border_solid",

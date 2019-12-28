@@ -615,6 +615,7 @@ void load_flat_attrib(T& attrib, VertexAttrib &va, unsigned short *indices, int 
 #include "brush_solidALPHA_PASS.h"
 #include "brush_image.h"
 #include "brush_imageALPHA_PASS.h"
+#include "brush_linear_gradientDITHERING.ALPHA_PASS.h"
 #include "cs_border_solid.h"
 #include "cs_blurALPHA_TARGET.h"
 #include "cs_clip_box_shadow.h"
@@ -914,6 +915,9 @@ void LinkProgram(GLuint program) {
         p.impl = &impl;
     } else if (p.vs_name == "brush_imageALPHA_PASS") {
         static brush_imageALPHA_PASS_program impl;
+        p.impl = &impl;
+    } else if (p.vs_name == "brush_linear_gradientDITHERING.ALPHA_PASS") {
+        static brush_linear_gradientDITHERING_ALPHA_PASS_program impl;
         p.impl = &impl;
     } else if (p.vs_name == "cs_border_solid") {
         static cs_border_solid_program impl;
