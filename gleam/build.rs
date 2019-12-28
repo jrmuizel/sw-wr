@@ -7,6 +7,7 @@ fn main() {
         "ps_text_run",
         "brush_image",
         "brush_solid",
+        "cs_border_solid",
         "cs_blurALPHA_TARGET",
         "cs_clip_rectangle",
         "ps_text_runDUAL_SOURCE_BLENDING",
