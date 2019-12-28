@@ -612,9 +612,12 @@ void load_flat_attrib(T& attrib, VertexAttrib &va, unsigned short *indices, int 
 }
 
 #include "brush_solid.h"
+#include "brush_solidALPHA_PASS.h"
 #include "brush_image.h"
+#include "brush_imageALPHA_PASS.h"
 #include "cs_border_solid.h"
 #include "cs_blurALPHA_TARGET.h"
+#include "cs_clip_box_shadow.h"
 #include "cs_clip_rectangle.h"
 #include "cs_clip_rectangleFAST_PATH.h"
 #include "ps_text_run.h"
@@ -903,14 +906,23 @@ void LinkProgram(GLuint program) {
     if (p.vs_name == "brush_solid") {
         static brush_solid_program impl;
         p.impl = &impl;
+    } else if (p.vs_name == "brush_solidALPHA_PASS") {
+        static brush_solidALPHA_PASS_program impl;
+        p.impl = &impl;
     } else if (p.vs_name == "brush_image") {
         static brush_image_program impl;
+        p.impl = &impl;
+    } else if (p.vs_name == "brush_imageALPHA_PASS") {
+        static brush_imageALPHA_PASS_program impl;
         p.impl = &impl;
     } else if (p.vs_name == "cs_border_solid") {
         static cs_border_solid_program impl;
         p.impl = &impl;
     } else if (p.vs_name == "cs_blurALPHA_TARGET") {
         static cs_blurALPHA_TARGET_program impl;
+        p.impl = &impl;
+    } else if (p.vs_name == "cs_clip_box_shadow") {
+        static cs_clip_box_shadow_program impl;
         p.impl = &impl;
     } else if (p.vs_name == "cs_clip_rectangle") {
         static cs_clip_rectangle_program impl;

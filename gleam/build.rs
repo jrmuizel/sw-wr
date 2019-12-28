@@ -6,9 +6,12 @@ fn main() {
     let shaders = &[
         "ps_text_run",
         "brush_image",
+        "brush_imageALPHA_PASS",
         "brush_solid",
+        "brush_solidALPHA_PASS",
         "cs_border_solid",
         "cs_blurALPHA_TARGET",
+        "cs_clip_box_shadow",
         "cs_clip_rectangle",
         "cs_clip_rectangleFAST_PATH",
         "ps_text_runDUAL_SOURCE_BLENDING",
