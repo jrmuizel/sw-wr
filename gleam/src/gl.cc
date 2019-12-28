@@ -616,6 +616,7 @@ void load_flat_attrib(T& attrib, VertexAttrib &va, unsigned short *indices, int 
 #include "cs_border_solid.h"
 #include "cs_blurALPHA_TARGET.h"
 #include "cs_clip_rectangle.h"
+#include "cs_clip_rectangleFAST_PATH.h"
 #include "ps_text_run.h"
 #include "ps_text_runDUAL_SOURCE_BLENDING.h"
 extern "C" {
@@ -913,6 +914,9 @@ void LinkProgram(GLuint program) {
         p.impl = &impl;
     } else if (p.vs_name == "cs_clip_rectangle") {
         static cs_clip_rectangle_program impl;
+        p.impl = &impl;
+    } else if (p.vs_name == "cs_clip_rectangleFAST_PATH") {
+        static cs_clip_rectangleFAST_PATH_program impl;
         p.impl = &impl;
     } else if (p.vs_name == "ps_text_run") {
         static ps_text_run_program impl;

@@ -10,6 +10,7 @@ fn main() {
         "cs_border_solid",
         "cs_blurALPHA_TARGET",
         "cs_clip_rectangle",
+        "cs_clip_rectangleFAST_PATH",
         "ps_text_runDUAL_SOURCE_BLENDING",
     ];
     for s in shaders {
