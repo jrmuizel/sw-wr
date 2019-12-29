@@ -1340,6 +1340,7 @@ void VertexAttribIPointer(GLuint index,
         VertexAttrib &va = v.attribs[index];
         va.size = size * bytes_per_type(type);
         va.type = type;
+        va.normalized = false;
         va.stride = stride;
         va.offset = offset;
         Buffer &vertex_buf = buffers[current_buffer[GL_ARRAY_BUFFER]];
