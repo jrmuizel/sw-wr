@@ -270,8 +270,22 @@ fn build_shader_prefix_string<F: FnMut(&str)>(
     // GLSL requires that the version number comes first.
     output(gl_version_string);
 
+    let mut features_key = String::new();
+    for feat in features.lines() {
+        const prefix: &'static str = "#define WR_FEATURE_";
+        if let Some(i) = feat.find(prefix) {
+            if i + prefix.len() < feat.len() {
+                if !features_key.is_empty() {
+                    features_key.push_str(".");
+                }
+                features_key.push_str(&feat[i + prefix.len() ..]);
+            }
+        }
+    }
+    println!("name: {}", &(base_filename.to_owned() + &features_key));
+
     // Insert the shader name to make debugging easier.
-    let name_string = format!("// {}\n", base_filename);
+    let name_string = format!("// shader: {} {}\n", base_filename, features_key);
     output(&name_string);
 
     // Define a constant depending on whether we are compiling VS or FS.
@@ -1561,18 +1575,7 @@ impl Device {
         let id = gl.create_shader(shader_type);
         println!("features {}", features);
         
-        // XXX: a really crappy parser of the feature defines
-        let feat = features.trim_start_matches("#define WR_MAX_VERTEX_TEXTURE_WIDTH ");
-        let feat = feat.trim_start_matches(char::is_numeric);
-        let feat = feat.trim_start_matches('U');
-        let feat = feat.trim();
-        let features: Vec<_> = feat.split("#define WR_FEATURE_").skip(1).map(|x| x.trim()).collect();
-        let features = features.join(".");
-        println!("feat {}", feat);
-        println!("name: {}", &(name.to_owned() + &features));
-        
-        
-        gl.shader_source_with_name(id, &[source.as_bytes()], &(name.to_owned() + &features));
+        gl.shader_source(id, &[source.as_bytes()]);
         gl.compile_shader(id);
         let log = gl.get_shader_info_log(id);
         let mut status = [0];

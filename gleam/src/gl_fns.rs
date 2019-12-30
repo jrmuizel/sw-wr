@@ -89,10 +89,6 @@ impl Gl for GlFns {
         drop(pointers);
     }
 
-    fn shader_source_with_name(&self, shader: GLuint, strings: &[&[u8]], _name: &str) {
-        self.shader_source(shader, strings);
-    }
-
     fn tex_buffer(&self, target: GLenum, internal_format: GLenum, buffer: GLuint) {
         unsafe {
             self.ffi_gl_.TexBuffer(target, internal_format, buffer);
