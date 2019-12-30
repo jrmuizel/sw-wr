@@ -47,6 +47,7 @@ use std::path::{Path, PathBuf};
 use std::process;
 use std::ptr;
 use std::rc::Rc;
+use std::slice;
 use std::sync::mpsc::{channel, Sender, Receiver};
 use webrender::DebugFlags;
 use webrender::api::*;
@@ -135,7 +136,7 @@ impl HeadlessContext {
 }
 
 pub enum WindowWrapper {
-    WindowedContext(glutin::WindowedContext<glutin::PossiblyCurrent>, Rc<dyn gl::Gl>),
+    WindowedContext(glutin::WindowedContext<glutin::PossiblyCurrent>, Rc<dyn gl::Gl>, Option<Rc<dyn gl::Gl>>),
     Angle(winit::Window, angle::Context, Rc<dyn gl::Gl>),
     Headless(HeadlessContext, Rc<dyn gl::Gl>),
 }
@@ -143,10 +144,28 @@ pub enum WindowWrapper {
 pub struct HeadlessEventIterater;
 
 impl WindowWrapper {
+    fn upload_sw_to_gl(&self, gl: &dyn gl::Gl) {
+        let tex = gl.gen_textures(1)[0];
+        gl.bind_texture(gl::TEXTURE_2D, tex);
+        let (data_ptr, width, height) = gl::SwGlFns::get_color_buffer();
+        let buffer = unsafe { slice::from_raw_parts(data_ptr as *const u8, width as usize * height as usize * 4) };
+        gl.tex_image_2d(gl::TEXTURE_2D, 0, gl::RGBA8 as gl::GLint, width, height, 0, gl::RGBA, gl::UNSIGNED_BYTE, Some(buffer));
+        let fb = gl.gen_framebuffers(1)[0];
+        gl.bind_framebuffer(gl::READ_FRAMEBUFFER, fb);
+        gl.framebuffer_texture_2d(gl::READ_FRAMEBUFFER, gl::COLOR_ATTACHMENT0, gl::TEXTURE_2D, tex, 0);
+        gl.blit_framebuffer(0, 0, width, height, 0, 0, width, height, gl::COLOR_BUFFER_BIT, gl::NEAREST);
+        gl.delete_framebuffers(&[fb]);
+        gl.delete_textures(&[tex]);
+        gl.finish();
+    }
+
     fn swap_buffers(&self) {
         match *self {
-            WindowWrapper::WindowedContext(ref windowed_context, ref gl) => {
+            WindowWrapper::WindowedContext(ref windowed_context, ref gl, ref win_gl) => {
                 gl.finish();
+                if let Some(win_gl) = win_gl {
+                    self.upload_sw_to_gl(&**win_gl);
+                }
                 windowed_context.swap_buffers().unwrap()
             }
             WindowWrapper::Angle(_, ref context, _) => context.swap_buffers().unwrap(),
@@ -163,7 +182,7 @@ impl WindowWrapper {
             DeviceIntSize::new(size.width as i32, size.height as i32)
         }
         match *self {
-            WindowWrapper::WindowedContext(ref windowed_context, _) => {
+            WindowWrapper::WindowedContext(ref windowed_context, ..) => {
                 inner_size(windowed_context.window())
             }
             WindowWrapper::Angle(ref window, ..) => inner_size(window),
@@ -173,7 +192,7 @@ impl WindowWrapper {
 
     fn hidpi_factor(&self) -> f32 {
         match *self {
-            WindowWrapper::WindowedContext(ref windowed_context, _) => {
+            WindowWrapper::WindowedContext(ref windowed_context, ..) => {
                 windowed_context.window().get_hidpi_factor() as f32
             }
             WindowWrapper::Angle(ref window, ..) => window.get_hidpi_factor() as f32,
@@ -183,7 +202,7 @@ impl WindowWrapper {
 
     fn resize(&mut self, size: DeviceIntSize) {
         match *self {
-            WindowWrapper::WindowedContext(ref mut windowed_context, _) => {
+            WindowWrapper::WindowedContext(ref mut windowed_context, ..) => {
                 windowed_context.window()
                     .set_inner_size(LogicalSize::new(size.width as f64, size.height as f64))
             },
@@ -196,7 +215,7 @@ impl WindowWrapper {
 
     fn set_title(&mut self, title: &str) {
         match *self {
-            WindowWrapper::WindowedContext(ref windowed_context, _) => {
+            WindowWrapper::WindowedContext(ref windowed_context, ..) => {
                 windowed_context.window().set_title(title)
             }
             WindowWrapper::Angle(ref window, ..) => window.set_title(title),
@@ -206,7 +225,7 @@ impl WindowWrapper {
 
     pub fn gl(&self) -> &dyn gl::Gl {
         match *self {
-            WindowWrapper::WindowedContext(_, ref gl) |
+            WindowWrapper::WindowedContext(_, ref gl, _) |
             WindowWrapper::Angle(_, _, ref gl) |
             WindowWrapper::Headless(_, ref gl) => &**gl,
         }
@@ -214,9 +233,20 @@ impl WindowWrapper {
 
     pub fn clone_gl(&self) -> Rc<dyn gl::Gl> {
         match *self {
-            WindowWrapper::WindowedContext(_, ref gl) |
+            WindowWrapper::WindowedContext(_, ref gl, _) |
             WindowWrapper::Angle(_, _, ref gl) |
             WindowWrapper::Headless(_, ref gl) => gl.clone(),
+        }
+    }
+
+    pub fn update(&self, dim: DeviceIntSize) {
+        match *self {
+            WindowWrapper::WindowedContext(_, _, ref win_gl) => {
+                if win_gl.is_some() {
+                    gl::SwGlFns::update(dim.width, dim.height);
+                }
+            }
+            _ => {}
         }
     }
 }
@@ -272,7 +302,7 @@ fn make_window(
                         .expect("unable to make context current!")
                 };
 
-                let gl = if true { gl::SwGlFns::load() } else { match windowed_context.get_api() {
+                let gl = match windowed_context.get_api() {
                     glutin::Api::OpenGl => unsafe {
                         gl::GlFns::load_with(
                             |symbol| windowed_context.get_proc_address(symbol) as *const _
@@ -284,9 +314,10 @@ fn make_window(
                         )
                     },
                     glutin::Api::WebGl => unimplemented!(),
-                }};
+                };
 
-                WindowWrapper::WindowedContext(windowed_context, gl)
+                let swgl = gl::SwGlFns::load();
+                WindowWrapper::WindowedContext(windowed_context, swgl, Some(gl))
             }
         }
         None => {
@@ -529,6 +560,7 @@ fn main() {
     );
     let dp_ratio = dp_ratio.unwrap_or(window.hidpi_factor());
     let dim = window.get_inner_size();
+    window.update(dim);
 
     let needs_frame_notifier = ["perf", "reftest", "png", "rawtest"]
         .iter()
@@ -656,6 +688,7 @@ fn render<'a>(
     let mut cursor_position = WorldPoint::zero();
 
     let dim = window.get_inner_size();
+    window.update(dim);
     wrench.update(dim);
     thing.do_frame(wrench);
 

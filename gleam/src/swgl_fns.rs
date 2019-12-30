@@ -8,6 +8,8 @@
 // except according to those terms.
 #[allow(warnings)]
 
+use std::slice;
+
 pub struct SwGlFns {
 }
 
@@ -236,11 +238,28 @@ extern "C" {
     fn GetString(name: GLenum) -> *const c_char;
     fn GetStringi(name: GLenum, index: GLuint) -> *const c_char;
     fn GetError() -> GLenum;
+    fn Update(width: i32, height: i32);
+    fn GetColorBuffer(width: *mut i32, height: *mut i32) -> *mut c_void;
 }
 
 impl SwGlFns {
     pub fn load() -> Rc<Gl> {
         Rc::new(SwGlFns {}) as Rc<Gl>
+    }
+
+    pub fn update(width: i32, height: i32) {
+        unsafe {
+            Update(width, height);
+        }
+    }
+
+    pub fn get_color_buffer() -> (*mut c_void, i32, i32) {
+        unsafe {
+            let mut width: i32 = 0;
+            let mut height: i32 = 0;
+            let data_ptr = GetColorBuffer(&mut width, &mut height);
+            (data_ptr, width, height)
+        }
     }
 }
 

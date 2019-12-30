@@ -184,6 +184,13 @@ struct Texture {
             buf = (char*)malloc(size + sizeof(__m128i));
         }
     }
+
+    void cleanup() {
+        if (buf) {
+            free(buf);
+            buf = nullptr;
+        }
+    }
 };
 
 #define MAX_ATTRS 16
@@ -1487,24 +1494,6 @@ Framebuffer *get_framebuffer(GLenum target) {
     return nullptr;
 }
 
-Framebuffer &get_draw_framebuffer() {
-    if (Framebuffer *fb = get_framebuffer(GL_DRAW_FRAMEBUFFER)) {
-      return *fb;
-    }
-    // allocate a default framebuffer
-    Framebuffer& fb = framebuffers[0];
-    const size_t width = 3072;
-    const size_t height = 2048;
-    GenTextures(1, &fb.color_attachment);
-    fb.layer = 0;
-    current_texture[GL_DRAW_FRAMEBUFFER] = fb.color_attachment;
-    TexStorage2D(GL_DRAW_FRAMEBUFFER, 1, GL_RGBA8, width, height);
-    GenTextures(1, &fb.depth_attachment);
-    current_texture[GL_DRAW_FRAMEBUFFER] = fb.depth_attachment;
-    TexStorage2D(GL_DRAW_FRAMEBUFFER, 1, GL_DEPTH_COMPONENT16, width, height);
-    return fb;
-}
-
 template<typename T>
 static void clear_buffer(Texture& t, __m128i chunk, T value, int layer = 0) {
     int x0 = 0, y0 = 0, x1 = t.width, y1 = t.height;
@@ -1532,6 +1521,40 @@ static void clear_buffer(Texture& t, __m128i chunk, T value, int layer = 0) {
 
 extern "C" {
 
+void Update(int width, int height) {
+    Framebuffer& fb = framebuffers[0];
+    if (!fb.color_attachment) {
+        GenTextures(1, &fb.color_attachment);
+        fb.layer = 0;
+    }
+    Texture& colortex = textures[fb.color_attachment];
+    if (colortex.width != width || colortex.height != height) {
+        colortex.cleanup();
+        current_texture[GL_DRAW_FRAMEBUFFER] = fb.color_attachment;
+        TexStorage2D(GL_DRAW_FRAMEBUFFER, 1, GL_RGBA8, width, height);
+    }
+    if (!fb.depth_attachment) {
+        GenTextures(1, &fb.depth_attachment);
+    }
+    Texture& depthtex = textures[fb.depth_attachment];
+    if (depthtex.width != width || depthtex.height != height) {
+        depthtex.cleanup();
+        current_texture[GL_DRAW_FRAMEBUFFER] = fb.depth_attachment;
+        TexStorage2D(GL_DRAW_FRAMEBUFFER, 1, GL_DEPTH_COMPONENT16, width, height);
+    }
+}
+
+void* GetColorBuffer(int32_t* width, int32_t* height) {
+    Framebuffer& fb = framebuffers[0];
+    if (!fb.color_attachment) {
+        return nullptr;
+    }
+    Texture& colortex = textures[fb.color_attachment];
+    *width = colortex.width;
+    *height = colortex.height;
+    return colortex.buf;
+}
+
 #define GL_FRAMEBUFFER_COMPLETE                      0x8CD5
 #define GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT         0x8CD6
 #define GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT 0x8CD7
@@ -1552,7 +1575,7 @@ GLenum CheckFramebufferStatus(GLenum target) {
 #define GL_STENCIL_BUFFER_BIT       0x00000400
 
 void Clear(GLbitfield mask) {
-    Framebuffer& fb = get_draw_framebuffer();
+    Framebuffer& fb = *get_framebuffer(GL_DRAW_FRAMEBUFFER);
     if ((mask & GL_COLOR_BUFFER_BIT) && fb.color_attachment) {
         Texture& t = textures[fb.color_attachment];
         if (t.internal_format == GL_RGBA8) {
@@ -2327,7 +2350,7 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
         assert(count == 6);
         assert(indices == 0);
 
-        Framebuffer& fb = get_draw_framebuffer();
+        Framebuffer& fb = *get_framebuffer(GL_DRAW_FRAMEBUFFER);
         Texture& colortex = textures[fb.color_attachment];
         assert(colortex.internal_format == GL_RGBA8 || colortex.internal_format == GL_R8);
         static Texture nodepthtex;
@@ -2400,7 +2423,7 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
 }
 
 void Finish() {
-        Framebuffer& fb = get_draw_framebuffer();
+        Framebuffer& fb = *get_framebuffer(GL_DRAW_FRAMEBUFFER);
         Texture& t = textures[fb.color_attachment];
         //writetga("out.tga", t.width, t.height, t.buf);
         write_png("out.png", t.buf, t.width, t.height);
