@@ -8,8 +8,6 @@
 // except according to those terms.
 #[allow(warnings)]
 
-use std::slice;
-
 pub struct SwGlFns {
 }
 
