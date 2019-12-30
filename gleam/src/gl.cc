@@ -557,12 +557,12 @@ static inline S load_attrib_scalar(const char *src, size_t size, GLenum type, bo
     if (type == GL_UNSIGNED_SHORT) {
         if (normalized) {
             for (int i = 0; i < size/sizeof(uint16_t); i++) {
-                typename ElementType<S>::ty x = *reinterpret_cast<const uint16_t*>(src + i * sizeof(uint16_t));
+                typename ElementType<S>::ty x = reinterpret_cast<const uint16_t*>(src)[i];
                 put_nth_component(scalar, i, x * (1.0f / 0xFFFF));
             }
         } else {
             for (int i = 0; i < size/sizeof(uint16_t); i++) {
-                typename ElementType<S>::ty x = *reinterpret_cast<const uint16_t*>(src + i * sizeof(uint16_t));
+                typename ElementType<S>::ty x = reinterpret_cast<const uint16_t*>(src)[i];
                 put_nth_component(scalar, i, x);
             }
         }
