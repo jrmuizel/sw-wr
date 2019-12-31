@@ -117,10 +117,13 @@ struct Buffer {
         char *buf = nullptr;
         size_t size = 0;
 
-        void allocate(size_t new_size) {
-            cleanup();
-            size = new_size;
-            buf = (char*)malloc(size);
+        bool allocate(size_t new_size) {
+            if (new_size != size) {
+                size = new_size;
+                buf = (char*)realloc(buf, size);
+                return true;
+            }
+            return false;
         }
 
         void cleanup() {
@@ -216,8 +219,11 @@ struct Texture {
 #define MAX_ATTRS 16
 struct VertexArray {
     VertexAttrib attribs[MAX_ATTRS];
+
+    void validate();
 };
 
+bool validate_vertex_array = true;
 
 #define GL_VERTEX_SHADER                  0x8B31
 #define GL_FRAGMENT_SHADER                0x8B30
@@ -1123,6 +1129,9 @@ void GetQueryObjectui64v(GLuint id, GLenum pname, GLuint64 *params)
 }
 
 void BindVertexArray(GLuint vertex_array) {
+    if (vertex_array != current_vertex_array) {
+        validate_vertex_array = true;
+    }
     current_vertex_array = vertex_array;
 }
 
@@ -1495,6 +1504,7 @@ void VertexAttribPointer(GLuint index,
         Buffer &vertex_buf = buffers[current_buffer[GL_ARRAY_BUFFER]];
         va.vertex_buffer = current_buffer[GL_ARRAY_BUFFER];
         va.vertex_array = current_vertex_array;
+        validate_vertex_array = true;
 }
 
 void VertexAttribIPointer(GLuint index,
@@ -1514,11 +1524,15 @@ void VertexAttribIPointer(GLuint index,
         Buffer &vertex_buf = buffers[current_buffer[GL_ARRAY_BUFFER]];
         va.vertex_buffer = current_buffer[GL_ARRAY_BUFFER];
         va.vertex_array = current_vertex_array;
+        validate_vertex_array = true;
 }
 
 void EnableVertexAttribArray(GLuint index) {
         VertexArray &v = vertex_arrays[current_vertex_array];
         VertexAttrib &va = v.attribs[index];
+        if (!va.enabled) {
+            validate_vertex_array = true;
+        }
         va.enabled = true;
 }
 
@@ -1544,7 +1558,9 @@ void BufferData(GLenum target,
         GLenum usage)
 {
     Buffer &b = buffers[current_buffer[target]];
-    b.allocate(size);
+    if (b.allocate(size)) {
+        validate_vertex_array = true;
+    }
     memcpy(b.buf, data, size);
 }
 
@@ -2501,6 +2517,19 @@ void writetga(const char *name, int width, int height, uint8_t *data)
 }
 #endif
 
+void VertexArray::validate() {
+    for (int i = 0; i < MAX_ATTRS; i++) {
+        if (attribs[i].enabled) {
+            VertexAttrib &attr = attribs[i];
+            VertexArray &v = vertex_arrays[attr.vertex_array];
+            Buffer &vertex_buf = buffers[attr.vertex_buffer];
+            attr.buf = vertex_buf.buf;
+            attr.buf_size = vertex_buf.size;
+            //printf("%d %x %d %d %d %d\n", i, attr.type, attr.size, attr.stride, attr.offset, attr.divisor);
+        }
+    }
+}
+
 extern "C" {
 
 void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indices, GLsizei instancecount) {
@@ -2508,6 +2537,9 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
         assert(type == GL_UNSIGNED_SHORT);
         assert(count == 6);
         assert(indices == 0);
+        if (count <= 0 || instancecount <= 0 || indices) {
+            return;
+        }
 
         Framebuffer& fb = *get_framebuffer(GL_DRAW_FRAMEBUFFER);
         Texture& colortex = textures[fb.color_attachment];
@@ -2517,6 +2549,15 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
         if (&depthtex != &nodepthtex) {
             assert(depthtex.internal_format == GL_DEPTH_COMPONENT16);
             assert(colortex.width == depthtex.width && colortex.height == depthtex.height);
+        }
+
+        Buffer &indices_buf = buffers[current_buffer[GL_ELEMENT_ARRAY_BUFFER]];
+        //printf("current_vertex_array %d\n", current_vertex_array);
+        //printf("indices size: %d\n", indices_buf.size);
+        VertexArray &v = vertex_arrays[current_vertex_array];
+        if (validate_vertex_array) {
+            validate_vertex_array = false;
+            v.validate();
         }
 
         uint64_t start = get_time_value();
@@ -2529,21 +2570,6 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
         vertex_shader.init_batch(p.impl);
         fragment_shader.init_batch(p.impl);
         for (int instance = 0; instance < instancecount; instance++) {
-            if (indices == 0) {
-                Buffer &indices_buf = buffers[current_buffer[GL_ELEMENT_ARRAY_BUFFER]];
-                //printf("current_vertex_array %d\n", current_vertex_array);
-                //printf("indices size: %d\n", indices_buf.size);
-                VertexArray &v = vertex_arrays[current_vertex_array];
-                for (int i = 0; i < MAX_ATTRS; i++) {
-                        if (v.attribs[i].enabled) {
-                                VertexAttrib &attr = v.attribs[i];
-                                VertexArray &v = vertex_arrays[attr.vertex_array];
-                                Buffer &vertex_buf = buffers[attr.vertex_buffer];
-                                attr.buf = vertex_buf.buf;
-                                attr.buf_size = vertex_buf.size;
-                                //printf("%d %x %d %d %d %d\n", i, attr.type, attr.size, attr.stride, attr.offset, attr.divisor);
-                        }
-                }
                 if (type == GL_UNSIGNED_SHORT) {
                         assert(indices_buf.size == count * 2);
                         unsigned short *indices = (unsigned short*)indices_buf.buf;
@@ -2568,7 +2594,6 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
                 } else {
                         assert(0);
                 }
-            }
         }
 
         auto qid = current_query.find(GL_SAMPLES_PASSED);
