@@ -8,7 +8,6 @@
 
 #include <map>
 #include <string>
-#include "minpng.h"
 #include "glsl.h"
 
 using namespace std;
@@ -2433,90 +2432,6 @@ void draw_quad(int nump, Texture& colortex, Texture& depthtex) {
         }
 }
 
-#if 0
-struct tgaheader
-{
-    uint8_t  identsize;
-    uint8_t  cmaptype;
-    uint8_t  imagetype;
-    uint8_t  cmaporigin[2];
-    uint8_t  cmapsize[2];
-    uint8_t  cmapentrysize;
-    uint8_t  xorigin[2];
-    uint8_t  yorigin[2];
-    uint8_t  width[2];
-    uint8_t  height[2];
-    uint8_t  pixelsize;
-    uint8_t  descbyte;
-};
-
-void writetga(const char *name, int width, int height, uint8_t *data)
-{
-    FILE *f = fopen(name, "wb");
-    if(!f) return;
-
-    bool compress = true;
-    tgaheader hdr;
-    memset(&hdr, 0, sizeof(hdr));
-    hdr.pixelsize = 32;
-    hdr.width[0] = width&0xFF;
-    hdr.width[1] = (width>>8)&0xFF;
-    hdr.height[0] = height&0xFF;
-    hdr.height[1] = (height>>8)&0xFF;
-    hdr.imagetype = compress ? 10 : 2;
-    fwrite(&hdr, 1, sizeof(hdr), f);
-
-    uint8_t buf[128*4];
-    for(int i = 0; i < height; i++)
-    {
-        uint8_t *src = data + (height-i-1)*width*4;
-        for(int remaining = width; remaining > 0;)
-        {
-            int raw = 1;
-            if(compress)
-            {
-                int run = 1;
-                for(uint8_t *scan = src; run < std::min(remaining, 128); run++)
-                {
-                    scan += 4;
-                    if(src[0]!=scan[0] || src[1]!=scan[1] || src[2]!=scan[2]) break;
-                }
-                if(run > 1)
-                {
-                    fputc(0x80 | (run-1), f);
-                    fputc(src[2], f); fputc(src[1], f); fputc(src[0], f);
-                    fputc(src[3], f);
-                    src += run*4;
-                    remaining -= run;
-                    if(remaining <= 0) break;
-                }
-                for(uint8_t *scan = src; raw < std::min(remaining, 128); raw++)
-                {
-                    scan += 4;
-                    if(src[0]==scan[0] && src[1]==scan[1] && src[2]==scan[2] && src[3]==scan[3]) break;
-                }
-                fputc(raw - 1, f);
-            }
-            else raw = std::min(remaining, 128);
-            uint8_t *dst = buf;
-            for(int j = 0; j < raw; j++)
-            {
-                dst[0] = src[2];
-                dst[1] = src[1];
-                dst[2] = src[0];
-                dst[3] = src[3];
-                dst += 4;
-                src += 4;
-            }
-            fwrite(buf, 1, raw*4, f);
-            remaining -= raw;
-        }
-    }
-
-    fclose(f);
-}
-#endif
-
 void VertexArray::validate() {
     for (int i = 0; i < MAX_ATTRS; i++) {
         if (attribs[i].enabled) {
@@ -2607,10 +2522,6 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
 }
 
 void Finish() {
-        Framebuffer& fb = *get_framebuffer(GL_DRAW_FRAMEBUFFER);
-        Texture& t = textures[fb.color_attachment];
-        //writetga("out.tga", t.width, t.height, t.buf);
-        write_png("out.png", t.buf, t.width, t.height);
 }
 
 } // extern "C"
