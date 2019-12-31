@@ -147,7 +147,7 @@ impl WindowWrapper {
     fn upload_sw_to_gl(&self, gl: &dyn gl::Gl) {
         let tex = gl.gen_textures(1)[0];
         gl.bind_texture(gl::TEXTURE_2D, tex);
-        let (data_ptr, width, height) = gl::SwGlFns::get_color_buffer();
+        let (data_ptr, width, height) = swgl::SwGlFns::get_color_buffer();
         let buffer = unsafe { slice::from_raw_parts(data_ptr as *const u8, width as usize * height as usize * 4) };
         gl.tex_image_2d(gl::TEXTURE_2D, 0, gl::RGBA8 as gl::GLint, width, height, 0, gl::RGBA, gl::UNSIGNED_BYTE, Some(buffer));
         let fb = gl.gen_framebuffers(1)[0];
@@ -243,7 +243,7 @@ impl WindowWrapper {
         match *self {
             WindowWrapper::WindowedContext(_, _, ref win_gl) => {
                 if win_gl.is_some() {
-                    gl::SwGlFns::update(dim.width, dim.height);
+                    swgl::SwGlFns::update(dim.width, dim.height);
                 }
             }
             _ => {}
@@ -316,7 +316,7 @@ fn make_window(
                     glutin::Api::WebGl => unimplemented!(),
                 };
 
-                let swgl = gl::SwGlFns::load();
+                let swgl = swgl::SwGlFns::load();
                 WindowWrapper::WindowedContext(windowed_context, swgl, Some(gl))
             }
         }

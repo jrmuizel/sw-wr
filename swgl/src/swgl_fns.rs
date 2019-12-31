@@ -1,12 +1,14 @@
-// Copyright 2014 The Servo Project Developers. See the COPYRIGHT
-// file at the top-level directory of this distribution.
-//
-// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
-// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
-// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
-// option. This file may not be copied, modified, or distributed
-// except according to those terms.
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 #[allow(warnings)]
+
+use std::ffi::{CStr, CString};
+use std::os::raw::{c_char, c_int, c_void};
+use std::ptr;
+use std::rc::Rc;
+use std::str;
+use gleam::gl::*;
 
 pub struct SwGlFns {
 }
@@ -267,6 +269,32 @@ impl SwGlFns {
             (data_ptr, width, height)
         }
     }
+}
+
+fn calculate_length(width: GLsizei, height: GLsizei, format: GLenum, pixel_type: GLenum) -> usize {
+    let colors = match format {
+        RED => 1,
+        RGB => 3,
+        BGR => 3,
+
+        RGBA => 4,
+        BGRA => 4,
+
+        ALPHA => 1,
+        R16 => 1,
+        LUMINANCE => 1,
+        DEPTH_COMPONENT => 1,
+        _ => panic!("unsupported format for read_pixels: {:?}", format),
+    };
+    let depth = match pixel_type {
+        UNSIGNED_BYTE => 1,
+        UNSIGNED_SHORT => 2,
+        SHORT => 2,
+        FLOAT => 4,
+        _ => panic!("unsupported pixel_type for read_pixels: {:?}", pixel_type),
+    };
+
+    return (width * height * colors * depth) as usize;
 }
 
 impl Gl for SwGlFns {
@@ -1730,13 +1758,13 @@ impl Gl for SwGlFns {
         // gl.GetShaderPrecisionFormat is not available until OpenGL 4.1.
         // Fallback to OpenGL standard precissions that most desktop hardware support.
         match precision_type {
-            ffi::LOW_FLOAT | ffi::MEDIUM_FLOAT | ffi::HIGH_FLOAT => {
+            LOW_FLOAT | MEDIUM_FLOAT | HIGH_FLOAT => {
                 // Fallback to IEEE 754 single precision
                 // Range: from -2^127 to 2^127
                 // Significand precision: 23 bits
                 (127, 127, 23)
             }
-            ffi::LOW_INT | ffi::MEDIUM_INT | ffi::HIGH_INT => {
+            LOW_INT | MEDIUM_INT | HIGH_INT => {
                 // Fallback to single precision integer
                 // Range: from -2^24 to 2^24
                 // Precision: For integer formats this value is always 0
