@@ -238,6 +238,14 @@ extern "C" {
     fn GetError() -> GLenum;
     fn Update(width: i32, height: i32);
     fn GetColorBuffer(width: *mut i32, height: *mut i32) -> *mut c_void;
+    fn DeleteTexture(n: GLuint);
+    fn DeleteRenderbuffer(n: GLuint);
+    fn DeleteFramebuffer(n: GLuint);
+    fn DeleteBuffer(n: GLuint);
+    fn DeleteVertexArray(n: GLuint);
+    fn DeleteQuery(n: GLuint);
+    fn DeleteShader(shader: GLuint);
+    fn DeleteProgram(program: GLuint);
 }
 
 impl SwGlFns {
@@ -525,31 +533,49 @@ impl Gl for SwGlFns {
 
     fn delete_queries(&self, queries: &[GLuint]) {
         unsafe {
+            for q in queries {
+                DeleteQuery(*q);
+            }
         }
     }
 
     fn delete_vertex_arrays(&self, vertex_arrays: &[GLuint]) {
         unsafe {
+            for v in vertex_arrays {
+                DeleteVertexArray(*v);
+            }
         }
     }
 
     fn delete_buffers(&self, buffers: &[GLuint]) {
         unsafe {
+            for b in buffers {
+                DeleteBuffer(*b);
+            }
         }
     }
 
     fn delete_renderbuffers(&self, renderbuffers: &[GLuint]) {
         unsafe {
+            for r in renderbuffers {
+                DeleteRenderbuffer(*r);
+            }
         }
     }
 
     fn delete_framebuffers(&self, framebuffers: &[GLuint]) {
         unsafe {
+            for f in framebuffers {
+                DeleteFramebuffer(*f);
+            }
         }
     }
 
     fn delete_textures(&self, textures: &[GLuint]) {
         unsafe {
+            for t in textures {
+                DeleteTexture(*t);
+            }
         }
     }
 
@@ -1737,6 +1763,7 @@ impl Gl for SwGlFns {
 
     fn delete_program(&self, program: GLuint) {
         unsafe {
+            DeleteProgram(program);
         }
     }
 
@@ -1752,6 +1779,7 @@ impl Gl for SwGlFns {
         println!("delete_shader {}", shader);
         //panic!();
         unsafe {
+            DeleteShader(shader);
         }
     }
 

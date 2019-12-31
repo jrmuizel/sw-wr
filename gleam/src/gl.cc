@@ -39,17 +39,17 @@ typedef size_t GLsizeiptr;
 typedef intptr_t GLintptr;
 
 struct VertexAttrib {
-        size_t size; // in bytes
-        GLenum type;
-        bool normalized;
-        GLsizei stride;
-        GLuint offset;
+        size_t size = 0; // in bytes
+        GLenum type = 0;
+        bool normalized = false;
+        GLsizei stride = 0;
+        GLuint offset = 0;
         bool enabled = false;
-        GLuint divisor;
-        int vertex_array;
-        int vertex_buffer;
-        char *buf; // XXX: this can easily dangle
-        size_t buf_size; // this will let us bounds check
+        GLuint divisor = 0;
+        int vertex_array = 0;
+        int vertex_buffer = 0;
+        char *buf = nullptr; // XXX: this can easily dangle
+        size_t buf_size = 0; // this will let us bounds check
 };
 #define GL_RGBA32F                        0x8814
 #define GL_RGBA8                          0x8058
@@ -114,25 +114,41 @@ struct Query {
 };
 
 struct Buffer {
-        char *buf;
-        size_t size;
+        char *buf = nullptr;
+        size_t size = 0;
+
+        void allocate(size_t new_size) {
+            cleanup();
+            size = new_size;
+            buf = (char*)malloc(size);
+        }
+
+        void cleanup() {
+            if (buf) {
+                free(buf);
+                buf = nullptr;
+                size = 0;
+            }
+        }
+
+        ~Buffer() {
+            cleanup();
+        }
 };
 
 #define GL_READ_FRAMEBUFFER               0x8CA8
 #define GL_DRAW_FRAMEBUFFER               0x8CA9
 
 struct Framebuffer {
-        GLint color_attachment;
-        GLint layer;
-        GLint depth_attachment;
-
-        Framebuffer() : color_attachment(0), layer(0), depth_attachment(0) {}
+        GLint color_attachment = 0;
+        GLint layer = 0;
+        GLint depth_attachment = 0;
 };
 
 struct Renderbuffer {
-        GLint texture;
+        GLint texture = 0;
 
-        Renderbuffer() : texture(0) {}
+        ~Renderbuffer();
 };
 
 #define GL_NEAREST                  0x2600
@@ -191,6 +207,10 @@ struct Texture {
             buf = nullptr;
         }
     }
+
+    ~Texture() {
+        cleanup();
+    }
 };
 
 #define MAX_ATTRS 16
@@ -202,7 +222,7 @@ struct VertexArray {
 #define GL_VERTEX_SHADER                  0x8B31
 #define GL_FRAGMENT_SHADER                0x8B30
 struct Shader {
-    GLenum type;
+    GLenum type = 0;
     std::string name;
 };
 
@@ -220,6 +240,7 @@ struct Program {
     std::string fs_name;
     std::map<std::string, int> attribs;
     ProgramImpl* impl = nullptr;
+    bool deleted = false;
 };
 
 struct ShaderImpl {
@@ -633,9 +654,16 @@ void load_flat_attrib(T& attrib, VertexAttrib &va, unsigned short *indices, int 
 extern "C" {
 
 void UseProgram(GLuint program) {
+    if (current_program && program != current_program) {
+        auto i = programs.find(current_program);
+        if (i != programs.end() && i->second.deleted) {
+            programs.erase(i);
+        }
+    }
     current_program = program;
-    if (!program)
+    if (!program) {
         return;
+    }
     Program &p = programs[program];
     assert(p.impl);
     p.impl->init_shaders(&vertex_shader, &fragment_shader);
@@ -862,6 +890,22 @@ void GenQueries(GLsizei n, GLuint *result) {
         }
 }
 
+void DeleteQuery(GLuint n) {
+    if (!n) {
+        return;
+    }
+    auto i = queries.find(n);
+    if (i == queries.end()) {
+        return;
+    }
+    queries.erase(i);
+    for (auto& b : current_query) {
+        if (b.second == n) {
+            b.second = 0;
+        }
+    }
+}
+
 void GenBuffers(int n, int *result) {
         for (int i = 0; i < n; i++) {
                 Buffer b;
@@ -870,12 +914,42 @@ void GenBuffers(int n, int *result) {
         }
 }
 
+void DeleteBuffer(GLuint n) {
+    if (!n) {
+        return;
+    }
+    auto i = buffers.find(n);
+    if (i == buffers.end()) {
+        return;
+    }
+    buffers.erase(i);
+    for (auto& b : current_buffer) {
+        if (b.second == n) {
+            b.second = 0;
+        }
+    }
+}
+
 void GenVertexArrays(int n, int *result) {
         for (int i = 0; i < n; i++) {
                 VertexArray v;
                 vertex_arrays.insert(pair<GLuint, VertexArray>(vertex_array_count, v));
                 result[i] = vertex_array_count++;
         }
+}
+
+void DeleteVertexArray(GLuint n) {
+    if (!n) {
+        return;
+    }
+    auto i = vertex_arrays.find(n);
+    if (i == vertex_arrays.end()) {
+        return;
+    }
+    vertex_arrays.erase(i);
+    if (current_vertex_array == n) {
+        current_vertex_array = 0;
+    }
 }
 
 GLuint CreateShader(GLenum type) {
@@ -902,10 +976,36 @@ void AttachShader(GLuint program, GLuint shader) {
     }
 }
 
+void DeleteShader(GLuint shader) {
+    if (!shader) {
+        return;
+    }
+    auto i = shaders.find(shader);
+    if (i == shaders.end()) {
+        return;
+    }
+    shaders.erase(i);
+}
+
 GLuint CreateProgram() {
         Program p;
         programs.insert(pair<GLuint, Program>(program_count, p));
         return program_count++;
+}
+
+void DeleteProgram(GLuint program) {
+    if (!program) {
+        return;
+    }
+    auto i = programs.find(program);
+    if (i == programs.end()) {
+        return;
+    }
+    if (current_program == program) {
+        i->second.deleted = true;
+    } else {
+        programs.erase(i);
+    }
 }
 
 void LinkProgram(GLuint program) {
@@ -1279,6 +1379,22 @@ void GenTextures(int n, int *result) {
         }
 }
 
+void DeleteTexture(GLuint n) {
+    if (!n) {
+        return;
+    }
+    auto i = textures.find(n);
+    if (i == textures.end()) {
+        return;
+    }
+    textures.erase(i);
+    for (auto& b : current_texture) {
+        if (b.second == n) {
+            b.second = 0;
+        }
+    }
+}
+
 void GenRenderbuffers(int n, int *result) {
         for (int i = 0; i < n; i++) {
                 Renderbuffer r;
@@ -1287,6 +1403,35 @@ void GenRenderbuffers(int n, int *result) {
         }
 }
 
+Renderbuffer::~Renderbuffer() {
+    for (auto& i : framebuffers) {
+        auto& fb = i.second;
+        if (fb.color_attachment == texture) {
+            fb.color_attachment = 0;
+            fb.layer = 0;
+        }
+        if (fb.depth_attachment == texture) {
+            fb.depth_attachment = 0;
+        }
+    }
+    DeleteTexture(texture);
+}
+
+void DeleteRenderbuffer(GLuint n) {
+    if (!n) {
+        return;
+    }
+    auto i = renderbuffers.find(n);
+    if (i == renderbuffers.end()) {
+        return;
+    }
+    renderbuffers.erase(i);
+    for (auto& b : current_renderbuffer) {
+        if (b.second == n) {
+            b.second = 0;
+        }
+    }
+}
 
 void GenFramebuffers(int n, int *result) {
         for (int i = 0; i < n; i++) {
@@ -1294,6 +1439,22 @@ void GenFramebuffers(int n, int *result) {
                 framebuffers.insert(pair<GLuint, Framebuffer>(framebuffer_count, f));
                 result[i] = framebuffer_count++;
         }
+}
+
+void DeleteFramebuffer(GLuint n) {
+    if (!n) {
+        return;
+    }
+    auto i = framebuffers.find(n);
+    if (i == framebuffers.end()) {
+        return;
+    }
+    framebuffers.erase(i);
+    for (auto& b : current_framebuffer) {
+        if (b.second == n) {
+            b.second = 0;
+        }
+    }
 }
 
 void RenderbufferStorage(
@@ -1383,10 +1544,8 @@ void BufferData(GLenum target,
         GLenum usage)
 {
     Buffer &b = buffers[current_buffer[target]];
-    //XXX: leak the stuff
-    b.buf = (char*)malloc(size);
+    b.allocate(size);
     memcpy(b.buf, data, size);
-    b.size = size;
 }
 
 void BufferSubData(GLenum target,
