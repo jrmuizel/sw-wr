@@ -1,0 +1,9 @@
+#set -e
+rm -f all.h
+COUNT=0
+for i in *.vert.pp; do
+f=`basename $i .vert.pp`
+cargo run --manifest-path=../../glsl-to-cxx/Cargo.toml --release $f.vert.pp $f.frag.pp > $f.h
+COUNT=$((COUNT+1))
+echo -e "namespace k$COUNT {\r#include \"$f.h\"\n}" >> all.h
+done
