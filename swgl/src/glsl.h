@@ -1600,10 +1600,9 @@ struct sampler2DArray_impl {
 
 typedef sampler2DArray_impl *sampler2DArray;
 
-struct sampler2DArrayRGBA8_impl : sampler2DArray_impl {};
-typedef sampler2DArrayRGBA8_impl *sampler2DArrayRGBA8;
-struct sampler2DArrayRGBA32F_impl : sampler2DArray_impl {};
-typedef sampler2DArrayRGBA32F_impl *sampler2DArrayRGBA32F;
+typedef struct sampler2DArrayR8_impl : sampler2DArray_impl {} *sampler2DArrayR8;
+typedef struct sampler2DArrayRGBA8_impl : sampler2DArray_impl {} *sampler2DArrayRGBA8;
+typedef struct sampler2DArrayRGBA32F_impl : sampler2DArray_impl {} *sampler2DArrayRGBA32F;
 
 struct sampler2D_impl {
         uint32_t *buf;
@@ -1616,10 +1615,9 @@ struct sampler2D_impl {
 
 typedef sampler2D_impl *sampler2D;
 
-struct sampler2DRGBA8_impl : sampler2D_impl {};
-typedef sampler2DRGBA8_impl *sampler2DRGBA8;
-struct sampler2DRGBA32F_impl : sampler2D_impl {};
-typedef sampler2DRGBA32F_impl *sampler2DRGBA32F;
+typedef struct sampler2DR8_impl : sampler2D_impl {} *sampler2DR8;
+typedef struct sampler2DRGBA8_impl : sampler2D_impl {} *sampler2DRGBA8;
+typedef struct sampler2DRGBA32F_impl : sampler2D_impl {} *sampler2DRGBA32F;
 
 struct isampler2D_impl {
         uint32_t *buf;
@@ -2055,6 +2053,12 @@ vec4 texelFetch(sampler2DRGBA8 sampler, ivec2 P, int lod) {
         return texelFetchRGBA8(sampler, P, lod);
 }
 
+vec4 texelFetch(sampler2DR8 sampler, ivec2 P, int lod) {
+        P = clamp2D(P, sampler);
+        assert(sampler->format == TextureFormat::R8);
+        return texelFetchR8(sampler, P, lod);
+}
+
 vec4_scalar texelFetch(sampler2D sampler, ivec2_scalar P, int lod) {
         P = clamp2D(P, sampler);
         if (sampler->format == TextureFormat::RGBA32F) {
@@ -2075,6 +2079,12 @@ vec4_scalar texelFetch(sampler2DRGBA8 sampler, ivec2_scalar P, int lod) {
         P = clamp2D(P, sampler);
         assert(sampler->format == TextureFormat::RGBA8);
         return pixel_to_vec4(sampler->buf[P.x + P.y*sampler->stride]);
+}
+
+vec4_scalar texelFetch(sampler2DR8 sampler, ivec2_scalar P, int lod) {
+        P = clamp2D(P, sampler);
+        assert(sampler->format == TextureFormat::R8);
+        return vec4_scalar{to_float(((uint8_t*)sampler->buf)[P.x + P.y*sampler->stride]), 0.0f, 0.0f, 0.0f};
 }
 
 vec4 texelFetch(sampler2DArray sampler, ivec3 P, int lod) {
@@ -2099,6 +2109,12 @@ vec4 texelFetch(sampler2DArrayRGBA8 sampler, ivec3 P, int lod) {
         P = clamp2DArray(P, sampler);
         assert(sampler->format == TextureFormat::RGBA8);
         return texelFetchRGBA8(sampler, P, lod);
+}
+
+vec4 texelFetch(sampler2DArrayR8 sampler, ivec3 P, int lod) {
+        P = clamp2DArray(P, sampler);
+        assert(sampler->format == TextureFormat::R8);
+        return texelFetchR8(sampler, P, lod);
 }
 
 ivec4 texelFetch(isampler2D sampler, ivec2 P, int lod) {
@@ -2202,6 +2218,53 @@ vec4 textureLinearRGBA8(S sampler, vec2 P, I32 zoffset = 0) {
 }
 
 template<typename S>
+vec4 textureLinearR8(S sampler, vec2 P, I32 zoffset = 0) {
+    assert(sampler->format == TextureFormat::RGBA8);
+    P.x *= sampler->width * 256.0f;
+    P.y *= sampler->height * 256.0f;
+    P -= 0.5f * 256.0f;
+    ivec2 i(P);
+    ivec2 frac = i & (I32)0xFF;
+    i >>= 8;
+
+    __m128i row0 = _mm_min_epi16(_mm_max_epi16(i.y, _mm_setzero_si128()), _mm_set1_epi32(sampler->height - 1));
+    row0 = _mm_madd_epi16(row0, _mm_set1_epi32(sampler->stride));
+    row0 = _mm_add_epi32(row0, _mm_min_epi16(_mm_max_epi16(i.x, _mm_setzero_si128()), _mm_set1_epi32(sampler->width - 1)));
+    row0 = _mm_add_epi32(row0, zoffset);
+
+    __m128i yinside = _mm_andnot_si128(_mm_cmplt_epi32(i.y, _mm_setzero_si128()),
+                                       _mm_cmplt_epi32(i.y, _mm_set1_epi32(sampler->height - 1)));
+    __m128i row1 = _mm_add_epi32(row0, _mm_and_si128(yinside, _mm_set1_epi32(sampler->stride)));
+
+    __m128i xinside = _mm_andnot_si128(_mm_cmplt_epi32(i.x, _mm_setzero_si128()),
+                                       _mm_cmplt_epi32(i.x, _mm_set1_epi32(sampler->width - 1)));
+    __m128i fracx = _mm_and_si128(xinside, frac.x);
+    fracx = _mm_or_si128(_mm_slli_epi32(fracx, 16), _mm_sub_epi32(_mm_set1_epi32(256), fracx));
+
+    __m128i fracy = _mm_slli_epi16(frac.y, 4);
+    fracy = _mm_shufflelo_epi16(fracy, _MM_SHUFFLE(2, 2, 0, 0));
+    fracy = _mm_shufflehi_epi16(fracy, _MM_SHUFFLE(2, 2, 0, 0));
+
+    __m128i cc0 = _mm_unpacklo_epi16(_mm_setr_epi16(
+        *(uint16_t*)((uint8_t*)sampler->buf + _mm_cvtsi128_si32(_mm_shuffle_epi32(row0, _MM_SHUFFLE(0, 0, 0, 0)))),
+        *(uint16_t*)((uint8_t*)sampler->buf + _mm_cvtsi128_si32(_mm_shuffle_epi32(row0, _MM_SHUFFLE(1, 1, 1, 1)))),
+        *(uint16_t*)((uint8_t*)sampler->buf + _mm_cvtsi128_si32(_mm_shuffle_epi32(row0, _MM_SHUFFLE(2, 2, 2, 2)))),
+        *(uint16_t*)((uint8_t*)sampler->buf + _mm_cvtsi128_si32(_mm_shuffle_epi32(row0, _MM_SHUFFLE(3, 3, 3, 3)))),
+        0, 0, 0, 0), _mm_setzero_si128());
+    __m128i cc1 = _mm_unpacklo_epi16(_mm_setr_epi16(
+        *(uint16_t*)((uint8_t*)sampler->buf + _mm_cvtsi128_si32(_mm_shuffle_epi32(row1, _MM_SHUFFLE(0, 0, 0, 0)))),
+        *(uint16_t*)((uint8_t*)sampler->buf + _mm_cvtsi128_si32(_mm_shuffle_epi32(row1, _MM_SHUFFLE(1, 1, 1, 1)))),
+        *(uint16_t*)((uint8_t*)sampler->buf + _mm_cvtsi128_si32(_mm_shuffle_epi32(row1, _MM_SHUFFLE(2, 2, 2, 2)))),
+        *(uint16_t*)((uint8_t*)sampler->buf + _mm_cvtsi128_si32(_mm_shuffle_epi32(row1, _MM_SHUFFLE(3, 3, 3, 3)))),
+        0, 0, 0, 0), _mm_setzero_si128());
+    __m128i cc = _mm_add_epi16(cc0,
+                               _mm_mulhi_epi16(_mm_slli_epi16(_mm_sub_epi16(cc1, cc0), 4),
+                                               fracy));
+    __m128 r = _mm_cvtepi32_ps(_mm_madd_epi16(cc, fracx));
+    return vec4((Float)r * (1.0f / 0xFF00), 0.0f, 0.0f, 0.0f);
+}
+
+template<typename S>
 vec4 textureLinearRGBA32F(S sampler, vec2 P, I32 zoffset = 0) {
     assert(sampler->format == TextureFormat::RGBA32F);
     P.x *= sampler->width;
@@ -2238,9 +2301,7 @@ vec4 texture(sampler2D sampler, vec2 P) {
             return textureLinearRGBA8(sampler, P);
         } else {
             assert(sampler->format == TextureFormat::R8);
-            // XXX: do LINEAR instead of NEAREST
-            ivec2 coord(round(P.x, sampler->width), round(P.y, sampler->height));
-            return texelFetch(sampler, coord, 0);
+            return textureLinearR8(sampler, P);
         }
     } else {
         ivec2 coord(round(P.x, sampler->width), round(P.y, sampler->height));
@@ -2269,9 +2330,7 @@ vec4 texture(sampler2DArray sampler, vec3 P) {
             return textureLinearRGBA8(sampler, vec2(P.x, P.y), zoffset);
         } else {
             assert(sampler->format == TextureFormat::R8);
-            // XXX: do LINEAR instead of NEAREST
-            ivec3 coord(round(P.x, sampler->width), round(P.y, sampler->height), round(P.z, 1.0f));
-            return texelFetch(sampler, coord, 0);
+            return textureLinearR8(sampler, vec2(P.x, P.y), zoffset);
         }
     } else {
         // just do nearest for now
