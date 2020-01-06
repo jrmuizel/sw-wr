@@ -137,14 +137,24 @@ impl HeadlessContext {
 
 pub enum WindowWrapper {
     WindowedContext(glutin::WindowedContext<glutin::PossiblyCurrent>, Rc<dyn gl::Gl>, Option<Rc<dyn gl::Gl>>),
-    Angle(winit::Window, angle::Context, Rc<dyn gl::Gl>),
+    Angle(winit::Window, angle::Context, Rc<dyn gl::Gl>, Option<Rc<dyn gl::Gl>>),
     Headless(HeadlessContext, Rc<dyn gl::Gl>),
 }
 
 pub struct HeadlessEventIterater;
 
 impl WindowWrapper {
-    fn upload_sw_to_gl(&self, gl: &dyn gl::Gl) {
+    fn upload_sw_to_gl(&self) {
+        let (swgl, wingl) = match *self {
+            WindowWrapper::WindowedContext(_, ref swgl, ref wingl) |
+            WindowWrapper::Angle(_, _, ref swgl, ref wingl) => (swgl, wingl),
+            WindowWrapper::Headless(_, ref swgl) => (swgl, &None)
+        };
+        swgl.finish();
+        let gl = match wingl {
+            Some(wingl) => &**wingl,
+            None => return,
+        };
         let tex = gl.gen_textures(1)[0];
         gl.bind_texture(gl::TEXTURE_2D, tex);
         let (data_ptr, width, height) = swgl::SwGlFns::get_color_buffer();
@@ -161,14 +171,10 @@ impl WindowWrapper {
 
     fn swap_buffers(&self) {
         match *self {
-            WindowWrapper::WindowedContext(ref windowed_context, ref gl, ref win_gl) => {
-                gl.finish();
-                if let Some(win_gl) = win_gl {
-                    self.upload_sw_to_gl(&**win_gl);
-                }
+            WindowWrapper::WindowedContext(ref windowed_context, _, _) => {
                 windowed_context.swap_buffers().unwrap()
             }
-            WindowWrapper::Angle(_, ref context, _) => context.swap_buffers().unwrap(),
+            WindowWrapper::Angle(_, ref context, _, _) => context.swap_buffers().unwrap(),
             WindowWrapper::Headless(_, _) => {}
         }
     }
@@ -226,7 +232,7 @@ impl WindowWrapper {
     pub fn gl(&self) -> &dyn gl::Gl {
         match *self {
             WindowWrapper::WindowedContext(_, ref gl, _) |
-            WindowWrapper::Angle(_, _, ref gl) |
+            WindowWrapper::Angle(_, _, ref gl, _) |
             WindowWrapper::Headless(_, ref gl) => &**gl,
         }
     }
@@ -234,20 +240,17 @@ impl WindowWrapper {
     pub fn clone_gl(&self) -> Rc<dyn gl::Gl> {
         match *self {
             WindowWrapper::WindowedContext(_, ref gl, _) |
-            WindowWrapper::Angle(_, _, ref gl) |
+            WindowWrapper::Angle(_, _, ref gl, _) |
             WindowWrapper::Headless(_, ref gl) => gl.clone(),
         }
     }
 
-    pub fn update(&self, dim: DeviceIntSize) {
-        match *self {
-            WindowWrapper::WindowedContext(_, _, ref win_gl) => {
-                if win_gl.is_some() {
-                    swgl::SwGlFns::update(dim.width, dim.height);
-                }
-            }
-            _ => {}
+    fn update(&self, wrench: &mut Wrench, software: bool) {
+        let dim = self.get_inner_size();
+        if software {
+            swgl::SwGlFns::update(dim.width, dim.height);
         }
+        wrench.update(dim);
     }
 }
 
@@ -258,6 +261,7 @@ fn make_window(
     events_loop: &Option<winit::EventsLoop>,
     angle: bool,
     gl_request: glutin::GlRequest,
+    software: bool,
 ) -> WindowWrapper {
     let wrapper = match *events_loop {
         Some(ref events_loop) => {
@@ -290,7 +294,8 @@ fn make_window(
                     glutin::Api::WebGl => unimplemented!(),
                 };
 
-                WindowWrapper::Angle(_window, _context, gl)
+                let (swgl, wingl) = if software { (swgl::SwGlFns::load(), Some(gl)) } else { (gl, None) };
+                WindowWrapper::Angle(_window, _context, swgl, wingl)
             } else {
                 let windowed_context = context_builder
                     .build_windowed(window_builder, events_loop)
@@ -316,22 +321,26 @@ fn make_window(
                     glutin::Api::WebGl => unimplemented!(),
                 };
 
-                let swgl = swgl::SwGlFns::load();
-                WindowWrapper::WindowedContext(windowed_context, swgl, Some(gl))
+                let (swgl, wingl) = if software { (swgl::SwGlFns::load(), Some(gl)) } else { (gl, None) };
+                WindowWrapper::WindowedContext(windowed_context, swgl, wingl)
             }
         }
         None => {
-            let gl = match gl::GlType::default() {
-                gl::GlType::Gl => unsafe {
-                    gl::GlFns::load_with(|symbol| {
-                        HeadlessContext::get_proc_address(symbol) as *const _
-                    })
-                },
-                gl::GlType::Gles => unsafe {
-                    gl::GlesFns::load_with(|symbol| {
-                        HeadlessContext::get_proc_address(symbol) as *const _
-                    })
-                },
+            let gl = if software {
+                swgl::SwGlFns::load()
+            } else {
+                match gl::GlType::default() {
+                    gl::GlType::Gl => unsafe {
+                        gl::GlFns::load_with(|symbol| {
+                            HeadlessContext::get_proc_address(symbol) as *const _
+                        })
+                    },
+                    gl::GlType::Gles => unsafe {
+                        gl::GlesFns::load_with(|symbol| {
+                            HeadlessContext::get_proc_address(symbol) as *const _
+                        })
+                    },
+                }
             };
             WindowWrapper::Headless(HeadlessContext::new(size.width, size.height), gl)
         }
@@ -550,6 +559,8 @@ fn main() {
         }
     };
 
+    let software = args.is_present("software");
+
     let mut window = make_window(
         size,
         dp_ratio,
@@ -557,10 +568,10 @@ fn main() {
         &events_loop,
         args.is_present("angle"),
         gl_request,
+        software,
     );
     let dp_ratio = dp_ratio.unwrap_or(window.hidpi_factor());
     let dim = window.get_inner_size();
-    window.update(dim);
 
     let needs_frame_notifier = ["perf", "reftest", "png", "rawtest"]
         .iter()
@@ -592,6 +603,7 @@ fn main() {
         dump_shader_source,
         notifier,
     );
+    window.update(&mut wrench, software);
 
     if let Some(window_title) = wrench.take_title() {
         if !cfg!(windows) {
@@ -610,6 +622,7 @@ fn main() {
             subargs,
             no_block,
             no_batch,
+            software,
         );
     } else if let Some(subargs) = args.subcommand_matches("png") {
         let surface = match subargs.value_of("surface") {
@@ -655,6 +668,7 @@ fn render<'a>(
     subargs: &clap::ArgMatches<'a>,
     no_block: bool,
     no_batch: bool,
+    software: bool,
 ) {
     let input_path = subargs.value_of("INPUT").map(PathBuf::from).unwrap();
 
@@ -687,9 +701,7 @@ fn render<'a>(
     let mut cpu_profile_index = 0;
     let mut cursor_position = WorldPoint::zero();
 
-    let dim = window.get_inner_size();
-    window.update(dim);
-    wrench.update(dim);
+    window.update(wrench, software);
     thing.do_frame(wrench);
 
     let mut debug_flags = DebugFlags::empty();
@@ -877,8 +889,7 @@ fn render<'a>(
             }
         }
 
-        let dim = window.get_inner_size();
-        wrench.update(dim);
+        window.update(wrench, software);
 
         if do_frame {
             let frame_num = thing.do_frame(wrench);
@@ -893,6 +904,9 @@ fn render<'a>(
             }
 
             wrench.render();
+            if software {
+                window.upload_sw_to_gl();
+            }
             window.swap_buffers();
 
             if do_loop {
