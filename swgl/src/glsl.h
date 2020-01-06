@@ -2219,7 +2219,7 @@ vec4 textureLinearRGBA8(S sampler, vec2 P, I32 zoffset = 0) {
 
 template<typename S>
 vec4 textureLinearR8(S sampler, vec2 P, I32 zoffset = 0) {
-    assert(sampler->format == TextureFormat::RGBA8);
+    assert(sampler->format == TextureFormat::R8);
     P.x *= sampler->width * 256.0f;
     P.y *= sampler->height * 256.0f;
     P -= 0.5f * 256.0f;
