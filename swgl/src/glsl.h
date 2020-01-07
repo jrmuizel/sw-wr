@@ -2309,18 +2309,11 @@ vec4 texture(sampler2D sampler, vec2 P) {
     }
 }
 
-vec4 textureLod(sampler2DArray sampler, vec3 P, Float lod) {
-        assert(0);
-        // just do nearest for now
-        return vec4();
-}
-
-
-
 vec4 texture(sampler2DArray sampler, vec3 P, Float layer) {
         assert(0);
         return vec4();
 }
+
 vec4 texture(sampler2DArray sampler, vec3 P) {
     if (sampler->filter == TextureFilter::LINEAR) {
         I32 zoffset = clampCoord(round(P.z, 1.0f), sampler->depth) * sampler->height_stride;
@@ -2337,6 +2330,11 @@ vec4 texture(sampler2DArray sampler, vec3 P) {
         ivec3 coord(round(P.x, sampler->width), round(P.y, sampler->height), round(P.z, 1.0f));
         return texelFetch(sampler, coord, 0);
     }
+}
+
+vec4 textureLod(sampler2DArray sampler, vec3 P, float lod) {
+        assert(lod == 0.0);
+        return texture(sampler, P);
 }
 
 ivec3_scalar textureSize(sampler2DArray sampler, int) {
