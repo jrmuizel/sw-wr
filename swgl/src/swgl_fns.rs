@@ -355,15 +355,16 @@ impl Gl for SwGlFns {
     fn shader_source(&self, shader: GLuint, strings: &[&[u8]]) {
         //panic!();
         println!("shader_source {}", shader);
-        for s in strings {
-            println!("{}", str::from_utf8(s).unwrap());
-        }
+        //for s in strings {
+        //    println!("{}", str::from_utf8(s).unwrap());
+        //}
         //panic!();
         for s in strings {
             let u = str::from_utf8(s).unwrap();
             const prefix: &'static str = "// shader: ";
             if let Some(start) = u.find(prefix) {
                 if let Some(end) = u[start..].find('\n') {
+                    println!("shader name: {}", u[start + prefix.len() .. start + end].trim());
                     unsafe {
                         let c_string = CString::new(u[start + prefix.len() .. start + end].trim().replace(" ", "")).unwrap();
                         ShaderSourceByName(shader, c_string.as_ptr());
