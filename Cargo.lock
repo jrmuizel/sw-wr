@@ -652,7 +652,7 @@ dependencies = [
 [[package]]
 name = "glsl-to-cxx"
 version = "0.1.0"
-source = "git+https://github.com/jrmuizel/glsl-to-cxx#2caf9b689abac46947ccb23a8a41b7cc527bdddb"
+source = "git+https://github.com/jrmuizel/glsl-to-cxx#33e77288e882d4bcdd01e7ea02c611f78e6288e0"
 dependencies = [
  "glsl 4.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]

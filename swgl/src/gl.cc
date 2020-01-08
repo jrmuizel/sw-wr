@@ -215,9 +215,10 @@ struct Texture {
     }
 };
 
-#define MAX_ATTRS 16
+#define MAX_ATTRIBS 16
+#define NULL_ATTRIB 15
 struct VertexArray {
-    VertexAttrib attribs[MAX_ATTRS];
+    VertexAttrib attribs[MAX_ATTRIBS];
 
     void validate();
 };
@@ -613,7 +614,9 @@ static inline S load_attrib_scalar(const char *src, size_t size, GLenum type, bo
 template<typename T>
 void load_attrib(T& attrib, VertexAttrib &va, unsigned short *indices, int start, int instance, int count) {
     typedef decltype(force_scalar(attrib)) scalar_type;
-    if (va.divisor == 1) {
+    if (!va.enabled) {
+        attrib = T(0);
+    } else if (va.divisor == 1) {
         char* src = (char*)va.buf + va.stride * instance + va.offset;
         assert(src + va.size <= va.buf + va.buf_size);
         attrib = T(load_attrib_scalar<scalar_type>(src, va.size, va.type, va.normalized));
@@ -631,6 +634,10 @@ void load_attrib(T& attrib, VertexAttrib &va, unsigned short *indices, int start
 
 template<typename T>
 void load_flat_attrib(T& attrib, VertexAttrib &va, unsigned short *indices, int start, int instance, int count) {
+    if (!va.enabled) {
+        attrib = T{0};
+        return;
+    }
     char* src;
     if (va.divisor == 1) {
         src = (char*)va.buf + va.stride * instance + va.offset;
@@ -1498,6 +1505,9 @@ void EnableVertexAttribArray(GLuint index) {
 void DisableVertexAttribArray(GLuint index) {
         VertexArray &v = vertex_arrays[current_vertex_array];
         VertexAttrib &va = v.attribs[index];
+        if (va.enabled) {
+            validate_vertex_array = true;
+        }
         va.enabled = false;
 }
 
@@ -2393,7 +2403,7 @@ void draw_quad(int nump, Texture& colortex, int layer, Texture& depthtex) {
 }
 
 void VertexArray::validate() {
-    for (int i = 0; i < MAX_ATTRS; i++) {
+    for (int i = 0; i < MAX_ATTRIBS; i++) {
         if (attribs[i].enabled) {
             VertexAttrib &attr = attribs[i];
             VertexArray &v = vertex_arrays[attr.vertex_array];
