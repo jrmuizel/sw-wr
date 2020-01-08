@@ -2184,7 +2184,7 @@ static int shaded_rows = 0;
 static int shaded_pixels = 0;
 
 template<typename P>
-static inline void draw_quad_spans(int nump, Point p[4], uint16_t z, Interpolants interp_outs[4], Texture& colortex, Texture& depthtex, float fx0, float fy0, float fx1, float fy1) {
+static inline void draw_quad_spans(int nump, Point p[4], uint16_t z, Interpolants interp_outs[4], Texture& colortex, int layer, Texture& depthtex, float fx0, float fy0, float fx1, float fy1) {
         Point l0, r0, l1, r1;
         int l0i, r0i, l1i, r1i;
         {
@@ -2232,7 +2232,7 @@ static inline void draw_quad_spans(int nump, Point p[4], uint16_t z, Interpolant
         Interpolants ro = interp_outs[r0i];
         Interpolants rom = (interp_outs[r1i] - ro) * (1.0f / (r1.y - r0.y));
         ro = ro + rom * (y - r0.y);
-        P *fbuf = (P*)colortex.buf + int(y) * aligned_stride(sizeof(P) * colortex.width) / sizeof(P);
+        P *fbuf = (P*)colortex.buf + (layer * colortex.height + int(y)) * aligned_stride(sizeof(P) * colortex.width) / sizeof(P);
         uint16_t *fdepth = (uint16_t*)depthtex.buf + int(y) * aligned_stride(sizeof(uint16_t) * depthtex.width) / sizeof(uint16_t);
         while (y < fy1) {
             if (y > l1.y) {
@@ -2335,7 +2335,7 @@ static inline void draw_quad_spans(int nump, Point p[4], uint16_t z, Interpolant
         }
 }
 
-void draw_quad(int nump, Texture& colortex, Texture& depthtex) {
+void draw_quad(int nump, Texture& colortex, int layer, Texture& depthtex) {
         Flats flat_outs;
         Interpolants interp_outs[4] = { 0 };
         vertex_shader.run((char *)flat_outs, (char *)interp_outs, sizeof(Interpolants));
@@ -2384,9 +2384,9 @@ void draw_quad(int nump, Texture& colortex, Texture& depthtex) {
         fragment_shader.init_primitive(flat_outs);
 
         if (colortex.internal_format == GL_RGBA8) {
-            draw_quad_spans<uint32_t>(nump, p, z, interp_outs, colortex, depthtex, fx0, fy0, fx1, fy1);
+            draw_quad_spans<uint32_t>(nump, p, z, interp_outs, colortex, layer, depthtex, fx0, fy0, fx1, fy1);
         } else if (colortex.internal_format == GL_R8) {
-            draw_quad_spans<uint8_t>(nump, p, z, interp_outs, colortex, depthtex, fx0, fy0, fx1, fy1);
+            draw_quad_spans<uint8_t>(nump, p, z, interp_outs, colortex, layer, depthtex, fx0, fy0, fx1, fy1);
         } else {
             assert(false);
         }
@@ -2451,18 +2451,18 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
                         if (mode == GL_QUADS) for (int i = 0; i + 4 <= count; i += 4) {
                                 vertex_shader.load_attribs(p.impl, v.attribs, indices, i, instance, 4);
                                 //printf("native quad %d %d %d %d\n", indices[i], indices[i+1], indices[i+2], indices[i+3]);
-                                draw_quad(4, colortex, depthtex);
+                                draw_quad(4, colortex, fb.layer, depthtex);
                         } else for (int i = 0; i + 3 <= count; i += 3) {
                                 if (i + 6 <= count && indices[i+3] == indices[i+2] && indices[i+4] == indices[i+1]) {
                                     unsigned short quad_indices[4] = { indices[i], indices[i+1], indices[i+5], indices[i+2] };
                                     vertex_shader.load_attribs(p.impl, v.attribs, quad_indices, 0, instance, 4);
                                     //printf("emulate quad %d %d %d %d\n", indices[i], indices[i+1], indices[i+5], indices[i+2]);
-                                    draw_quad(4, colortex, depthtex);
+                                    draw_quad(4, colortex, fb.layer, depthtex);
                                     i += 3;
                                 } else {
                                     vertex_shader.load_attribs(p.impl, v.attribs, indices, i, instance, 3);
                                     //printf("triangle %d %d %d %d\n", indices[i], indices[i+1], indices[i+2]);
-                                    draw_quad(3, colortex, depthtex);
+                                    draw_quad(3, colortex, fb.layer, depthtex);
                                 }
                          }
 
