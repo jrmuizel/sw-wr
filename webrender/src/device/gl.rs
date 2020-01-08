@@ -272,13 +272,13 @@ fn build_shader_prefix_string<F: FnMut(&str)>(
 
     let mut features_key = String::new();
     for feat in features.lines() {
-        const prefix: &'static str = "#define WR_FEATURE_";
-        if let Some(i) = feat.find(prefix) {
-            if i + prefix.len() < feat.len() {
+        const PREFIX: &'static str = "#define WR_FEATURE_";
+        if let Some(i) = feat.find(PREFIX) {
+            if i + PREFIX.len() < feat.len() {
                 if !features_key.is_empty() {
                     features_key.push_str(".");
                 }
-                features_key.push_str(&feat[i + prefix.len() ..]);
+                features_key.push_str(&feat[i + PREFIX.len() ..]);
             }
         }
     }
