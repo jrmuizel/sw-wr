@@ -186,7 +186,6 @@ glsl::TextureFilter gl_filter_to_texture_filter(int type) {
 #define GL_TEXTURE_2D_ARRAY         0x8C1A
 
 struct Texture {
-    GLenum target = 0;
     int levels = 0;
     GLenum internal_format = 0;
     int width = 0;
