@@ -194,6 +194,7 @@ struct Texture {
     char *buf = nullptr;
     GLenum min_filter = GL_NEAREST;
     GLenum mag_filter = GL_LINEAR;
+    bool swizzle_bgra = false;
 
     void allocate() {
         if (!buf) {
@@ -515,6 +516,7 @@ S *lookup_sampler(S *s, int texture) {
             s->buf = nullptr;
             s->format = TextureFormat::RGBA8;
             s->filter = TextureFilter::NEAREST;
+            s->swizzle_bgra = false;
         } else {
             Texture &t = textures[tid];
             s->width = t.width;
@@ -525,6 +527,7 @@ S *lookup_sampler(S *s, int texture) {
             s->buf = (uint32_t*)t.buf; //XXX: wrong
             s->format = gl_format_to_texture_format(t.internal_format);
             s->filter = gl_filter_to_texture_filter(t.mag_filter);
+            s->swizzle_bgra = t.swizzle_bgra;
         }
         return s;
 }
@@ -563,6 +566,7 @@ S *lookup_sampler_array(S *s, int texture) {
             s->buf = nullptr;
             s->format = TextureFormat::RGBA8;
             s->filter = TextureFilter::NEAREST;
+            s->swizzle_bgra = false;
         } else {
             Texture &t = textures[tid];
             s->width = t.width;
@@ -575,6 +579,7 @@ S *lookup_sampler_array(S *s, int texture) {
             s->buf = (uint32_t*)t.buf; //XXX: wrong
             s->format = gl_format_to_texture_format(t.internal_format);
             s->filter = gl_filter_to_texture_filter(t.mag_filter);
+            s->swizzle_bgra = t.swizzle_bgra;
         }
         return s;
 }
@@ -1346,13 +1351,22 @@ void TexParameteri(GLenum target, GLenum pname, GLint param) {
             t.mag_filter = param;
             break;
         case GL_TEXTURE_SWIZZLE_R:
-            assert(param == (t.internal_format == GL_RGBA8 ? GL_BLUE : GL_RED));
+            if (t.internal_format == GL_RGBA8) {
+                assert(param == GL_BLUE || param == GL_RED);
+                t.swizzle_bgra = (param == GL_BLUE);
+            } else {
+                assert(param == GL_RED);
+            }
             break;
         case GL_TEXTURE_SWIZZLE_G:
             assert(param == GL_GREEN);
             break;
         case GL_TEXTURE_SWIZZLE_B:
-            assert(param == (t.internal_format == GL_RGBA8 ? GL_RED : GL_BLUE));
+            if (t.internal_format == GL_RGBA8) {
+                assert(param == GL_BLUE || param == GL_RED);
+            } else {
+                assert(param == GL_BLUE);
+            }
             break;
         case GL_TEXTURE_SWIZZLE_A:
             assert(param == GL_ALPHA);

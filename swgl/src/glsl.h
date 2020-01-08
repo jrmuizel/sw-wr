@@ -1595,6 +1595,7 @@ struct sampler2DArray_impl {
         uint32_t depth;
         TextureFormat format;
         TextureFilter filter;
+        bool swizzle_bgra;
 };
 
 
@@ -1611,6 +1612,7 @@ struct sampler2D_impl {
         uint32_t width;
         TextureFormat format;
         TextureFilter filter;
+        bool swizzle_bgra;
 };
 
 typedef sampler2D_impl *sampler2D;
@@ -1939,13 +1941,21 @@ float to_float(uint32_t x) {
         return x * (1.f/255.f);
 }
 
-vec4 pixel_to_vec4(int a, int b, int c, int d) {
+vec4 pixel_to_vec4(bool bgra, int a, int b, int c, int d) {
     I32 pixels = { a, b, c, d };
-    return vec4(
-        cast((pixels >> 16) & 0xFF),
-        cast((pixels >> 8) & 0xFF),
-        cast(pixels & 0xFF),
-        cast(pixels >> 24)) * (1.0f / 255.0f);
+    if (bgra) {
+        return vec4(
+            cast((pixels >> 16) & 0xFF),
+            cast((pixels >> 8) & 0xFF),
+            cast(pixels & 0xFF),
+            cast(pixels >> 24)) * (1.0f / 255.0f);
+    } else {
+        return vec4(
+            cast(pixels & 0xFF),
+            cast((pixels >> 8) & 0xFF),
+            cast((pixels >> 16) & 0xFF),
+            cast(pixels >> 24)) * (1.0f / 255.0f);
+    }
 }
 
 vec4 pixel_float_to_vec4(Float a, Float b, Float c, Float d) {
@@ -1963,16 +1973,24 @@ ivec4 pixel_int_to_ivec4(I32 a, I32 b, I32 c, I32 d) {
 }
 
 
-vec4_scalar pixel_to_vec4(uint32_t p) {
-    return vec4_scalar{to_float((p >> 16) & 0xFF),
-                       to_float((p >> 8) & 0xFF),
-                       to_float((p >> 0) & 0xFF),
-                       to_float((p >> 24) & 0xFF)};
+vec4_scalar pixel_to_vec4(bool bgra, uint32_t p) {
+    if (bgra) {
+        return vec4_scalar{to_float((p >> 16) & 0xFF),
+                           to_float((p >> 8) & 0xFF),
+                           to_float((p >> 0) & 0xFF),
+                           to_float((p >> 24) & 0xFF)};
+    } else {
+        return vec4_scalar{to_float((p >> 0) & 0xFF),
+                           to_float((p >> 8) & 0xFF),
+                           to_float((p >> 16) & 0xFF),
+                           to_float((p >> 24) & 0xFF)};
+    }
 }
 
 vec4 texelFetchRGBA8(sampler2D sampler, ivec2 P, int lod) {
         I32 offset = P.x + P.y*sampler->stride;
         return pixel_to_vec4(
+                      sampler->swizzle_bgra,
                       sampler->buf[offset.x],
                       sampler->buf[offset.y],
                       sampler->buf[offset.z],
@@ -2002,6 +2020,7 @@ vec4 texelFetchR8(sampler2DArray sampler, ivec3 P, int lod) {
 vec4 texelFetchRGBA8(sampler2DArray sampler, ivec3 P, int lod) {
         I32 offset = P.x + P.y*sampler->stride + P.z*sampler->height_stride;
         return pixel_to_vec4(
+                      sampler->swizzle_bgra,
                       sampler->buf[offset.x],
                       sampler->buf[offset.y],
                       sampler->buf[offset.z],
@@ -2065,7 +2084,7 @@ vec4_scalar texelFetch(sampler2D sampler, ivec2_scalar P, int lod) {
             return *(vec4_scalar*)&sampler->buf[P.x*4 + P.y*sampler->stride];
         } else {
             assert(sampler->format == TextureFormat::RGBA8);
-            return pixel_to_vec4(sampler->buf[P.x + P.y*sampler->stride]);
+            return pixel_to_vec4(sampler->swizzle_bgra, sampler->buf[P.x + P.y*sampler->stride]);
         }
 }
 
@@ -2078,7 +2097,7 @@ vec4_scalar texelFetch(sampler2DRGBA32F sampler, ivec2_scalar P, int lod) {
 vec4_scalar texelFetch(sampler2DRGBA8 sampler, ivec2_scalar P, int lod) {
         P = clamp2D(P, sampler);
         assert(sampler->format == TextureFormat::RGBA8);
-        return pixel_to_vec4(sampler->buf[P.x + P.y*sampler->stride]);
+        return pixel_to_vec4(sampler->swizzle_bgra, sampler->buf[P.x + P.y*sampler->stride]);
 }
 
 vec4_scalar texelFetch(sampler2DR8 sampler, ivec2_scalar P, int lod) {
@@ -2208,7 +2227,7 @@ vec4 textureLinearRGBA8(S sampler, vec2 P, I32 zoffset = 0) {
     #undef FILTER_LANE
 
     _MM_TRANSPOSE4_PS(r0, r1, r2, r3);
-    return vec4(r2, r1, r0, r3) * (1.0f / 0xFF00);
+    return (sampler->swizzle_bgra ? vec4(r2, r1, r0, r3) : vec4(r0, r1, r2, r3)) * (1.0f / 0xFF00);
 
 //    vec4 c00 = texelFetch(sampler, i, 0);
 //    vec4 c10 = texelFetch(sampler, i + ivec2(1, 0), 0);
