@@ -194,7 +194,7 @@ struct Texture {
     int depth = 0;
     char *buf = nullptr;
     GLenum min_filter = GL_NEAREST;
-    GLenum mag_filter = GL_NEAREST;
+    GLenum mag_filter = GL_LINEAR;
 
     void allocate() {
         if (!buf) {
@@ -500,14 +500,16 @@ GLdouble cleardepth = 1;
 #define GL_TEXTURE13                      0x84CD
 #define GL_TEXTURE14                      0x84CE
 #define GL_TEXTURE15                      0x84CF
-#define GL_TEXTURE16                      0x84D0
+#define GL_MAX_TEXTURE_UNITS              0x84E2
+#define GL_MAX_TEXTURE_IMAGE_UNITS        0x8872
 
-GLenum active_texture;
-GLuint texture_slots[16];
+int active_texture_index;
+#define active_texture(target) current_texture[(target) + (active_texture_index << 16)]
 
 template<typename S>
 S *lookup_sampler(S *s, int texture) {
-        if (!texture_slots[texture]) {
+        int tid = current_texture[GL_TEXTURE_2D + (texture << 16)];
+        if (!tid) {
             s->width = 0;
             s->height = 0;
             s->stride = 0;
@@ -515,7 +517,7 @@ S *lookup_sampler(S *s, int texture) {
             s->format = TextureFormat::RGBA8;
             s->filter = TextureFilter::NEAREST;
         } else {
-            Texture &t = textures[texture_slots[texture]];
+            Texture &t = textures[tid];
             s->width = t.width;
             s->height = t.height;
             int bpp = bytes_for_internal_format(t.internal_format);
@@ -530,14 +532,15 @@ S *lookup_sampler(S *s, int texture) {
 
 template<typename S>
 S *lookup_isampler(S *s, int texture) {
-        if (!texture_slots[texture]) {
+        int tid = current_texture[GL_TEXTURE_2D + (texture << 16)];
+        if (!tid) {
             s->width = 0;
             s->height = 0;
             s->stride = 0;
             s->buf = nullptr;
             s->format = TextureFormat::RGBA32I;
         } else {
-            Texture &t = textures[texture_slots[texture]];
+            Texture &t = textures[tid];
             s->width = t.width;
             s->height = t.height;
             int bpp = bytes_for_internal_format(t.internal_format);
@@ -551,7 +554,8 @@ S *lookup_isampler(S *s, int texture) {
 
 template<typename S>
 S *lookup_sampler_array(S *s, int texture) {
-        if (!texture_slots[texture]) {
+        int tid = current_texture[GL_TEXTURE_2D_ARRAY + (texture << 16)];
+        if (!tid) {
             s->width = 0;
             s->height = 0;
             s->depth = 0;
@@ -561,7 +565,7 @@ S *lookup_sampler_array(S *s, int texture) {
             s->format = TextureFormat::RGBA8;
             s->filter = TextureFilter::NEAREST;
         } else {
-            Texture &t = textures[texture_slots[texture]];
+            Texture &t = textures[tid];
             s->width = t.width;
             s->height = t.height;
             s->depth = t.depth;
@@ -729,6 +733,10 @@ static const char * const extensions[] = {
 void GetIntegerv(GLenum pname, GLint *params) {
     assert(params);
     switch (pname) {
+    case GL_MAX_TEXTURE_UNITS:
+    case GL_MAX_TEXTURE_IMAGE_UNITS:
+        params[0] = 16;
+        break;
     case GL_MAX_TEXTURE_SIZE:
         params[0] = 1 << 15;
         break;
@@ -884,8 +892,8 @@ void ClearDepth(GLdouble depth) {
 
 void ActiveTexture(GLenum texture) {
         assert(texture >= GL_TEXTURE0);
-        assert(texture <= GL_TEXTURE16); // this is just arbitrary
-        active_texture = texture - GL_TEXTURE0;
+        assert(texture <= GL_TEXTURE15);
+        active_texture_index = texture - GL_TEXTURE0;
 }
 
 void GenQueries(GLsizei n, GLuint *result) {
@@ -1102,8 +1110,7 @@ void BindVertexArray(GLuint vertex_array) {
 }
 
 void BindTexture(GLenum target, GLuint texture) {
-    texture_slots[active_texture] = texture;
-    current_texture[target] = texture;
+    active_texture(target) = texture;
 }
 
 void BindBuffer(GLenum target, GLuint buffer) {
@@ -1141,12 +1148,26 @@ void TexStorage3D(
         GLsizei height,
         GLsizei depth
     ) {
-    Texture &t = textures[current_texture[target]];
+    Texture &t = textures[active_texture(target)];
     t.levels = levels;
     t.internal_format = internal_format;
     t.width = width;
     t.height = height;
     t.depth = depth;
+    t.allocate();
+}
+
+static void set_tex_storage(
+        Texture &t,
+        GLint levels,
+        GLenum internal_format,
+        GLsizei width,
+        GLsizei height
+    ) {
+    t.levels = levels;
+    t.internal_format = internal_format;
+    t.width = width;
+    t.height = height;
     t.allocate();
 }
 
@@ -1157,12 +1178,8 @@ void TexStorage2D(
         GLsizei width,
         GLsizei height
     ) {
-    Texture &t = textures[current_texture[target]];
-    t.levels = levels;
-    t.internal_format = internal_format;
-    t.width = width;
-    t.height = height;
-    t.allocate();
+    Texture &t = textures[active_texture(target)];
+    set_tex_storage(t, levels, internal_format, width, height);
 }
 
 #define GL_RED                            0x1903
@@ -1216,7 +1233,7 @@ void TexSubImage2D(
         GLenum format,
         GLenum ty,
         void *data) {
-        Texture &t = textures[current_texture[target]];
+        Texture &t = textures[active_texture(target)];
         assert(xoffset + width <= t.width);
         assert(yoffset + height <= t.height);
         assert(unpack_row_length == 0 || unpack_row_length == width);
@@ -1267,7 +1284,7 @@ void TexSubImage3D(
         GLenum format,
         GLenum ty,
         void *data) {
-        Texture &t = textures[current_texture[target]];
+        Texture &t = textures[active_texture(target)];
         assert(unpack_row_length == 0 || unpack_row_length == width);
         if (format == GL_BGRA) {
             assert(ty == GL_UNSIGNED_BYTE);
@@ -1317,7 +1334,7 @@ void TexImage3D(
 }
 
 void TexParameteri(GLenum target, GLenum pname, GLint param) {
-        Texture &t = textures[current_texture[target]];
+        Texture &t = textures[active_texture(target)];
         switch (pname) {
         case GL_TEXTURE_WRAP_S: assert(param == GL_CLAMP_TO_EDGE); break;
         case GL_TEXTURE_WRAP_T: assert(param == GL_CLAMP_TO_EDGE); break;
@@ -1440,7 +1457,7 @@ void RenderbufferStorage(
     // Just refer a renderbuffer to a texture to simplify things for now...
     Renderbuffer &r = renderbuffers[current_renderbuffer[target]];
     GenTextures(1, &r.texture);
-    current_texture[target] = r.texture;
+    active_texture(target) = r.texture;
     switch (internalformat) {
         case GL_DEPTH_COMPONENT:
         case GL_DEPTH_COMPONENT24:
@@ -1674,8 +1691,7 @@ void Update(int width, int height) {
     Texture& colortex = textures[fb.color_attachment];
     if (colortex.width != width || colortex.height != height) {
         colortex.cleanup();
-        current_texture[GL_DRAW_FRAMEBUFFER] = fb.color_attachment;
-        TexStorage2D(GL_DRAW_FRAMEBUFFER, 1, GL_RGBA8, width, height);
+        set_tex_storage(colortex, 1, GL_RGBA8, width, height);
     }
     if (!fb.depth_attachment) {
         GenTextures(1, &fb.depth_attachment);
@@ -1683,8 +1699,7 @@ void Update(int width, int height) {
     Texture& depthtex = textures[fb.depth_attachment];
     if (depthtex.width != width || depthtex.height != height) {
         depthtex.cleanup();
-        current_texture[GL_DRAW_FRAMEBUFFER] = fb.depth_attachment;
-        TexStorage2D(GL_DRAW_FRAMEBUFFER, 1, GL_DEPTH_COMPONENT16, width, height);
+        set_tex_storage(depthtex, 1, GL_DEPTH_COMPONENT16, width, height);
     }
 }
 
@@ -1838,7 +1853,7 @@ void CopyTexSubImage3D(
     if (!fb) return;
     CopyImageSubData(
         fb->color_attachment, GL_TEXTURE_3D, 0, x, y, fb->layer,
-        current_texture[target], GL_TEXTURE_3D, 0, xoffset, yoffset, zoffset,
+        active_texture(target), GL_TEXTURE_3D, 0, xoffset, yoffset, zoffset,
         width, height, 1);
 }
 
@@ -1856,7 +1871,7 @@ void CopyTexSubImage2D(
     if (!fb) return;
     CopyImageSubData(
         fb->color_attachment, GL_TEXTURE_2D_ARRAY, 0, x, y, fb->layer,
-        current_texture[target], GL_TEXTURE_2D_ARRAY, 0, xoffset, yoffset, 0,
+        active_texture(target), GL_TEXTURE_2D_ARRAY, 0, xoffset, yoffset, 0,
         width, height, 1);
 }
 
