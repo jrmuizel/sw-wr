@@ -2004,7 +2004,7 @@ vec4 texelFetchR8(sampler2D sampler, ivec2 P, int lod) {
                 to_float(((uint8_t*)sampler->buf)[offset.y]),
                 to_float(((uint8_t*)sampler->buf)[offset.z]),
                 to_float(((uint8_t*)sampler->buf)[offset.w])
-        });
+        }, 0.0f, 0.0f, 1.0f);
 }
 
 vec4 texelFetchR8(sampler2DArray sampler, ivec3 P, int lod) {
@@ -2014,7 +2014,7 @@ vec4 texelFetchR8(sampler2DArray sampler, ivec3 P, int lod) {
                 to_float(((uint8_t*)sampler->buf)[offset.y]),
                 to_float(((uint8_t*)sampler->buf)[offset.z]),
                 to_float(((uint8_t*)sampler->buf)[offset.w])
-        });
+        }, 0.0f, 0.0f, 1.0f);
 }
 
 vec4 texelFetchRGBA8(sampler2DArray sampler, ivec3 P, int lod) {
@@ -2280,7 +2280,7 @@ vec4 textureLinearR8(S sampler, vec2 P, I32 zoffset = 0) {
                                _mm_mulhi_epi16(_mm_slli_epi16(_mm_sub_epi16(cc1, cc0), 4),
                                                fracy));
     __m128 r = _mm_cvtepi32_ps(_mm_madd_epi16(cc, fracx));
-    return vec4((Float)r * (1.0f / 0xFF00), 0.0f, 0.0f, 0.0f);
+    return vec4((Float)r * (1.0f / 0xFF00), 0.0f, 0.0f, 1.0f);
 }
 
 template<typename S>
