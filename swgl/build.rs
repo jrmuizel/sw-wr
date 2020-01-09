@@ -9,7 +9,9 @@ fn get_shaders() -> Vec<String> {
         let path = entry.unwrap().path();
         let s = path.strip_prefix("shaders").unwrap().to_str().unwrap();
         if let Some(idx) = s.rfind(".vert.pp") {
-            shaders.push(s[0 .. idx].to_owned());
+            if idx + ".vert.pp".len() == s.len() {
+                shaders.push(s[0 .. idx].to_owned());
+            }
         }
     }
     shaders
