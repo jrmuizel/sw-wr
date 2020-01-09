@@ -36,21 +36,28 @@ float make_float(int32_t n) {
     return float(n);
 }
 
-int32_t make_int(uint32_t n) {
-    return n;
+float make_float(uint32_t n) {
+    return float(n);
 }
 
-Float make_float(I32 v) {
-        // Float(v) seems to just convert the bits
-        return _mm_cvtepi32_ps(v);
+template<typename T> Float make_float(T v) {
+        return __builtin_convertvector(v, Float);
+}
+
+int32_t make_int(uint32_t n) {
+    return n;
 }
 
 int32_t make_int(int32_t n) {
     return n;
 }
 
+int32_t make_int(float n) {
+    return int32_t(n);
+}
+
 template<typename T> I32 make_int(T v) {
-    return I32(v);
+    return __builtin_convertvector(v, I32);
 }
 
 uint32_t make_uint(uint32_t n) {
@@ -61,12 +68,12 @@ uint32_t make_uint(int32_t n) {
     return n;
 }
 
-U32 make_uint(I32 x) {
-    return __builtin_convertvector(x, U32);
+uint32_t make_uint(float n) {
+    return uint32_t(n);
 }
 
 template<typename T> U32 make_uint(T v) {
-    return U32(v);
+    return __builtin_convertvector(v, U32);
 }
 
 template<typename T> T force_scalar(T n) { return n; }
