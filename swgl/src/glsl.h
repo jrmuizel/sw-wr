@@ -2271,17 +2271,18 @@ vec4 textureLinearR8(S sampler, vec2 P, I32 zoffset = 0) {
     fracy = _mm_shufflelo_epi16(fracy, _MM_SHUFFLE(2, 2, 0, 0));
     fracy = _mm_shufflehi_epi16(fracy, _MM_SHUFFLE(2, 2, 0, 0));
 
-    __m128i cc0 = _mm_unpacklo_epi16(_mm_setr_epi16(
-        *(uint16_t*)((uint8_t*)sampler->buf + _mm_cvtsi128_si32(_mm_shuffle_epi32(row0, _MM_SHUFFLE(0, 0, 0, 0)))),
-        *(uint16_t*)((uint8_t*)sampler->buf + _mm_cvtsi128_si32(_mm_shuffle_epi32(row0, _MM_SHUFFLE(1, 1, 1, 1)))),
-        *(uint16_t*)((uint8_t*)sampler->buf + _mm_cvtsi128_si32(_mm_shuffle_epi32(row0, _MM_SHUFFLE(2, 2, 2, 2)))),
-        *(uint16_t*)((uint8_t*)sampler->buf + _mm_cvtsi128_si32(_mm_shuffle_epi32(row0, _MM_SHUFFLE(3, 3, 3, 3)))),
+    uint8_t* buf = (uint8_t*)sampler->buf;
+    __m128i cc0 = _mm_unpacklo_epi8(_mm_setr_epi16(
+        *(uint16_t*)(buf + _mm_cvtsi128_si32(_mm_shuffle_epi32(row0, _MM_SHUFFLE(0, 0, 0, 0)))),
+        *(uint16_t*)(buf + _mm_cvtsi128_si32(_mm_shuffle_epi32(row0, _MM_SHUFFLE(1, 1, 1, 1)))),
+        *(uint16_t*)(buf + _mm_cvtsi128_si32(_mm_shuffle_epi32(row0, _MM_SHUFFLE(2, 2, 2, 2)))),
+        *(uint16_t*)(buf + _mm_cvtsi128_si32(_mm_shuffle_epi32(row0, _MM_SHUFFLE(3, 3, 3, 3)))),
         0, 0, 0, 0), _mm_setzero_si128());
-    __m128i cc1 = _mm_unpacklo_epi16(_mm_setr_epi16(
-        *(uint16_t*)((uint8_t*)sampler->buf + _mm_cvtsi128_si32(_mm_shuffle_epi32(row1, _MM_SHUFFLE(0, 0, 0, 0)))),
-        *(uint16_t*)((uint8_t*)sampler->buf + _mm_cvtsi128_si32(_mm_shuffle_epi32(row1, _MM_SHUFFLE(1, 1, 1, 1)))),
-        *(uint16_t*)((uint8_t*)sampler->buf + _mm_cvtsi128_si32(_mm_shuffle_epi32(row1, _MM_SHUFFLE(2, 2, 2, 2)))),
-        *(uint16_t*)((uint8_t*)sampler->buf + _mm_cvtsi128_si32(_mm_shuffle_epi32(row1, _MM_SHUFFLE(3, 3, 3, 3)))),
+    __m128i cc1 = _mm_unpacklo_epi8(_mm_setr_epi16(
+        *(uint16_t*)(buf + _mm_cvtsi128_si32(_mm_shuffle_epi32(row1, _MM_SHUFFLE(0, 0, 0, 0)))),
+        *(uint16_t*)(buf + _mm_cvtsi128_si32(_mm_shuffle_epi32(row1, _MM_SHUFFLE(1, 1, 1, 1)))),
+        *(uint16_t*)(buf + _mm_cvtsi128_si32(_mm_shuffle_epi32(row1, _MM_SHUFFLE(2, 2, 2, 2)))),
+        *(uint16_t*)(buf + _mm_cvtsi128_si32(_mm_shuffle_epi32(row1, _MM_SHUFFLE(3, 3, 3, 3)))),
         0, 0, 0, 0), _mm_setzero_si128());
     __m128i cc = _mm_add_epi16(cc0,
                                _mm_mulhi_epi16(_mm_slli_epi16(_mm_sub_epi16(cc1, cc0), 4),
