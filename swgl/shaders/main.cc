@@ -25,6 +25,8 @@ S *lookup_sampler_array(S *s, int slot) {
         return nullptr;
 }
 
+#define NULL_ATTRIB 15
+
 struct VertexAttrib {
         GLint size;
         GLenum type;

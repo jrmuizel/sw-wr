@@ -1910,6 +1910,31 @@ mat2_scalar make_mat2(const mat4_scalar &m) {
     return mat2_scalar{{{m[0].x, m[0].y}, {m[1].x, m[1].y}}};
 }
 
+mat4_scalar force_scalar(const mat4& v) {
+    return mat4_scalar{{ force_scalar(v[0]), force_scalar(v[1]), force_scalar(v[2]), force_scalar(v[3]) }};
+}
+
+mat4_scalar make_mat4(const mat4_scalar& m) {
+    return m;
+}
+
+mat4_scalar make_mat4(const vec4_scalar& x, const vec4_scalar& y, const vec4_scalar& z, const vec4_scalar& w) {
+    return mat4_scalar{{x, y, z, w}};
+}
+
+constexpr mat4_scalar make_mat4(float m0, float m1, float m2, float m3, float m4, float m5, float m6, float m7, float m8,
+                                float m9, float m10, float m11, float m12, float m13, float m14, float m15) {
+    return mat4_scalar{{{m0, m1, m2, m3}, {m4, m5, m6, m7},  {m8, m9, m10, m11}, {m12, m13, m14, m15}}};
+}
+
+template<typename N> mat4 make_mat4(const N& n) {
+    return mat4(n);
+}
+
+template<typename X, typename Y, typename Z, typename W> mat4 make_mat4(const X& x, const Y& y, const Z& z, const W& w) {
+    return mat4(x, y, z, w);
+}
+
 SI mat3 if_then_else(I32 c, mat3 t, mat3 e) {
     return mat3{if_then_else(c, t[0], e[0]),
                 if_then_else(c, t[1], e[1]),
