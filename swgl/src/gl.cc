@@ -99,7 +99,7 @@ glsl::TextureFormat gl_format_to_texture_format(int type) {
                 case GL_RGBA32I: return glsl::TextureFormat::RGBA32I;
                 case GL_RGBA8: return glsl::TextureFormat::RGBA8;
                 case GL_R8: return glsl::TextureFormat::R8;
-                defaut: assert(0);
+                default: assert(0);
         }
 }
 
@@ -177,7 +177,7 @@ glsl::TextureFilter gl_filter_to_texture_filter(int type) {
                 case GL_LINEAR: return glsl::TextureFilter::LINEAR;
                 case GL_LINEAR_MIPMAP_LINEAR: return glsl::TextureFilter::LINEAR;
                 case GL_LINEAR_MIPMAP_NEAREST: return glsl::TextureFilter::LINEAR;
-                defaut: assert(0);
+                default: assert(0);
         }
 }
 
