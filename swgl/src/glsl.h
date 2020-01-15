@@ -796,7 +796,7 @@ struct ivec4_scalar {
                     case W: return w;
                 }
         }
-        int32_t sel(XYZW c1) {
+        int32_t& sel(XYZW c1) {
                 return select(c1);
         }
         ivec2_scalar sel(XYZW c1, XYZW c2) {
@@ -1008,6 +1008,11 @@ struct vec2_ref {
         vec2_ref& operator+=(vec2 a) {
                 x += a.x;
                 y += a.y;
+                return *this;
+        }
+        vec2_ref& operator-=(vec2 a) {
+                x -= a.x;
+                y -= a.y;
                 return *this;
         }
         vec2_ref& operator*=(vec2 a) {
