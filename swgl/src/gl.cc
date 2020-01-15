@@ -722,6 +722,10 @@ GLenum GetError() {
 #define GL_DRAW_FRAMEBUFFER_BINDING 0x8CA6
 #define GL_READ_FRAMEBUFFER_BINDING 0x8CAA
 #define GL_DEPTH_WRITEMASK          0x0B72
+#define GL_PIXEL_PACK_BUFFER              0x88EB
+#define GL_PIXEL_UNPACK_BUFFER            0x88EC
+#define GL_PIXEL_PACK_BUFFER_BINDING      0x88ED
+#define GL_PIXEL_UNPACK_BUFFER_BINDING    0x88EF
 
 static const char * const extensions[] = {
     "GL_ARB_blend_func_extended",
@@ -757,11 +761,21 @@ void GetIntegerv(GLenum pname, GLint *params) {
         params[0] = i != current_framebuffer.end() ? i->second : 0;
         break;
     }
+    case GL_PIXEL_PACK_BUFFER_BINDING: {
+        auto i = current_buffer.find(GL_PIXEL_PACK_BUFFER);
+        params[0] = i != current_buffer.end() ? i->second : 0;
+        break;
+    }
+    case GL_PIXEL_UNPACK_BUFFER_BINDING: {
+        auto i = current_buffer.find(GL_PIXEL_UNPACK_BUFFER);
+        params[0] = i != current_buffer.end() ? i->second : 0;
+        break;
+    }
     case GL_NUM_EXTENSIONS:
         params[0] = sizeof(extensions) / sizeof(extensions[0]);
         break;
     default:
-        printf("unhandled glGetIntegerv parameter %x", pname);
+        printf("unhandled glGetIntegerv parameter %x\n", pname);
         assert(false);
     }
 }
