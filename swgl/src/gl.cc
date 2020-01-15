@@ -140,6 +140,7 @@ struct Buffer {
 
 #define GL_READ_FRAMEBUFFER               0x8CA8
 #define GL_DRAW_FRAMEBUFFER               0x8CA9
+#define GL_FRAMEBUFFER                    0x8D40
 
 struct Framebuffer {
         GLint color_attachment = 0;
@@ -1137,7 +1138,13 @@ void BindBuffer(GLenum target, GLuint buffer) {
 }
 
 void BindFramebuffer(GLenum target, GLuint fb) {
-    current_framebuffer[target] = fb;
+    if (target == GL_FRAMEBUFFER) {
+        current_framebuffer[GL_READ_FRAMEBUFFER] = fb;
+        current_framebuffer[GL_DRAW_FRAMEBUFFER] = fb;
+    } else {
+        assert(target == GL_READ_FRAMEBUFFER || target == GL_DRAW_FRAMEBUFFER);
+        current_framebuffer[target] = fb;
+    }
 }
 
 void BindRenderbuffer(GLenum target, GLuint rb) {
