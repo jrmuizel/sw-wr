@@ -4,6 +4,7 @@
 #include <assert.h>
 #include <math.h>
 #include <array>
+#include "sse_math.h"
 
 
 // Some of this is copied from Skia and is governed by a BSD-style license
@@ -2516,13 +2517,13 @@ Float dot(vec2 a, vec2 b) {
 }
 
 
+/* sin_ps and cos_ps are based on the same implementation used
+ * by llvmpipe */
 Float sin(Float x) {
-        assert(false);
-        return Float(0);
+        return sin_ps(x);
 }
 Float cos(Float x) {
-        assert(false);
-        return Float(0);
+        return cos_ps(x);
 }
 
 bvec4 notEqual(ivec4 a, ivec4 b) {
