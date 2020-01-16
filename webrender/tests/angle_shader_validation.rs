@@ -19,6 +19,7 @@ struct Shader {
 const SHADER_PREFIX: &str = "#define WR_MAX_VERTEX_TEXTURE_WIDTH 1024U\n";
 
 const BRUSH_FEATURES: &[&str] = &["", "ALPHA_PASS"];
+const BRUSH_IMAGE_FEATURES: &[&str] = &["", "ALPHA_PASS", "REPETITION,ANTIALIASING", "REPETITION,ANTIALIASING,ALPHA_PASS"];
 const CLIP_FEATURES: &[&str] = &[""];
 const FAST_CLIP_FEATURES: &[&str] = &["FAST_PATH"];
 const CACHE_FEATURES: &[&str] = &[""];
@@ -95,7 +96,7 @@ const SHADERS: &[Shader] = &[
     },
     Shader {
         name: "brush_image",
-        features: BRUSH_FEATURES,
+        features: BRUSH_IMAGE_FEATURES,
     },
     Shader {
         name: "brush_blend",
