@@ -2549,7 +2549,7 @@ Float mod(Float a, Float b) {
 }
 
 vec2 mod(vec2 a, vec2 b) {
-        return vec2(mod(a.x, b.x), mod(a.y, a.y));
+        return vec2(mod(a.x, b.x), mod(a.y, b.y));
 }
 
 vec3 abs(vec3 v) {
