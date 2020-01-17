@@ -52,6 +52,7 @@ fn main() {
         .cpp(true)
         .file("src/gl.cc")
         .define("FOO", Some("bar"))
+        .flag("-UMOZILLA_CONFIG_H")
         .flag("-std=c++14")
         .include("src")
         .include(std::env::var("OUT_DIR").unwrap())
