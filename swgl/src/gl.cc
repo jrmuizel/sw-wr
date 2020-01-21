@@ -1261,7 +1261,13 @@ void TexSubImage2D(
         Texture &t = textures[active_texture(target)];
         assert(xoffset + width <= t.width);
         assert(yoffset + height <= t.height);
-        assert(unpack_row_length == 0 || unpack_row_length == width);
+        assert(unpack_row_length == 0 || unpack_row_length >= width);
+        GLsizei row_length;
+        if (unpack_row_length == 0) {
+                row_length = width;
+        } else {
+                row_length = unpack_row_length;
+        }
         assert(t.internal_format == internal_format_for_data(format, ty));
         int bpp = bytes_for_internal_format(t.internal_format);
         if (!bpp) return;
@@ -1275,7 +1281,7 @@ void TexSubImage2D(
                     memcpy(dest, src, width * bpp);
                 }
                 dest += dest_stride;
-                src += width * bpp;
+                src += row_length * bpp;
         }
 }
 
@@ -1310,7 +1316,14 @@ void TexSubImage3D(
         GLenum ty,
         void *data) {
         Texture &t = textures[active_texture(target)];
-        assert(unpack_row_length == 0 || unpack_row_length == width);
+        assert(unpack_row_length == 0 || unpack_row_length >= width);
+        GLsizei row_length;
+        if (unpack_row_length == 0) {
+                row_length = width;
+        } else {
+                row_length = unpack_row_length;
+        }
+
         if (format == GL_BGRA) {
             assert(ty == GL_UNSIGNED_BYTE);
             assert(t.internal_format == GL_RGBA8);
@@ -1333,7 +1346,7 @@ void TexSubImage3D(
                             memcpy(dest, src, width * bpp);
                         }
                         dest += dest_stride;
-                        src += width * bpp;
+                        src += row_length * bpp;
                 }
         }
 
