@@ -309,6 +309,18 @@ struct vec2_scalar_ref {
         }
         float &x;
         float &y;
+
+        float& select(XYZW c) {
+                switch (c) {
+                    case X: return x;
+                    case Y: return y;
+                    default: UNREACHABLE;
+                }
+        }
+        float& sel(XYZW c1) {
+                return select(c1);
+        }
+
         vec2_scalar_ref& operator=(const vec2_scalar &a) {
                 x = a.x;
                 y = a.y;
@@ -988,6 +1000,18 @@ struct vec2_ref {
         }
         Float &x;
         Float &y;
+
+        Float& select(XYZW c) {
+                switch (c) {
+                    case X: return x;
+                    case Y: return y;
+                    default: UNREACHABLE;
+                }
+        }
+        Float& sel(XYZW c1) {
+                return select(c1);
+        }
+
         vec2_ref& operator=(const vec2 &a) {
                 x = a.x;
                 y = a.y;
