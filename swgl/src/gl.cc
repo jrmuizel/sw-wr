@@ -1646,10 +1646,13 @@ void FramebufferTexture2D(
         GLuint texture,
         GLint level)
 {
+        assert(target == GL_READ_FRAMEBUFFER || target == GL_DRAW_FRAMEBUFFER);
+        Framebuffer &fb = framebuffers[current_framebuffer[target]];
         if (attachment == GL_COLOR_ATTACHMENT0) {
-               Framebuffer &fb = framebuffers[current_framebuffer[target]];
-               fb.color_attachment = texture;
-               fb.layer = 0;
+                fb.color_attachment = texture;
+                fb.layer = 0;
+        } else if (attachment == GL_DEPTH_ATTACHMENT) {
+                fb.depth_attachment = texture;
         } else {
                 assert(0);
         }
@@ -1664,10 +1667,13 @@ void FramebufferTextureLayer(
 {
         assert(level == 0);
         assert(target == GL_READ_FRAMEBUFFER || target == GL_DRAW_FRAMEBUFFER);
+        Framebuffer &fb = framebuffers[current_framebuffer[target]];
         if (attachment == GL_COLOR_ATTACHMENT0) {
-               Framebuffer &fb = framebuffers[current_framebuffer[target]];
-               fb.color_attachment = texture;
-               fb.layer = layer;
+                fb.color_attachment = texture;
+                fb.layer = layer;
+        } else if (attachment == GL_DEPTH_ATTACHMENT) {
+                assert(layer == 0);
+                fb.depth_attachment = texture;
         } else {
                 assert(0);
         }
@@ -1690,6 +1696,8 @@ void FramebufferRenderbuffer(
         fb.layer = 0;
     } else if (attachment == GL_DEPTH_ATTACHMENT) {
         fb.depth_attachment = rb.texture;
+    } else {
+        assert(0);
     }
 }
 
@@ -1875,7 +1883,7 @@ void CopyImageSubData(
     assert(srcY + srcHeight <= srctex.height);
     assert(srcZ + srcDepth <= std::max(srctex.depth, 1));
     assert(dstX + srcWidth <= dsttex.width);
-    assert(dstY + srcHeight <= dsttex.height);
+    assert(std::max(dstY, dstY + srcHeight) <= dsttex.height);
     assert(dstZ + srcDepth <= std::max(dsttex.depth, 1));
     int bpp = bytes_for_internal_format(srctex.internal_format);
     int src_stride = aligned_stride(bpp * srctex.width);
@@ -1883,10 +1891,19 @@ void CopyImageSubData(
     for (int z = 0; z < srcDepth; z++) {
         char *dest = dsttex.buf + (dsttex.height * (dstZ + z) + dstY) * dest_stride + dstX * bpp;
         char *src = srctex.buf + (srctex.height * (srcZ + z) + srcY) * src_stride + srcX * bpp;
-        for (int y = 0; y < srcHeight; y++) {
-            memcpy(dest, src, srcWidth * bpp);
-            dest += dest_stride;
-            src += src_stride;
+        if (srcHeight < 0) {
+            dest += srcHeight * dest_stride;
+            for (int y = srcHeight; y < 0; y++) {
+                memcpy(dest, src, srcWidth * bpp);
+                dest += dest_stride;
+                src += src_stride;
+            }
+        } else {
+            for (int y = 0; y < srcHeight; y++) {
+                memcpy(dest, src, srcWidth * bpp);
+                dest += dest_stride;
+                src += src_stride;
+            }
         }
     }
 }
@@ -1949,11 +1966,11 @@ void BlitFramebuffer(
     int srcHeight = srcY1 - srcY0;
     int dstWidth = dstX1 - dstX0;
     int dstHeight = dstY1 - dstY0;
-    assert(srcWidth == dstWidth && srcHeight == dstHeight);
+    assert(srcWidth == dstWidth && srcHeight == abs(dstHeight));
     CopyImageSubData(
         srcfb->color_attachment, GL_TEXTURE_2D_ARRAY, 0, srcX0, srcY0, srcfb->layer,
         dstfb->color_attachment, GL_TEXTURE_2D_ARRAY, 0, dstX0, dstY0, dstfb->layer,
-        srcWidth, srcHeight, 1);
+        dstWidth, dstHeight, 1);
 }
 
 #define GL_POINTS                         0x0000
