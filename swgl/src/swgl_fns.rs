@@ -10,6 +10,9 @@ use std::rc::Rc;
 use std::str;
 use gleam::gl::*;
 
+#[allow(unused)]
+macro_rules! debug { ($($x:tt)*) => () }
+
 pub struct SwGlFns {
 }
 
@@ -309,7 +312,7 @@ impl Gl for SwGlFns {
         data: *const GLvoid,
         usage: GLenum,
     ) {
-        println!("buffer_data_untyped {} {} {:?} {}", target, size, data, usage);
+        debug!("buffer_data_untyped {} {} {:?} {}", target, size, data, usage);
         //panic!();
         unsafe {
                 BufferData(target, size, data, usage);
@@ -323,7 +326,7 @@ impl Gl for SwGlFns {
         size: GLsizeiptr,
         data: *const GLvoid,
     ) {
-        println!("buffer_sub_data_untyped {} {} {} {:?}",
+        debug!("buffer_sub_data_untyped {} {} {} {:?}",
                 target, offset, size, data);
         //panic!();
         unsafe {
@@ -354,17 +357,22 @@ impl Gl for SwGlFns {
 
     fn shader_source(&self, shader: GLuint, strings: &[&[u8]]) {
         //panic!();
-        println!("shader_source {}", shader);
-        //for s in strings {
-        //    println!("{}", str::from_utf8(s).unwrap());
-        //}
+        debug!("shader_source {}", shader);
+        let mut out = String::new();
+        for s in strings {
+            out.push_str(str::from_utf8(s).unwrap());
+        //    debug!("{}", str::from_utf8(s).unwrap());
+        }
         //panic!();
         for s in strings {
             let u = str::from_utf8(s).unwrap();
             const prefix: &'static str = "// shader: ";
             if let Some(start) = u.find(prefix) {
                 if let Some(end) = u[start..].find('\n') {
-                    println!("shader name: {}", u[start + prefix.len() .. start + end].trim());
+                    debug!("shader name: {}", u[start + prefix.len() .. start + end].trim());
+                    let suffix = if u.find("#define WR_FRAGMENT_SHADER").is_some() { ".frag" } else { ".vert" };
+                    std::fs::write("used/".to_string() + &u[start + prefix.len() .. start + end].trim().replace(" ", "") + suffix,
+                                   out.replace("#version 150", "#version 300 es"));
                     unsafe {
                         let c_string = CString::new(u[start + prefix.len() .. start + end].trim().replace(" ", "")).unwrap();
                         ShaderSourceByName(shader, c_string.as_ptr());
@@ -460,7 +468,7 @@ impl Gl for SwGlFns {
 
     fn pixel_store_i(&self, name: GLenum, param: GLint) {
         //panic!();
-        println!("pixel_store_i {:x} {}", name, param);
+        debug!("pixel_store_i {:x} {}", name, param);
         unsafe {
                 PixelStorei(name, param);
         }
@@ -476,7 +484,7 @@ impl Gl for SwGlFns {
     }
 
     fn gen_renderbuffers(&self, n: GLsizei) -> Vec<GLuint> {
-        println!("gen_renderbuffers {}", n);
+        debug!("gen_renderbuffers {}", n);
         //panic!();
         let mut result = vec![0 as GLuint; n as usize];
         unsafe {
@@ -487,7 +495,7 @@ impl Gl for SwGlFns {
 
     fn gen_framebuffers(&self, n: GLsizei) -> Vec<GLuint> {
         //panic!();
-        println!("gen_framebuffers {}", n);
+        debug!("gen_framebuffers {}", n);
         let mut result = vec![0 as GLuint; n as usize];
         unsafe {
                 GenFramebuffers(n, result.as_mut_ptr());
@@ -615,7 +623,7 @@ impl Gl for SwGlFns {
         renderbuffertarget: GLenum,
         renderbuffer: GLuint,
     ) {
-        println!("framebufer_renderbuffer {} {} {} {}",
+        debug!("framebufer_renderbuffer {} {} {} {}",
                  target, attachment, renderbuffertarget,
                  renderbuffer);
         //panic!();
@@ -631,7 +639,7 @@ impl Gl for SwGlFns {
         width: GLsizei,
         height: GLsizei,
     ) {
-        println!("renderbuffer_storage {} {} {} {}", target, internalformat, width, height);
+        debug!("renderbuffer_storage {} {} {} {}", target, internalformat, width, height);
         //panic!();
         unsafe {
                 RenderbufferStorage(target, internalformat, width, height);
@@ -639,7 +647,7 @@ impl Gl for SwGlFns {
     }
 
     fn depth_func(&self, func: GLenum) {
-        println!("depth_func {}", func);
+        debug!("depth_func {}", func);
         //panic!();
         unsafe {
                 DepthFunc(func);
@@ -654,7 +662,7 @@ impl Gl for SwGlFns {
     }
 
     fn attach_shader(&self, program: GLuint, shader: GLuint) {
-        println!("attach shader {} {}", program, shader);
+        debug!("attach shader {} {}", program, shader);
         //panic!();
         unsafe {
                 AttachShader(program, shader);
@@ -662,7 +670,7 @@ impl Gl for SwGlFns {
     }
 
     fn bind_attrib_location(&self, program: GLuint, index: GLuint, name: &str) {
-        println!("bind_attrib_location {} {} {}", program, index, name);
+        debug!("bind_attrib_location {} {} {}", program, index, name);
         //panic!();
         let c_string = CString::new(name).unwrap();
         unsafe {
@@ -731,7 +739,7 @@ impl Gl for SwGlFns {
     }
 
     fn bind_renderbuffer(&self, target: GLenum, renderbuffer: GLuint) {
-        println!("bind_renderbuffer {} {}", target, renderbuffer);
+        debug!("bind_renderbuffer {} {}", target, renderbuffer);
         //panic!();
         unsafe {
                 BindRenderbuffer(target, renderbuffer);
@@ -739,7 +747,7 @@ impl Gl for SwGlFns {
     }
 
     fn bind_framebuffer(&self, target: GLenum, framebuffer: GLuint) {
-        println!("bind_framebuffer {} {}", target, framebuffer);
+        debug!("bind_framebuffer {} {}", target, framebuffer);
         //panic!();
         unsafe {
                 BindFramebuffer(target, framebuffer);
@@ -911,7 +919,7 @@ impl Gl for SwGlFns {
         ty: GLenum,
         data: &[u8],
     ) {
-        println!("tex_sub_image_2d {} {} {} {} {} {} {} {}",
+        debug!("tex_sub_image_2d {} {} {} {} {} {} {} {}",
                  target, level, xoffset, yoffset, width, height, format, ty);
         //panic!();
         unsafe {
@@ -941,7 +949,7 @@ impl Gl for SwGlFns {
         ty: GLenum,
         offset: usize,
     ) {
-        println!("tex_sub_image_2d_pbo {} {} {} {} {} {} {} {} {}",
+        debug!("tex_sub_image_2d_pbo {} {} {} {} {} {} {} {} {}",
                  target, level, xoffset, yoffset, width, height,
                  format, ty, offset);
         //panic!();
@@ -974,7 +982,7 @@ impl Gl for SwGlFns {
         ty: GLenum,
         data: &[u8],
     ) {
-        println!("tex_sub_image_3d");
+        debug!("tex_sub_image_3d");
         //panic!();
         unsafe {
             TexSubImage3D(
@@ -1129,7 +1137,7 @@ impl Gl for SwGlFns {
 
     #[inline]
     unsafe fn get_boolean_v(&self, name: GLenum, result: &mut [GLboolean]) {
-        println!("get_boolean_v {}", name);
+        debug!("get_boolean_v {}", name);
         //panic!();
         assert!(!result.is_empty());
             GetBooleanv(name, result.as_mut_ptr());
@@ -1185,7 +1193,7 @@ impl Gl for SwGlFns {
         texture: GLuint,
         level: GLint,
     ) {
-        println!("framebuffer_texture_2d {} {} {} {} {}",
+        debug!("framebuffer_texture_2d {} {} {} {} {}",
                  target, attachment, textarget, texture,
                  level);
         //panic!();
@@ -1202,7 +1210,7 @@ impl Gl for SwGlFns {
         level: GLint,
         layer: GLint,
     ) {
-        println!("framebuffer_texture_layer {} {} {} {} {}",
+        debug!("framebuffer_texture_layer {} {} {} {} {}",
                  target, attachment, texture, level, layer);
         //panic!();
         unsafe {
@@ -1254,7 +1262,7 @@ impl Gl for SwGlFns {
         stride: GLsizei,
         offset: GLuint,
     ) {
-        println!("vertex_attrib_pointer {} {} {} {} {} {}", index, size, type_, normalized, stride, offset);
+        debug!("vertex_attrib_pointer {} {} {} {} {} {}", index, size, type_, normalized, stride, offset);
         //panic!();
         unsafe {
             VertexAttribPointer(
@@ -1275,7 +1283,7 @@ impl Gl for SwGlFns {
         stride: GLsizei,
         offset: GLuint,
     ) {
-        println!("vertex_attrib_i_pointer {} {} {} {} {}", index, size, type_, stride, offset);
+        debug!("vertex_attrib_i_pointer {} {} {} {} {}", index, size, type_, stride, offset);
         //panic!();
         unsafe {
                 VertexAttribIPointer(index, size, type_, stride, offset as *const GLvoid);
@@ -1283,7 +1291,7 @@ impl Gl for SwGlFns {
     }
 
     fn vertex_attrib_divisor(&self, index: GLuint, divisor: GLuint) {
-        println!("vertex_attrib_divisor {} {}", index, divisor);
+        debug!("vertex_attrib_divisor {} {}", index, divisor);
         //assert!(index == 0 && divisor == 0);
         //panic!();
         unsafe {
@@ -1292,7 +1300,7 @@ impl Gl for SwGlFns {
     }
 
     fn viewport(&self, x: GLint, y: GLint, width: GLsizei, height: GLsizei) {
-        println!("viewport {} {} {} {}", x, y, width, height);
+        debug!("viewport {} {} {} {}", x, y, width, height);
         //panic!();
         unsafe {
                 SetViewport(x, y, width, height);
@@ -1353,7 +1361,7 @@ impl Gl for SwGlFns {
         indices_offset: GLuint,
         primcount: GLsizei,
     ) {
-        println!("draw_elements_instanced {} {} {} {} {}",
+        debug!("draw_elements_instanced {} {} {} {} {}",
                  mode, count, element_type, indices_offset, primcount);
         //panic!();
         unsafe {
@@ -1414,7 +1422,7 @@ impl Gl for SwGlFns {
     }
 
     fn enable(&self, cap: GLenum) {
-        println!("enable {}", cap);
+        debug!("enable {}", cap);
         //panic!();
         unsafe {
                 Enable(cap);
@@ -1422,7 +1430,7 @@ impl Gl for SwGlFns {
     }
 
     fn disable(&self, cap: GLenum) {
-        println!("disable {}", cap);
+        debug!("disable {}", cap);
         //panic!();
         unsafe {
                 Disable(cap);
@@ -1459,7 +1467,7 @@ impl Gl for SwGlFns {
     }
 
     fn check_frame_buffer_status(&self, target: GLenum) -> GLenum {
-        println!("check_frame_buffer_status {}", target);
+        debug!("check_frame_buffer_status {}", target);
         //panic!();
         unsafe {
                 CheckFramebufferStatus(target)
@@ -1468,7 +1476,7 @@ impl Gl for SwGlFns {
 
     fn enable_vertex_attrib_array(&self, index: GLuint) {
         //panic!();
-        println!("enable_vertex_attrib_array {}", index);
+        debug!("enable_vertex_attrib_array {}", index);
         unsafe {
                 EnableVertexAttribArray(index);
                 //assert_eq!(index, 0);
@@ -1488,7 +1496,7 @@ impl Gl for SwGlFns {
     }
 
     fn uniform_1i(&self, location: GLint, v0: GLint) {
-        println!("uniform_1i {} {}", location, v0);
+        debug!("uniform_1i {} {}", location, v0);
         //panic!();
         unsafe {
                 Uniform1i(location, v0);
@@ -1575,7 +1583,7 @@ impl Gl for SwGlFns {
     }
 
     fn uniform_matrix_4fv(&self, location: GLint, transpose: bool, value: &[f32]) {
-        println!("uniform_matrix_4fv {} {} {:?}", location, transpose, value);
+        debug!("uniform_matrix_4fv {} {} {:?}", location, transpose, value);
         //panic!();
         unsafe {
             UniformMatrix4fv(
@@ -1588,7 +1596,7 @@ impl Gl for SwGlFns {
     }
 
     fn depth_mask(&self, flag: bool) {
-        println!("depth_mask {}", flag);
+        debug!("depth_mask {}", flag);
         //panic!();
         unsafe {
                 DepthMask(flag as GLboolean);
@@ -1650,7 +1658,7 @@ impl Gl for SwGlFns {
     }
 
     fn get_uniform_location(&self, program: GLuint, name: &str) -> c_int {
-        println!("get_uniform_location {} {}", program, name);
+        debug!("get_uniform_location {} {}", program, name);
         //panic!();
         let name = CString::new(name).unwrap();
         unsafe {
@@ -1665,7 +1673,7 @@ impl Gl for SwGlFns {
 
     #[inline]
     unsafe fn get_program_iv(&self, program: GLuint, pname: GLenum, result: &mut [GLint]) {
-        println!("get_program_iv {}", pname);
+        debug!("get_program_iv {}", pname);
         //panic!();
         assert!(!result.is_empty());
             //#define GL_LINK_STATUS                    0x8B82
@@ -1710,7 +1718,7 @@ impl Gl for SwGlFns {
     }
 
     fn get_shader_info_log(&self, shader: GLuint) -> String {
-        println!("get_shader_info_log {}", shader);
+        debug!("get_shader_info_log {}", shader);
         //panic!();
         String::new()
     }
@@ -1742,7 +1750,7 @@ impl Gl for SwGlFns {
     }
 
     unsafe fn get_shader_iv(&self, shader: GLuint, pname: GLenum, result: &mut [GLint]) {
-        println!("get_shader_iv");
+        debug!("get_shader_iv");
         //panic!();
         assert!(!result.is_empty());
             if pname == 0x8B81 /*gl::COMPILE_STATUS*/ {
@@ -1776,14 +1784,14 @@ impl Gl for SwGlFns {
     }
 
     fn compile_shader(&self, shader: GLuint) {
-        println!("compile_shader {}", shader);
+        debug!("compile_shader {}", shader);
         //panic!();
         unsafe {
         }
     }
 
     fn create_program(&self) -> GLuint {
-        println!("create_program");
+        debug!("create_program");
         //panic!();
         unsafe {
                 CreateProgram()
@@ -1797,7 +1805,7 @@ impl Gl for SwGlFns {
     }
 
     fn create_shader(&self, shader_type: GLenum) -> GLuint {
-        println!("create_shader {}", shader_type);
+        debug!("create_shader {}", shader_type);
         //panic!();
         unsafe {
                 CreateShader(shader_type)
@@ -1805,7 +1813,7 @@ impl Gl for SwGlFns {
     }
 
     fn delete_shader(&self, shader: GLuint) {
-        println!("delete_shader {}", shader);
+        debug!("delete_shader {}", shader);
         //panic!();
         unsafe {
             DeleteShader(shader);
@@ -1813,14 +1821,14 @@ impl Gl for SwGlFns {
     }
 
     fn detach_shader(&self, program: GLuint, shader: GLuint) {
-        println!("detach_shader {} {}", program, shader);
+        debug!("detach_shader {} {}", program, shader);
         //panic!();
         unsafe {
         }
     }
 
     fn link_program(&self, program: GLuint) {
-        println!("link_program {}", program);
+        debug!("link_program {}", program);
         //panic!();
         unsafe {
             LinkProgram(program);
@@ -1835,7 +1843,7 @@ impl Gl for SwGlFns {
     }
 
     fn clear(&self, buffer_mask: GLbitfield) {
-        println!("clear {}", buffer_mask);
+        debug!("clear {}", buffer_mask);
         //panic!();
         unsafe {
                 Clear(buffer_mask);
@@ -1843,7 +1851,7 @@ impl Gl for SwGlFns {
     }
 
     fn clear_depth(&self, depth: f64) {
-        println!("clear_depth {}", depth);
+        debug!("clear_depth {}", depth);
         //panic!();
         unsafe {
                 ClearDepth(depth as GLclampd);
@@ -1910,12 +1918,12 @@ impl Gl for SwGlFns {
     }
 
     fn push_group_marker_ext(&self, message: &str) {
-        println!("push group {}", message);
+        debug!("push group {}", message);
         panic!();
     }
 
     fn pop_group_marker_ext(&self) {
-        println!("pop group");
+        debug!("pop group");
         panic!();
     }
 
