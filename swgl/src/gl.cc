@@ -22,7 +22,6 @@ using namespace glsl;
 #define GL_ARRAY_BUFFER                   0x8892
 #define GL_ELEMENT_ARRAY_BUFFER           0x8893
 
-
 typedef int8_t GLbyte;
 typedef uint8_t GLubyte;
 typedef int16_t GLshort;
@@ -62,9 +61,12 @@ struct VertexAttrib {
 #define GL_RGBA32I                        0x8D82
 #define GL_BGRA8                          0x93A1
 
+#define GL_BYTE                           0x1400
 #define GL_UNSIGNED_BYTE                  0x1401
+#define GL_SHORT                          0x1402
 #define GL_UNSIGNED_SHORT                 0x1403
 #define GL_INT                            0x1404
+#define GL_UNSIGNED_INT                   0x1405
 #define GL_FLOAT                          0x1406
 
 #define GL_DEPTH_COMPONENT                0x1902
@@ -1892,10 +1894,9 @@ void CopyImageSubData(
         char *dest = dsttex.buf + (dsttex.height * (dstZ + z) + dstY) * dest_stride + dstX * bpp;
         char *src = srctex.buf + (srctex.height * (srcZ + z) + srcY) * src_stride + srcX * bpp;
         if (srcHeight < 0) {
-            dest += srcHeight * dest_stride;
             for (int y = srcHeight; y < 0; y++) {
+                dest -= dest_stride;
                 memcpy(dest, src, srcWidth * bpp);
-                dest += dest_stride;
                 src += src_stride;
             }
         } else {
@@ -1971,6 +1972,74 @@ void BlitFramebuffer(
         srcfb->color_attachment, GL_TEXTURE_2D_ARRAY, 0, srcX0, srcY0, srcfb->layer,
         dstfb->color_attachment, GL_TEXTURE_2D_ARRAY, 0, dstX0, dstY0, dstfb->layer,
         dstWidth, dstHeight, 1);
+}
+
+void Composite(
+    GLuint srcId,
+    GLint srcX,
+    GLint srcY,
+    GLsizei srcWidth,
+    GLsizei srcHeight,
+    GLint dstX,
+    GLint dstY,
+    GLboolean opaque,
+    GLboolean flip
+) {
+    Framebuffer& fb = framebuffers[0];
+    if (!fb.color_attachment) {
+        return;
+    }
+    Texture &srctex = textures[srcId];
+    if (!srctex.buf) return;
+    Texture &dsttex = textures[fb.color_attachment];
+    assert(bytes_for_internal_format(srctex.internal_format) == 4);
+    const int bpp = 4;
+    int src_stride = aligned_stride(bpp * srctex.width);
+    int dest_stride = aligned_stride(bpp * dsttex.width);
+    char *dest = dsttex.buf + (flip ? dsttex.height - 1 - dstY : dstY) * dest_stride + dstX * bpp;
+    char *src = srctex.buf + srcY * src_stride + srcX * bpp;
+    if (flip) {
+        dest_stride = -dest_stride;
+    }
+    if (opaque) {
+        for (int y = 0; y < srcHeight; y++) {
+            memcpy(dest, src, srcWidth * bpp);
+            dest += dest_stride;
+            src += src_stride;
+        }
+    } else {
+        #define muldiv255(x, y) ({ __m128i b = x; _mm_srli_epi16(_mm_add_epi16(_mm_mullo_epi16(b, y), b), 8); })
+        #define alphas(c) _mm_shufflehi_epi16(_mm_shufflelo_epi16(c, 0xFF), 0xFF)
+        for (int y = 0; y < srcHeight; y++) {
+            char *end = src + srcWidth * bpp;
+            while (src + 4 * bpp <= end) {
+                __m128i srcpx = _mm_loadu_si128((__m128i*)src);
+                __m128i slo = _mm_unpacklo_epi8(srcpx, _mm_setzero_si128());
+                __m128i shi = _mm_unpackhi_epi8(srcpx, _mm_setzero_si128());
+                __m128i dstpx = _mm_loadu_si128((__m128i*)dest);
+                __m128i dlo = _mm_unpacklo_epi8(dstpx, _mm_setzero_si128());
+                __m128i dhi = _mm_unpackhi_epi8(dstpx, _mm_setzero_si128());
+                __m128i r = _mm_packus_epi16(
+                        _mm_add_epi16(slo, _mm_sub_epi16(dlo, muldiv255(dlo, alphas(slo)))),
+                        _mm_add_epi16(shi, _mm_sub_epi16(dhi, muldiv255(dhi, alphas(shi)))));
+                _mm_storeu_si128((__m128i*)dest, r);
+                src += 4 * bpp;
+                dest += 4 * bpp;
+            }
+            while (src < end) {
+                __m128i slo = _mm_unpacklo_epi8(_mm_loadu_si32(src), _mm_setzero_si128());
+                __m128i dlo = _mm_unpacklo_epi8(_mm_loadu_si32(dest), _mm_setzero_si128());
+                __m128i r = _mm_packus_epi16(
+                        _mm_add_epi16(slo, _mm_sub_epi16(dlo, muldiv255(dlo, alphas(slo)))),
+                        _mm_setzero_si128());
+                _mm_storeu_si32(dest, r);
+                src += bpp;
+                dest += bpp;
+            }
+            dest += dest_stride - srcWidth * bpp;
+            src += src_stride - srcWidth * bpp;
+        }
+    }
 }
 
 #define GL_POINTS                         0x0000
@@ -2218,11 +2287,6 @@ static inline __m128i blend_pixels_R8(__m128i dst) {
     }
     return r;
 }
-
-#ifdef __MACH__
-#define _mm_loadu_si32(ptr) (_mm_cvtsi32_si128(*(const uint32_t*)(ptr)))
-#define _mm_storeu_si32(ptr, val) (*(uint32_t*)(ptr) = _mm_cvtsi128_si32(val))
-#endif
 
 template<bool DISCARD>
 static inline void commit_output(uint8_t* buf, __m128i mask) {
@@ -2502,12 +2566,12 @@ void VertexArray::validate() {
 
 extern "C" {
 
-void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indices, GLsizei instancecount) {
+void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indicesptr, GLsizei instancecount) {
         assert(mode == GL_TRIANGLES || mode == GL_QUADS);
-        assert(type == GL_UNSIGNED_SHORT);
+        assert(type == GL_UNSIGNED_SHORT || type == GL_UNSIGNED_INT);
         assert(count == 6);
-        assert(indices == 0);
-        if (count <= 0 || instancecount <= 0 || indices) {
+        assert(indicesptr == nullptr);
+        if (count <= 0 || instancecount <= 0 || indicesptr) {
             return;
         }
 
@@ -2522,6 +2586,7 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
         }
 
         Buffer &indices_buf = buffers[current_buffer[GL_ELEMENT_ARRAY_BUFFER]];
+
         //debugf("current_vertex_array %d\n", current_vertex_array);
         //debugf("indices size: %d\n", indices_buf.size);
         VertexArray &v = vertex_arrays[current_vertex_array];
@@ -2535,35 +2600,47 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
         shaded_rows = 0;
         shaded_pixels = 0;
 
+        unsigned short *indices = (unsigned short*)indices_buf.buf;
+        if (type == GL_UNSIGNED_INT) {
+            assert(indices_buf.size == count * 4);
+            indices = (unsigned short*)calloc(count, sizeof(unsigned short));
+            for (int i = 0; i < count; i++) {
+                unsigned int val = ((unsigned int *)indices_buf.buf)[i];
+                assert(val <= 0xFFFFU);
+                indices[i] = val;
+            }
+        } else if (type == GL_UNSIGNED_SHORT) {
+            assert(indices_buf.size == count * 2);
+        } else {
+            assert(0);
+        }
+
         Program &p = programs[current_program];
         assert(p.impl);
         vertex_shader.init_batch(p.impl);
         fragment_shader.init_batch(p.impl);
         for (int instance = 0; instance < instancecount; instance++) {
-                if (type == GL_UNSIGNED_SHORT) {
-                        assert(indices_buf.size == count * 2);
-                        unsigned short *indices = (unsigned short*)indices_buf.buf;
-                        if (mode == GL_QUADS) for (int i = 0; i + 4 <= count; i += 4) {
-                                vertex_shader.load_attribs(p.impl, v.attribs, indices, i, instance, 4);
-                                //debugf("native quad %d %d %d %d\n", indices[i], indices[i+1], indices[i+2], indices[i+3]);
-                                draw_quad(4, colortex, fb.layer, depthtex);
-                        } else for (int i = 0; i + 3 <= count; i += 3) {
-                                if (i + 6 <= count && indices[i+3] == indices[i+2] && indices[i+4] == indices[i+1]) {
-                                    unsigned short quad_indices[4] = { indices[i], indices[i+1], indices[i+5], indices[i+2] };
-                                    vertex_shader.load_attribs(p.impl, v.attribs, quad_indices, 0, instance, 4);
-                                    //debugf("emulate quad %d %d %d %d\n", indices[i], indices[i+1], indices[i+5], indices[i+2]);
-                                    draw_quad(4, colortex, fb.layer, depthtex);
-                                    i += 3;
-                                } else {
-                                    vertex_shader.load_attribs(p.impl, v.attribs, indices, i, instance, 3);
-                                    //debugf("triangle %d %d %d %d\n", indices[i], indices[i+1], indices[i+2]);
-                                    draw_quad(3, colortex, fb.layer, depthtex);
-                                }
-                         }
-
+            if (mode == GL_QUADS) for (int i = 0; i + 4 <= count; i += 4) {
+                vertex_shader.load_attribs(p.impl, v.attribs, indices, i, instance, 4);
+                //debugf("native quad %d %d %d %d\n", indices[i], indices[i+1], indices[i+2], indices[i+3]);
+                draw_quad(4, colortex, fb.layer, depthtex);
+            } else for (int i = 0; i + 3 <= count; i += 3) {
+                if (i + 6 <= count && indices[i+3] == indices[i+2] && indices[i+4] == indices[i+1]) {
+                    unsigned short quad_indices[4] = { indices[i], indices[i+1], indices[i+5], indices[i+2] };
+                    vertex_shader.load_attribs(p.impl, v.attribs, quad_indices, 0, instance, 4);
+                    //debugf("emulate quad %d %d %d %d\n", indices[i], indices[i+1], indices[i+5], indices[i+2]);
+                    draw_quad(4, colortex, fb.layer, depthtex);
+                    i += 3;
                 } else {
-                        assert(0);
+                    vertex_shader.load_attribs(p.impl, v.attribs, indices, i, instance, 3);
+                    //debugf("triangle %d %d %d %d\n", indices[i], indices[i+1], indices[i+2]);
+                    draw_quad(3, colortex, fb.layer, depthtex);
                 }
+            }
+        }
+
+        if (indices != (unsigned short*)indices_buf.buf) {
+            free(indices);
         }
 
         auto qid = current_query.find(GL_SAMPLES_PASSED);

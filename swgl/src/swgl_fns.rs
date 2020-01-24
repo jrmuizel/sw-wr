@@ -251,6 +251,17 @@ extern "C" {
     fn DeleteQuery(n: GLuint);
     fn DeleteShader(shader: GLuint);
     fn DeleteProgram(program: GLuint);
+    fn Composite(
+        src_id: GLuint,
+        src_x: GLint,
+        src_y: GLint,
+        src_width: GLsizei,
+        src_height: GLsizei,
+        dst_x: GLint,
+        dst_y: GLint,
+        opaque: GLboolean,
+        flip: GLboolean,
+    );
 }
 
 impl SwGlFns {
@@ -270,6 +281,22 @@ impl SwGlFns {
             let mut height: i32 = 0;
             let data_ptr = GetColorBuffer(&mut width, &mut height);
             (data_ptr, width, height)
+        }
+    }
+
+    pub fn composite(
+        src_id: GLuint,
+        src_x: GLint,
+        src_y: GLint,
+        src_width: GLsizei,
+        src_height: GLint,
+        dst_x: GLint,
+        dst_y: GLint,
+        opaque: bool,
+        flip: bool,
+    ) {
+        unsafe {
+            Composite(src_id, src_x, src_y, src_width, src_height, dst_x, dst_y, opaque as GLboolean, flip as GLboolean);
         }
     }
 }

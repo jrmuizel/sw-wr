@@ -6,7 +6,6 @@
 #include <array>
 #include "sse_math.h"
 
-
 // Some of this is copied from Skia and is governed by a BSD-style license
 // Every function in this file should be marked static and inline using SI.
 #ifdef _WIN32
@@ -17,6 +16,11 @@
 #define SI ALWAYS_INLINE static
 
 #define UNREACHABLE __builtin_unreachable()
+
+#ifdef __MACH__
+#define _mm_loadu_si32(ptr) (_mm_cvtsi32_si128(*(const uint32_t*)(ptr)))
+#define _mm_storeu_si32(ptr, val) (*(uint32_t*)(ptr) = _mm_cvtsi128_si32(val))
+#endif
 
 namespace glsl {
 
