@@ -10,6 +10,12 @@
 #include <string>
 #include "glsl.h"
 
+#ifdef NDEBUG
+#define debugf(...)
+#else
+#define debugf(...) printf(__VA_ARGS__)
+#endif
+
 using namespace std;
 using namespace glsl;
 
@@ -84,7 +90,7 @@ int bytes_for_internal_format(GLenum internal_format) {
                 case GL_DEPTH_COMPONENT32:
                         return 4;
                 default:
-                        printf("internal format: %x\n", internal_format);
+                        debugf("internal format: %x\n", internal_format);
                         assert(0);
         }
 }
@@ -776,7 +782,7 @@ void GetIntegerv(GLenum pname, GLint *params) {
         params[0] = sizeof(extensions) / sizeof(extensions[0]);
         break;
     default:
-        printf("unhandled glGetIntegerv parameter %x\n", pname);
+        debugf("unhandled glGetIntegerv parameter %x\n", pname);
         assert(false);
     }
 }
@@ -788,7 +794,7 @@ void GetBooleanv(GLenum pname, GLboolean *params) {
         params[0] = depthmask;
         break;
     default:
-        printf("unhandled glGetBooleanv parameter %x\n", pname);
+        debugf("unhandled glGetBooleanv parameter %x\n", pname);
         assert(false);
     }
 }
@@ -802,7 +808,7 @@ const char *GetString(GLenum name) {
     case GL_VERSION:
         return "3.2";
     default:
-        printf("unhandled glGetString parameter %x\n", name);
+        debugf("unhandled glGetString parameter %x\n", name);
         assert(false);
     }
 }
@@ -815,7 +821,7 @@ const char *GetStringi(GLenum name, GLuint index) {
         }
         return extensions[index];
     default:
-        printf("unhandled glGetStringi parameter %x\n", name);
+        debugf("unhandled glGetStringi parameter %x\n", name);
         assert(false);
     }
 }
@@ -860,7 +866,7 @@ void BlendFunc(GLenum srgb, GLenum drgb, GLenum sa, GLenum da) {
             break;
     FOR_EACH_BLEND_KEY(MAP_BLEND_KEY)
     default:
-        printf("blendfunc: %x, %x, separate: %x, %x\n", srgb, drgb, sa, da);
+        debugf("blendfunc: %x, %x, separate: %x, %x\n", srgb, drgb, sa, da);
         assert(false);
         break;
     }
@@ -1047,7 +1053,7 @@ void LinkProgram(GLuint program) {
 
     p.impl = load_shader(p.vs_name);
     if (!p.impl) {
-        printf("unknown program %s\n", p.vs_name.c_str());
+        debugf("unknown program %s\n", p.vs_name.c_str());
     }
 
     assert(p.impl);
@@ -1065,7 +1071,7 @@ GLint GetUniformLocation(GLuint program, char* name) {
     Program &p = programs[program];
     assert(p.impl);
     GLint loc = p.impl->get_uniform(name);
-    printf("location: %d\n", loc);
+    debugf("location: %d\n", loc);
     return loc;
 }
 
@@ -1088,7 +1094,7 @@ void BeginQuery(GLenum target, GLuint id) {
         q.value = get_time_value();
         break;
     default:
-        printf("unknown query target %x for query %d\n", target, id);
+        debugf("unknown query target %x for query %d\n", target, id);
         assert(false);
     }
 }
@@ -1102,7 +1108,7 @@ void EndQuery(GLenum target) {
         q.value = get_time_value() - q.value;
         break;
     default:
-        printf("unknown query target %x for query %d\n", target, current_query[target]);
+        debugf("unknown query target %x for query %d\n", target, current_query[target]);
         assert(false);
     }
     current_query[target] = 0;
@@ -1225,7 +1231,7 @@ GLenum internal_format_for_data(GLenum format, GLenum ty) {
     } else if (format == GL_RGBA_INTEGER && ty == GL_INT) {
         return GL_RGBA32I;
     } else {
-        printf("unknown internal format for format %x, type %x\n", format, ty);
+        debugf("unknown internal format for format %x, type %x\n", format, ty);
         assert(false);
         return 0;
     }
@@ -1523,7 +1529,7 @@ void VertexAttribPointer(GLuint index,
         GLsizei stride,
         GLuint offset)
 {
-        printf("cva: %d\n", current_vertex_array);
+        debugf("cva: %d\n", current_vertex_array);
         VertexArray &v = vertex_arrays[current_vertex_array];
         VertexAttrib &va = v.attribs[index];
         va.size = size * bytes_per_type(type);
@@ -1543,7 +1549,7 @@ void VertexAttribIPointer(GLuint index,
         GLsizei stride,
         GLuint offset)
 {
-        printf("cva: %d\n", current_vertex_array);
+        debugf("cva: %d\n", current_vertex_array);
         VertexArray &v = vertex_arrays[current_vertex_array];
         VertexAttrib &va = v.attribs[index];
         va.size = size * bytes_per_type(type);
@@ -1608,7 +1614,7 @@ void BufferSubData(GLenum target,
 }
 
 void Uniform1i(GLint location, GLint V0) {
-    printf("tex: %d\n", texture_count);
+    debugf("tex: %d\n", texture_count);
     Program &p = programs[current_program];
     assert(p.impl);
     if (!p.impl->set_sampler(location, V0)) {
@@ -1814,11 +1820,11 @@ void ReadPixels(GLint x, GLint y, GLsizei width, GLsizei height, GLenum format, 
     assert(format == GL_RED || format == GL_RGBA || format == GL_RGBA_INTEGER || format == GL_BGRA);
     Texture &t = textures[fb->color_attachment];
     if (!t.buf) return;
-    printf("read pixels %d, %d, %d, %d from fb %d with format %x\n", x, y, width, height, current_framebuffer[GL_READ_FRAMEBUFFER], t.internal_format);
+    debugf("read pixels %d, %d, %d, %d from fb %d with format %x\n", x, y, width, height, current_framebuffer[GL_READ_FRAMEBUFFER], t.internal_format);
     assert(x + width <= t.width);
     assert(y + height <= t.height);
     if (internal_format_for_data(format, type) != t.internal_format) {
-        printf("mismatched format for read pixels: %x vs %x\n", t.internal_format, internal_format_for_data(format, type));
+        debugf("mismatched format for read pixels: %x vs %x\n", t.internal_format, internal_format_for_data(format, type));
         assert(false);
     }
     int bpp = bytes_for_internal_format(t.internal_format);
@@ -1867,7 +1873,7 @@ void CopyImageSubData(
     assert(srctex.internal_format == dsttex.internal_format);
     assert(srcX + srcWidth <= srctex.width);
     assert(srcY + srcHeight <= srctex.height);
-    assert(srcZ + srcDepth <= srctex.depth);
+    assert(srcZ + srcDepth <= std::max(srctex.depth, 1));
     assert(dstX + srcWidth <= dsttex.width);
     assert(dstY + srcHeight <= dsttex.height);
     assert(dstZ + srcDepth <= std::max(dsttex.depth, 1));
@@ -2287,7 +2293,7 @@ static inline void draw_quad_spans(int nump, Point p[4], uint16_t z, Interpolant
             r0 = p[r0i];
             l1 = p[l1i];
             r1 = p[r1i];
-        //    printf("l0: %d(%f,%f), r0: %d(%f,%f) -> l1: %d(%f,%f), r1: %d(%f,%f)\n", l0i, l0.x, l0.y, r0i, r0.x, r0.y, l1i, l1.x, l1.y, r1i, r1.x, r1.y);
+        //    debugf("l0: %d(%f,%f), r0: %d(%f,%f) -> l1: %d(%f,%f), r1: %d(%f,%f)\n", l0i, l0.x, l0.y, r0i, r0.x, r0.y, l1i, l1.x, l1.y, r1i, r1.x, r1.y);
         }
 
         float lx = l0.x;
@@ -2418,9 +2424,9 @@ void draw_quad(int nump, Texture& colortex, int layer, Texture& depthtex) {
         for (int k = 0; k < 4; k++)
         {
         //        vec4 pos = vertex_shader.gl_Position;
-        //        printf("%f %f %f %f\n", pos.x[k], pos.y[k], pos.z[k], pos.y[k]);
+        //        debugf("%f %f %f %f\n", pos.x[k], pos.y[k], pos.z[k], pos.y[k]);
                 p[k] = Point { screen.x[k], screen.y[k] };
-        //        printf("%f %f\n", p[k].x, p[k].y);
+        //        debugf("%f %f\n", p[k].x, p[k].y);
         }
 
         auto top_left = p[0];
@@ -2431,7 +2437,7 @@ void draw_quad(int nump, Texture& colortex, int layer, Texture& depthtex) {
             bot_right.x = std::max(bot_right.x, p[i].x);
             bot_right.y = std::max(bot_right.y, p[i].y);
         }
-        //printf("bbox: %f %f %f %f\n", top_left.x, top_left.y, bot_right.x, bot_right.y);
+        //debugf("bbox: %f %f %f %f\n", top_left.x, top_left.y, bot_right.x, bot_right.y);
 
         float fx0 = 0;
         float fy0 = 0;
@@ -2472,7 +2478,7 @@ void VertexArray::validate() {
             Buffer &vertex_buf = buffers[attr.vertex_buffer];
             attr.buf = vertex_buf.buf;
             attr.buf_size = vertex_buf.size;
-            //printf("%d %x %d %d %d %d\n", i, attr.type, attr.size, attr.stride, attr.offset, attr.divisor);
+            //debugf("%d %x %d %d %d %d\n", i, attr.type, attr.size, attr.stride, attr.offset, attr.divisor);
         }
     }
 }
@@ -2499,8 +2505,8 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
         }
 
         Buffer &indices_buf = buffers[current_buffer[GL_ELEMENT_ARRAY_BUFFER]];
-        //printf("current_vertex_array %d\n", current_vertex_array);
-        //printf("indices size: %d\n", indices_buf.size);
+        //debugf("current_vertex_array %d\n", current_vertex_array);
+        //debugf("indices size: %d\n", indices_buf.size);
         VertexArray &v = vertex_arrays[current_vertex_array];
         if (validate_vertex_array) {
             validate_vertex_array = false;
@@ -2522,18 +2528,18 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
                         unsigned short *indices = (unsigned short*)indices_buf.buf;
                         if (mode == GL_QUADS) for (int i = 0; i + 4 <= count; i += 4) {
                                 vertex_shader.load_attribs(p.impl, v.attribs, indices, i, instance, 4);
-                                //printf("native quad %d %d %d %d\n", indices[i], indices[i+1], indices[i+2], indices[i+3]);
+                                //debugf("native quad %d %d %d %d\n", indices[i], indices[i+1], indices[i+2], indices[i+3]);
                                 draw_quad(4, colortex, fb.layer, depthtex);
                         } else for (int i = 0; i + 3 <= count; i += 3) {
                                 if (i + 6 <= count && indices[i+3] == indices[i+2] && indices[i+4] == indices[i+1]) {
                                     unsigned short quad_indices[4] = { indices[i], indices[i+1], indices[i+5], indices[i+2] };
                                     vertex_shader.load_attribs(p.impl, v.attribs, quad_indices, 0, instance, 4);
-                                    //printf("emulate quad %d %d %d %d\n", indices[i], indices[i+1], indices[i+5], indices[i+2]);
+                                    //debugf("emulate quad %d %d %d %d\n", indices[i], indices[i+1], indices[i+5], indices[i+2]);
                                     draw_quad(4, colortex, fb.layer, depthtex);
                                     i += 3;
                                 } else {
                                     vertex_shader.load_attribs(p.impl, v.attribs, indices, i, instance, 3);
-                                    //printf("triangle %d %d %d %d\n", indices[i], indices[i+1], indices[i+2]);
+                                    //debugf("triangle %d %d %d %d\n", indices[i], indices[i+1], indices[i+2]);
                                     draw_quad(3, colortex, fb.layer, depthtex);
                                 }
                          }
@@ -2550,7 +2556,7 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
         }
 
         uint64_t end = get_time_value();
-        printf("draw(%d): %fms for %d pixels in %d rows (avg %f pixels/row, %f ns/pixel)\n", instancecount, double(end - start)/(1000.*1000.), shaded_pixels, shaded_rows, double(shaded_pixels)/shaded_rows, double(end - start)/std::max(shaded_pixels, 1));
+        debugf("draw(%d): %fms for %d pixels in %d rows (avg %f pixels/row, %f ns/pixel)\n", instancecount, double(end - start)/(1000.*1000.), shaded_pixels, shaded_rows, double(shaded_pixels)/shaded_rows, double(end - start)/std::max(shaded_pixels, 1));
 }
 
 void Finish() {
