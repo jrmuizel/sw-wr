@@ -1069,6 +1069,12 @@ void BindAttribLocation(GLuint program, GLuint index, char *name) {
     p.attribs[name] = index;
 }
 
+GLint GetAttribLocation(GLuint program, char* name) {
+    Program &p = programs[program];
+    auto i = p.attribs.find(name);
+    return i != p.attribs.end() ? i->second : -1;
+}
+
 GLint GetUniformLocation(GLuint program, char* name) {
     Program &p = programs[program];
     assert(p.impl);

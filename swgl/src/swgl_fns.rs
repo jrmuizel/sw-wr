@@ -119,6 +119,7 @@ extern "C" {
     );
     fn GetUniformLocation(program: GLuint, name: *const GLchar) -> GLint;
     fn BindAttribLocation(program: GLuint, index: GLuint, name: *const GLchar);
+    fn GetAttribLocation(program: GLuint, name: *const GLchar) -> GLint;
     fn GenVertexArrays(n: i32, result: *mut u32);
     fn VertexAttribPointer(
         index: GLuint,
@@ -1675,8 +1676,10 @@ impl Gl for SwGlFns {
     }
 
     fn get_attrib_location(&self, program: GLuint, name: &str) -> c_int {
-        panic!();
-        0
+        let name = CString::new(name).unwrap();
+        unsafe {
+            GetAttribLocation(program, name.as_ptr())
+        }
     }
 
     fn get_frag_data_location(&self, program: GLuint, name: &str) -> c_int {
