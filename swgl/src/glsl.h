@@ -563,6 +563,8 @@ Float ceil(Float v) {
 
     I32 roundto(Float v, Float scale) { return _mm_cvtps_epi32(v*scale); }
 
+Float round(Float v) { return floor(v + 0.5f); }
+
 Float fract(Float v) { return v - floor(v); }
 
 Float fwidth(Float p) {
