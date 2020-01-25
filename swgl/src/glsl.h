@@ -561,7 +561,7 @@ Float ceil(Float v) {
     }
 
 
-    I32 round(Float v, Float scale) { return _mm_cvtps_epi32(v*scale); }
+    I32 roundto(Float v, Float scale) { return _mm_cvtps_epi32(v*scale); }
 
 Float fract(Float v) { return v - floor(v); }
 
@@ -587,7 +587,7 @@ Float approx_log2(Float x) {
 }
 Float approx_pow2(Float x) {
     Float f = fract(x);
-    return bit_cast<Float>(round(1.0f * (1<<23),
+    return bit_cast<Float>(roundto(1.0f * (1<<23),
                              x + 121.274057500f
                                -   1.490129070f * f
                                +  27.728023300f / (4.84252568f - f)));
@@ -2390,7 +2390,7 @@ vec4 texture(sampler2D sampler, vec2 P) {
             return textureLinearR8(sampler, P);
         }
     } else {
-        ivec2 coord(round(P.x, sampler->width), round(P.y, sampler->height));
+        ivec2 coord(roundto(P.x, sampler->width), roundto(P.y, sampler->height));
         return texelFetch(sampler, coord, 0);
     }
 }
@@ -2402,7 +2402,7 @@ vec4 texture(sampler2DArray sampler, vec3 P, Float layer) {
 
 vec4 texture(sampler2DArray sampler, vec3 P) {
     if (sampler->filter == TextureFilter::LINEAR) {
-        I32 zoffset = clampCoord(round(P.z, 1.0f), sampler->depth) * sampler->height_stride;
+        I32 zoffset = clampCoord(roundto(P.z, 1.0f), sampler->depth) * sampler->height_stride;
         if (sampler->format == TextureFormat::RGBA32F) {
             return textureLinearRGBA32F(sampler, vec2(P.x, P.y), zoffset);
         } else if (sampler->format == TextureFormat::RGBA8) {
@@ -2413,7 +2413,7 @@ vec4 texture(sampler2DArray sampler, vec3 P) {
         }
     } else {
         // just do nearest for now
-        ivec3 coord(round(P.x, sampler->width), round(P.y, sampler->height), round(P.z, 1.0f));
+        ivec3 coord(roundto(P.x, sampler->width), roundto(P.y, sampler->height), roundto(P.z, 1.0f));
         return texelFetch(sampler, coord, 0);
     }
 }
