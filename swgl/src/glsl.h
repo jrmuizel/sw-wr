@@ -568,7 +568,8 @@ Float round(Float v) { return floor(v + 0.5f); }
 Float fract(Float v) { return v - floor(v); }
 
 Float fwidth(Float p) {
-        return abs(p.yyww - p.xxzz) - abs(p.zwzw - p.xyxy);
+        Float a = abs(p.yyyy - p.xxxx);
+        return a + a;
 }
 
 vec2 fwidth(vec2 p) {
