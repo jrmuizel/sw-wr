@@ -2002,6 +2002,22 @@ void Composite(
     const int bpp = 4;
     int src_stride = aligned_stride(bpp * srctex.width);
     int dest_stride = aligned_stride(bpp * dsttex.width);
+    if (srcY < 0) {
+        dstY -= srcY;
+        srcHeight += srcY;
+        srcY = 0;
+    }
+    if (dstY < 0) {
+        srcY -= dstY;
+        srcHeight += dstY;
+        dstY = 0;
+    }
+    if (srcY + srcHeight > srctex.height) {
+        srcHeight = srctex.height - srcY;
+    }
+    if (dstY + srcHeight > dsttex.height) {
+        srcHeight = dsttex.height - dstY;
+    }
     char *dest = dsttex.buf + (flip ? dsttex.height - 1 - dstY : dstY) * dest_stride + dstX * bpp;
     char *src = srctex.buf + srcY * src_stride + srcX * bpp;
     if (flip) {
