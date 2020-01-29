@@ -1378,7 +1378,18 @@ impl Gl for SwGlFns {
         element_type: GLenum,
         indices_offset: GLuint,
     ) {
-        panic!();
+        debug!("draw_elements {} {} {} {} {}",
+                 mode, count, element_type, indices_offset);
+        //panic!();
+        unsafe {
+            DrawElementsInstanced(
+                mode,
+                count,
+                element_type,
+                indices_offset as *const c_void,
+                1,
+            );
+        }
     }
 
     fn draw_elements_instanced(
