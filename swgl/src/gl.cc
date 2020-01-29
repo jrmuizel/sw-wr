@@ -639,11 +639,13 @@ void load_attrib(T& attrib, VertexAttrib &va, unsigned short *indices, int start
         attrib = T(load_attrib_scalar<scalar_type>(src, va.size, va.type, va.normalized));
     } else if (va.divisor == 0) {
         assert(sizeof(typename ElementType<T>::ty) == bytes_per_type(va.type));
-        for (int n = 0; n < count; n++) {
-            char* src = (char*)va.buf + va.stride * indices[start + n] + va.offset;
-            assert(src + va.size <= va.buf + va.buf_size);
-            put_nth(attrib, n, load_attrib_scalar<scalar_type>(src, va.size, va.type, va.normalized));
-        }
+        assert(count == 3 || count == 4);
+        attrib = (T){
+            load_attrib_scalar<scalar_type>((char*)va.buf + va.stride * indices[start + 0] + va.offset, va.size, va.type, va.normalized),
+            load_attrib_scalar<scalar_type>((char*)va.buf + va.stride * indices[start + 1] + va.offset, va.size, va.type, va.normalized),
+            load_attrib_scalar<scalar_type>((char*)va.buf + va.stride * indices[start + 2] + va.offset, va.size, va.type, va.normalized),
+            load_attrib_scalar<scalar_type>((char*)va.buf + va.stride * indices[start + (count > 3 ? 3 : 2)] + va.offset, va.size, va.type, va.normalized),
+        };
     } else {
         assert(false);
     }
