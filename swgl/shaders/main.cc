@@ -39,13 +39,17 @@ struct VertexAttrib {
         char *buf; // XXX: this can easily dangle
 };
 
+struct VertexShaderImpl;
+struct FragmentShaderImpl;
+
 struct ProgramImpl {
     virtual ~ProgramImpl() {}
     virtual const char *get_name() const = 0;
     virtual int get_uniform(const char *name) const = 0;
     virtual bool set_sampler(int index, int value) = 0;
     virtual void bind_attrib(const char *name, int index) = 0;
-    virtual void init_shaders(void *vertex_shader, void *fragment_shader) = 0;
+    virtual VertexShaderImpl* get_vertex_shader() = 0;
+    virtual FragmentShaderImpl* get_fragment_shader() = 0;
 };
 
 struct ShaderImpl {

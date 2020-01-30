@@ -241,13 +241,17 @@ struct Shader {
     std::string name;
 };
 
+struct VertexShaderImpl;
+struct FragmentShaderImpl;
+
 struct ProgramImpl {
     virtual ~ProgramImpl() {}
     virtual const char *get_name() const = 0;
     virtual int get_uniform(const char *name) const = 0;
     virtual bool set_sampler(int index, int value) = 0;
     virtual void bind_attrib(const char *name, int index) = 0;
-    virtual void init_shaders(void *vertex_shader, void *fragment_shader) = 0;
+    virtual VertexShaderImpl* get_vertex_shader() = 0;
+    virtual FragmentShaderImpl* get_fragment_shader() = 0;
 };
 
 struct Program {
@@ -255,10 +259,14 @@ struct Program {
     std::string fs_name;
     std::map<std::string, int> attribs;
     ProgramImpl* impl = nullptr;
+    VertexShaderImpl* vert_impl = nullptr;
+    FragmentShaderImpl* frag_impl = nullptr;
     bool deleted = false;
 
     ~Program() {
         delete impl;
+        delete vert_impl;
+        delete frag_impl;
     }
 };
 
@@ -270,22 +278,17 @@ struct ShaderImpl {
     SetUniform1iFunc set_uniform_1i_func = nullptr;
     SetUniform4fvFunc set_uniform_4fv_func = nullptr;
     SetUniformMatrix4fvFunc set_uniform_matrix4fv_func = nullptr;
-};
-
-template<typename T>
-struct ShaderCommon : T {
-    char impl_data[1024];
 
     void set_uniform_1i(int index, int value) {
-       (*ShaderImpl::set_uniform_1i_func)(this, index, value);
+       (*set_uniform_1i_func)(this, index, value);
     }
 
     void set_uniform_4fv(int index, const float *value) {
-       (*ShaderImpl::set_uniform_4fv_func)(this, index, value);
+       (*set_uniform_4fv_func)(this, index, value);
     }
 
     void set_uniform_matrix4fv(int index, const float *value) {
-       (*ShaderImpl::set_uniform_matrix4fv_func)(this, index, value);
+       (*set_uniform_matrix4fv_func)(this, index, value);
     }
 };
 
@@ -299,9 +302,7 @@ struct VertexShaderImpl : ShaderImpl {
     RunFunc run_func = nullptr;
 
     vec4 gl_Position;
-};
 
-struct VertexShader : ShaderCommon<VertexShaderImpl> {
     void init_batch(ProgramImpl *prog) {
         (*init_batch_func)(this, prog);
     }
@@ -313,7 +314,8 @@ struct VertexShader : ShaderCommon<VertexShaderImpl> {
     ALWAYS_INLINE void run(char* flats, char* interps, size_t interp_stride) {
         (*run_func)(this, flats, interps, interp_stride);
     }
-} vertex_shader;
+};
+VertexShaderImpl* vertex_shader = nullptr;
 
 GLuint current_program = 0;
 
@@ -340,9 +342,7 @@ struct FragmentShaderImpl : ShaderImpl {
     ALWAYS_INLINE void step_fragcoord() {
         gl_FragCoord.x += 4;
     }
-};
 
-struct FragmentShader : ShaderCommon<FragmentShaderImpl> {
     void init_batch(ProgramImpl *prog) {
         (*init_batch_func)(this, prog);
     }
@@ -366,7 +366,8 @@ struct FragmentShader : ShaderCommon<FragmentShaderImpl> {
     ALWAYS_INLINE bool use_discard() {
         return (*use_discard_func)(this);
     }
-} fragment_shader;
+};
+FragmentShaderImpl* fragment_shader = nullptr;
 
 map<GLuint, Query> queries;
 map<GLuint, Buffer> buffers;
@@ -691,7 +692,10 @@ void UseProgram(GLuint program) {
     }
     Program &p = programs[program];
     assert(p.impl);
-    p.impl->init_shaders(&vertex_shader, &fragment_shader);
+    assert(p.vert_impl);
+    assert(p.frag_impl);
+    vertex_shader = p.vert_impl;
+    fragment_shader = p.frag_impl;
 }
 
 void SetViewport(GLint x, GLint y, GLsizei width, GLsizei height) {
@@ -1064,6 +1068,9 @@ void LinkProgram(GLuint program) {
     for (auto i : p.attribs) {
         p.impl->bind_attrib(i.first.c_str(), i.second);
     }
+
+    p.vert_impl = p.impl->get_vertex_shader();
+    p.frag_impl = p.impl->get_fragment_shader();
 }
 
 void BindAttribLocation(GLuint program, GLuint index, char *name) {
@@ -1628,20 +1635,20 @@ void Uniform1i(GLint location, GLint V0) {
     Program &p = programs[current_program];
     assert(p.impl);
     if (!p.impl->set_sampler(location, V0)) {
-        vertex_shader.set_uniform_1i(location, V0);
-        fragment_shader.set_uniform_1i(location, V0);
+        vertex_shader->set_uniform_1i(location, V0);
+        fragment_shader->set_uniform_1i(location, V0);
     }
 }
 void Uniform4fv(GLint location, GLsizei count, const GLfloat *v) {
-        vertex_shader.set_uniform_4fv(location, v);
-        fragment_shader.set_uniform_4fv(location, v);
+        vertex_shader->set_uniform_4fv(location, v);
+        fragment_shader->set_uniform_4fv(location, v);
 }
 void UniformMatrix4fv(GLint location,
  	GLsizei count,
  	GLboolean transpose,
  	const GLfloat *value) {
-        vertex_shader.set_uniform_matrix4fv(location, value);
-        fragment_shader.set_uniform_matrix4fv(location, value);
+        vertex_shader->set_uniform_matrix4fv(location, value);
+        fragment_shader->set_uniform_matrix4fv(location, value);
 }
 
 
@@ -2136,7 +2143,7 @@ static inline int check_depth(uint16_t z, uint16_t* zbuf, __m128i& outmask, int 
 }
 
 static inline __m128i pack_pixels_RGBA8() {
-    auto output = fragment_shader.gl_FragColor * 255.49f;
+    auto output = fragment_shader->gl_FragColor * 255.49f;
     __m128i rxz = _mm_packs_epi32(_mm_cvtps_epi32(output.x), _mm_cvtps_epi32(output.z));
     __m128i ryw = _mm_packs_epi32(_mm_cvtps_epi32(output.y), _mm_cvtps_epi32(output.w));
     __m128i rxy = _mm_unpacklo_epi16(rxz, ryw);
@@ -2147,7 +2154,7 @@ static inline __m128i pack_pixels_RGBA8() {
 }
 
 static inline __m128i blend_pixels_RGBA8(__m128i dst) {
-    auto output = fragment_shader.gl_FragColor * 255.49f;
+    auto output = fragment_shader->gl_FragColor * 255.49f;
     __m128i sxz = _mm_packs_epi32(_mm_cvtps_epi32(output.x), _mm_cvtps_epi32(output.z));
     __m128i syw = _mm_packs_epi32(_mm_cvtps_epi32(output.y), _mm_cvtps_epi32(output.w));
     __m128i sxy = _mm_unpacklo_epi16(sxz, syw);
@@ -2218,7 +2225,7 @@ static inline __m128i blend_pixels_RGBA8(__m128i dst) {
                 _mm_add_epi16(dhi, muldiv255(_mm_sub_epi16(blendcolor, dhi), shi)));
         break;
     case BLEND_KEY(GL_ONE, GL_ONE_MINUS_SRC1_COLOR): {
-        auto secondary = fragment_shader.gl_SecondaryFragColor * 255.49f;
+        auto secondary = fragment_shader->gl_SecondaryFragColor * 255.49f;
         __m128i s1xz = _mm_packs_epi32(_mm_cvtps_epi32(secondary.x), _mm_cvtps_epi32(secondary.z));
         __m128i s1yw = _mm_packs_epi32(_mm_cvtps_epi32(secondary.y), _mm_cvtps_epi32(secondary.w));
         __m128i s1xy = _mm_unpacklo_epi16(s1xz, s1yw);
@@ -2239,10 +2246,10 @@ static inline __m128i blend_pixels_RGBA8(__m128i dst) {
 
 template<bool DISCARD>
 static inline void commit_output(uint32_t* buf, __m128i mask) {
-    fragment_shader.run();
+    fragment_shader->run();
     __m128i dst = _mm_loadu_si128((__m128i*)buf);
     __m128i r = blend ? blend_pixels_RGBA8(dst) : pack_pixels_RGBA8();
-    if (DISCARD) mask = _mm_or_si128(mask, fragment_shader.isPixelDiscarded);
+    if (DISCARD) mask = _mm_or_si128(mask, fragment_shader->isPixelDiscarded);
     _mm_storeu_si128((__m128i*)buf,
         _mm_or_si128(_mm_and_si128(mask, dst),
                      _mm_andnot_si128(mask, r)));
@@ -2255,7 +2262,7 @@ static inline void commit_output(uint32_t* buf) {
 
 template<>
 static inline void commit_output<false>(uint32_t* buf) {
-    fragment_shader.run();
+    fragment_shader->run();
     __m128i r = blend ? blend_pixels_RGBA8(_mm_loadu_si128((__m128i*)buf)) : pack_pixels_RGBA8();
     _mm_storeu_si128((__m128i*)buf, r);
 }
@@ -2266,7 +2273,7 @@ static inline void commit_output(uint32_t* buf, uint16_t z, uint16_t* zbuf) {
     if (check_depth<1>(z, zbuf, mask)) {
         commit_output<DISCARD>(buf, _mm_unpacklo_epi16(mask, mask));
     } else {
-        fragment_shader.skip();
+        fragment_shader->skip();
     }
 }
 
@@ -2284,12 +2291,12 @@ static inline void commit_output(uint32_t* buf, int span) {
 }
 
 static inline __m128i pack_pixels_R8() {
-    auto output = fragment_shader.gl_FragColor * 255.49f;
+    auto output = fragment_shader->gl_FragColor * 255.49f;
     return _mm_packs_epi32(_mm_cvtps_epi32(output.x), _mm_setzero_si128());
 }
 
 static inline __m128i blend_pixels_R8(__m128i dst) {
-    auto output = fragment_shader.gl_FragColor * 255.49f;
+    auto output = fragment_shader->gl_FragColor * 255.49f;
     __m128i src = _mm_packs_epi32(_mm_cvtps_epi32(output.x), _mm_setzero_si128());
     __m128i r;
     switch (blend_key) {
@@ -2314,10 +2321,10 @@ static inline __m128i blend_pixels_R8(__m128i dst) {
 
 template<bool DISCARD>
 static inline void commit_output(uint8_t* buf, __m128i mask) {
-    fragment_shader.run();
+    fragment_shader->run();
     __m128i dst = _mm_unpacklo_epi8(_mm_loadu_si32(buf), _mm_setzero_si128());
     __m128i r = blend ? blend_pixels_R8(dst) : pack_pixels_R8();
-    if (DISCARD) mask = _mm_or_si128(mask, _mm_packs_epi32(fragment_shader.isPixelDiscarded, _mm_setzero_si128()));
+    if (DISCARD) mask = _mm_or_si128(mask, _mm_packs_epi32(fragment_shader->isPixelDiscarded, _mm_setzero_si128()));
     r = _mm_or_si128(_mm_and_si128(mask, dst), _mm_andnot_si128(mask, r));
     _mm_storeu_si32(buf, _mm_packus_epi16(r, r));
 }
@@ -2329,7 +2336,7 @@ static inline void commit_output(uint8_t* buf) {
 
 template<>
 static inline void commit_output<false>(uint8_t* buf) {
-    fragment_shader.run();
+    fragment_shader->run();
     __m128i r = blend ? blend_pixels_R8(_mm_unpacklo_epi8(_mm_loadu_si32(buf), _mm_setzero_si128())) : pack_pixels_R8();
     _mm_storeu_si32(buf, _mm_packus_epi16(r, r));
 }
@@ -2340,7 +2347,7 @@ static inline void commit_output(uint8_t* buf, uint16_t z, uint16_t* zbuf) {
     if (check_depth<1>(z, zbuf, mask)) {
         commit_output<DISCARD>(buf, mask);
     } else {
-        fragment_shader.skip();
+        fragment_shader->skip();
     }
 }
 
@@ -2448,23 +2455,23 @@ static inline void draw_quad_spans(int nump, Point p[4], uint16_t z, Interpolant
             if (span > 0) {
                 shaded_rows++;
                 shaded_pixels += span;
-                fragment_shader.gl_FragCoord.x = init_interp(startx + 0.5f, 1);
-                fragment_shader.gl_FragCoord.y = y;
+                fragment_shader->gl_FragCoord.x = init_interp(startx + 0.5f, 1);
+                fragment_shader->gl_FragCoord.y = y;
                 {
                     Interpolants step = (ro - lo) * (1.0f / (rx - lx));
                     Interpolants o = lo + step * (startx + 0.5f - lx);
-                    fragment_shader.init_span(&o, &step, 4.0f);
+                    fragment_shader->init_span(&o, &step, 4.0f);
                 }
                 P* buf = fbuf + startx;
                 uint16_t* depth = fdepth + startx;
-                if (!fragment_shader.use_discard()) {
+                if (!fragment_shader->use_discard()) {
                     if (fdepth) {
                         for (; span >= 8; span -= 8, buf += 8, depth += 8) {
                             __m128i zmask;
                             switch (check_depth<2>(z, depth, zmask)) {
                             case 0:
-                                fragment_shader.skip();
-                                fragment_shader.skip();
+                                fragment_shader->skip();
+                                fragment_shader->skip();
                                 break;
                             case -1:
                                 commit_output<false>(buf);
@@ -2521,14 +2528,14 @@ static inline void draw_quad_spans(int nump, Point p[4], uint16_t z, Interpolant
 void draw_quad(int nump, Texture& colortex, int layer, Texture& depthtex) {
         Flats flat_outs;
         Interpolants interp_outs[4] = { 0 };
-        vertex_shader.run((char *)flat_outs, (char *)interp_outs, sizeof(Interpolants));
-        Float w = 1.0f / vertex_shader.gl_Position.w;
-        vec3 clip = vertex_shader.gl_Position.sel(X, Y, Z) * w;
+        vertex_shader->run((char *)flat_outs, (char *)interp_outs, sizeof(Interpolants));
+        Float w = 1.0f / vertex_shader->gl_Position.w;
+        vec3 clip = vertex_shader->gl_Position.sel(X, Y, Z) * w;
         Point p[4];
         vec3 screen = (clip + 1)*vec3(viewport.width/2, viewport.height/2, 0.5f) + vec3(viewport.x, viewport.y, 0);
         for (int k = 0; k < 4; k++)
         {
-        //        vec4 pos = vertex_shader.gl_Position;
+        //        vec4 pos = vertex_shader->gl_Position;
         //        debugf("%f %f %f %f\n", pos.x[k], pos.y[k], pos.z[k], pos.y[k]);
                 p[k] = Point { screen.x[k], screen.y[k] };
         //        debugf("%f %f\n", p[k].x, p[k].y);
@@ -2561,10 +2568,10 @@ void draw_quad(int nump, Texture& colortex, int layer, Texture& depthtex) {
 
         // SSE2 does not support unsigned comparison, so bias Z to be negative.
         uint16_t z = uint16_t(0xFFFF * screen.z.x) - 0x8000;
-        fragment_shader.gl_FragCoord.z = screen.z.x;
-        fragment_shader.gl_FragCoord.w = w.x;
+        fragment_shader->gl_FragCoord.z = screen.z.x;
+        fragment_shader->gl_FragCoord.w = w.x;
 
-        fragment_shader.init_primitive(flat_outs);
+        fragment_shader->init_primitive(flat_outs);
 
         if (colortex.internal_format == GL_RGBA8) {
             draw_quad_spans<uint32_t>(nump, p, z, interp_outs, colortex, layer, depthtex, fx0, fy0, fx1, fy1);
@@ -2641,22 +2648,22 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
 
         Program &p = programs[current_program];
         assert(p.impl);
-        vertex_shader.init_batch(p.impl);
-        fragment_shader.init_batch(p.impl);
+        vertex_shader->init_batch(p.impl);
+        fragment_shader->init_batch(p.impl);
         for (int instance = 0; instance < instancecount; instance++) {
             if (mode == GL_QUADS) for (int i = 0; i + 4 <= count; i += 4) {
-                vertex_shader.load_attribs(p.impl, v.attribs, indices, i, instance, 4);
+                vertex_shader->load_attribs(p.impl, v.attribs, indices, i, instance, 4);
                 //debugf("native quad %d %d %d %d\n", indices[i], indices[i+1], indices[i+2], indices[i+3]);
                 draw_quad(4, colortex, fb.layer, depthtex);
             } else for (int i = 0; i + 3 <= count; i += 3) {
                 if (i + 6 <= count && indices[i+3] == indices[i+2] && indices[i+4] == indices[i+1]) {
                     unsigned short quad_indices[4] = { indices[i], indices[i+1], indices[i+5], indices[i+2] };
-                    vertex_shader.load_attribs(p.impl, v.attribs, quad_indices, 0, instance, 4);
+                    vertex_shader->load_attribs(p.impl, v.attribs, quad_indices, 0, instance, 4);
                     //debugf("emulate quad %d %d %d %d\n", indices[i], indices[i+1], indices[i+5], indices[i+2]);
                     draw_quad(4, colortex, fb.layer, depthtex);
                     i += 3;
                 } else {
-                    vertex_shader.load_attribs(p.impl, v.attribs, indices, i, instance, 3);
+                    vertex_shader->load_attribs(p.impl, v.attribs, indices, i, instance, 3);
                     //debugf("triangle %d %d %d %d\n", indices[i], indices[i+1], indices[i+2]);
                     draw_quad(3, colortex, fb.layer, depthtex);
                 }
