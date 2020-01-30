@@ -232,8 +232,6 @@ struct VertexArray {
     void validate();
 };
 
-bool validate_vertex_array = true;
-
 #define GL_VERTEX_SHADER                  0x8B31
 #define GL_FRAGMENT_SHADER                0x8B30
 struct Shader {
@@ -315,9 +313,6 @@ struct VertexShaderImpl : ShaderImpl {
         (*run_func)(this, flats, interps, interp_stride);
     }
 };
-VertexShaderImpl* vertex_shader = nullptr;
-
-GLuint current_program = 0;
 
 struct FragmentShaderImpl : ShaderImpl {
     typedef void (*InitBatchFunc)(FragmentShaderImpl*, ProgramImpl *prog);
@@ -367,35 +362,6 @@ struct FragmentShaderImpl : ShaderImpl {
         return (*use_discard_func)(this);
     }
 };
-FragmentShaderImpl* fragment_shader = nullptr;
-
-map<GLuint, Query> queries;
-map<GLuint, Buffer> buffers;
-map<GLuint, Texture> textures;
-map<GLuint, VertexArray> vertex_arrays;
-map<GLuint, Framebuffer> framebuffers;
-map<GLuint, Renderbuffer> renderbuffers;
-map<GLuint, Shader> shaders;
-map<GLuint, Program> programs;
-
-GLuint query_count = 1;
-map<GLenum, GLuint> current_query;
-
-GLuint buffer_count = 1;
-map<GLenum, GLuint> current_buffer;
-
-GLuint texture_count = 1;
-map<GLenum, GLuint> current_texture;
-map<GLenum, GLuint> current_framebuffer;
-map<GLenum, GLuint> current_renderbuffer;
-
-GLuint vertex_array_count = 1;
-GLuint current_vertex_array;
-GLuint shader_count = 1;
-
-GLuint renderbuffer_count = 1;
-GLuint framebuffer_count = 1;
-GLuint program_count = 1;
 
 struct Viewport {
 	int x;
@@ -403,8 +369,6 @@ struct Viewport {
 	int width;
 	int height;
 };
-
-Viewport viewport;
 
 #define GL_BLEND                    0x0BE2
 #define GL_ZERO                     0
@@ -426,17 +390,7 @@ Viewport viewport;
 #define GL_ONE_MINUS_SRC1_COLOR     0x88FA
 #define GL_ONE_MINUS_SRC1_ALPHA     0x88FB
 
-bool blend = false;
-GLenum blendfunc_srgb = GL_ONE;
-GLenum blendfunc_drgb = GL_ZERO;
-GLenum blendfunc_sa = GL_ONE;
-GLenum blendfunc_da = GL_ZERO;
-
 #define GL_FUNC_ADD             0x8006
-
-GLenum blend_equation_mode = GL_FUNC_ADD;
-
-__m128i blendcolor = _mm_set1_epi16(0);
 
 // for GL defines to fully expand
 #define CONCAT_KEY(prefix, x, y, z, w, ...) prefix ## x ## y ## z ## w
@@ -462,8 +416,6 @@ enum BlendKey : uint8_t
     FOR_EACH_BLEND_KEY(DEFINE_BLEND_KEY)
 };
 
-BlendKey blend_key = BLEND_KEY_NONE;
-
 #define GL_NEVER                0x0200
 #define GL_LESS                 0x0201
 #define GL_EQUAL                0x0202
@@ -474,13 +426,7 @@ BlendKey blend_key = BLEND_KEY_NONE;
 #define GL_ALWAYS               0x0207
 #define GL_DEPTH_TEST           0x0B71
 
-bool depthtest = false;
-bool depthmask = true;
-GLenum depthfunc = GL_LESS;
-
 #define GL_SCISSOR_TEST             0x0C11
-
-bool scissortest = false;
 
 struct Scissor {
     int x;
@@ -488,11 +434,6 @@ struct Scissor {
     int width;
     int height;
 };
-
-Scissor scissor;
-
-GLfloat clearcolor[4] = { 0, 0, 0, 0 };
-GLdouble cleardepth = 1;
 
 #define GL_TEXTURE0                       0x84C0
 #define GL_TEXTURE1                       0x84C1
@@ -513,12 +454,77 @@ GLdouble cleardepth = 1;
 #define GL_MAX_TEXTURE_UNITS              0x84E2
 #define GL_MAX_TEXTURE_IMAGE_UNITS        0x8872
 
-int active_texture_index;
-#define active_texture(target) current_texture[(target) + (active_texture_index << 16)]
+struct Context {
+    bool validate_vertex_array = true;
+
+    GLuint current_program = 0;
+
+    map<GLuint, Query> queries;
+    map<GLuint, Buffer> buffers;
+    map<GLuint, Texture> textures;
+    map<GLuint, VertexArray> vertex_arrays;
+    map<GLuint, Framebuffer> framebuffers;
+    map<GLuint, Renderbuffer> renderbuffers;
+    map<GLuint, Shader> shaders;
+    map<GLuint, Program> programs;
+
+    GLuint query_count = 1;
+    map<GLenum, GLuint> current_query;
+
+    GLuint buffer_count = 1;
+    map<GLenum, GLuint> current_buffer;
+
+    GLuint texture_count = 1;
+    map<GLenum, GLuint> current_texture;
+    map<GLenum, GLuint> current_framebuffer;
+    map<GLenum, GLuint> current_renderbuffer;
+
+    GLuint vertex_array_count = 1;
+    GLuint current_vertex_array;
+    GLuint shader_count = 1;
+
+    GLuint renderbuffer_count = 1;
+    GLuint framebuffer_count = 1;
+    GLuint program_count = 1;
+
+    Viewport viewport = { 0, 0, 0, 0 };
+
+    bool blend = false;
+    GLenum blendfunc_srgb = GL_ONE;
+    GLenum blendfunc_drgb = GL_ZERO;
+    GLenum blendfunc_sa = GL_ONE;
+    GLenum blendfunc_da = GL_ZERO;
+    GLenum blend_equation = GL_FUNC_ADD;
+    __m128i blendcolor = _mm_set1_epi16(0);
+    BlendKey blend_key = BLEND_KEY_NONE;
+
+    bool depthtest = false;
+    bool depthmask = true;
+    GLenum depthfunc = GL_LESS;
+
+    bool scissortest = false;
+    Scissor scissor = { 0, 0, 0, 0 };
+
+    GLfloat clearcolor[4] = { 0, 0, 0, 0 };
+    GLdouble cleardepth = 1;
+
+    int active_texture_index = 0;
+    #define active_texture(target) ctx->current_texture[(target) + (ctx->active_texture_index << 16)]
+
+    int unpack_row_length = 0;
+
+    int shaded_rows = 0;
+    int shaded_pixels = 0;
+};
+Context default_ctx;
+Context *ctx = &default_ctx;
+ProgramImpl *program_impl = nullptr;
+VertexShaderImpl *vertex_shader = nullptr;
+FragmentShaderImpl *fragment_shader = nullptr;
 
 template<typename S>
 S *lookup_sampler(S *s, int texture) {
-        int tid = current_texture[GL_TEXTURE_2D + (texture << 16)];
+        int tid = ctx->current_texture[GL_TEXTURE_2D + (texture << 16)];
         if (!tid) {
             s->width = 0;
             s->height = 0;
@@ -528,7 +534,7 @@ S *lookup_sampler(S *s, int texture) {
             s->filter = TextureFilter::NEAREST;
             s->swizzle_bgra = false;
         } else {
-            Texture &t = textures[tid];
+            Texture &t = ctx->textures[tid];
             s->width = t.width;
             s->height = t.height;
             int bpp = bytes_for_internal_format(t.internal_format);
@@ -544,7 +550,7 @@ S *lookup_sampler(S *s, int texture) {
 
 template<typename S>
 S *lookup_isampler(S *s, int texture) {
-        int tid = current_texture[GL_TEXTURE_2D + (texture << 16)];
+        int tid = ctx->current_texture[GL_TEXTURE_2D + (texture << 16)];
         if (!tid) {
             s->width = 0;
             s->height = 0;
@@ -552,7 +558,7 @@ S *lookup_isampler(S *s, int texture) {
             s->buf = nullptr;
             s->format = TextureFormat::RGBA32I;
         } else {
-            Texture &t = textures[tid];
+            Texture &t = ctx->textures[tid];
             s->width = t.width;
             s->height = t.height;
             int bpp = bytes_for_internal_format(t.internal_format);
@@ -566,7 +572,7 @@ S *lookup_isampler(S *s, int texture) {
 
 template<typename S>
 S *lookup_sampler_array(S *s, int texture) {
-        int tid = current_texture[GL_TEXTURE_2D_ARRAY + (texture << 16)];
+        int tid = ctx->current_texture[GL_TEXTURE_2D_ARRAY + (texture << 16)];
         if (!tid) {
             s->width = 0;
             s->height = 0;
@@ -578,7 +584,7 @@ S *lookup_sampler_array(S *s, int texture) {
             s->filter = TextureFilter::NEAREST;
             s->swizzle_bgra = false;
         } else {
-            Texture &t = textures[tid];
+            Texture &t = ctx->textures[tid];
             s->width = t.width;
             s->height = t.height;
             s->depth = t.depth;
@@ -677,47 +683,55 @@ void load_flat_attrib(T& attrib, VertexAttrib &va, unsigned short *indices, int 
 
 #include "load_shader.h"
 
-extern "C" {
-
-void UseProgram(GLuint program) {
-    if (current_program && program != current_program) {
-        auto i = programs.find(current_program);
-        if (i != programs.end() && i->second.deleted) {
-            programs.erase(i);
-        }
-    }
-    current_program = program;
+void setup_program(GLuint program) {
     if (!program) {
+        program_impl = nullptr;
+        vertex_shader = nullptr;
+        fragment_shader = nullptr;
         return;
     }
-    Program &p = programs[program];
+    Program &p = ctx->programs[program];
     assert(p.impl);
     assert(p.vert_impl);
     assert(p.frag_impl);
+    program_impl = p.impl;
     vertex_shader = p.vert_impl;
     fragment_shader = p.frag_impl;
 }
 
+extern "C" {
+
+void UseProgram(GLuint program) {
+    if (ctx->current_program && program != ctx->current_program) {
+        auto i = ctx->programs.find(ctx->current_program);
+        if (i != ctx->programs.end() && i->second.deleted) {
+            ctx->programs.erase(i);
+        }
+    }
+    ctx->current_program = program;
+    setup_program(program);
+}
+
 void SetViewport(GLint x, GLint y, GLsizei width, GLsizei height) {
-	viewport.x = x;
-	viewport.y = y;
-	viewport.width = width;
-	viewport.height = height;
+	ctx->viewport.x = x;
+	ctx->viewport.y = y;
+	ctx->viewport.width = width;
+	ctx->viewport.height = height;
 }
 
 void Enable(GLenum cap) {
     switch (cap) {
-    case GL_BLEND: blend = true; break;
-    case GL_DEPTH_TEST: depthtest = true; break;
-    case GL_SCISSOR_TEST: scissortest = true; break;
+    case GL_BLEND: ctx->blend = true; break;
+    case GL_DEPTH_TEST: ctx->depthtest = true; break;
+    case GL_SCISSOR_TEST: ctx->scissortest = true; break;
     }
 }
 
 void Disable(GLenum cap) {
     switch (cap) {
-    case GL_BLEND: blend = false; break;
-    case GL_DEPTH_TEST: depthtest = false; break;
-    case GL_SCISSOR_TEST: scissortest = false; break;
+    case GL_BLEND: ctx->blend = false; break;
+    case GL_DEPTH_TEST: ctx->depthtest = false; break;
+    case GL_SCISSOR_TEST: ctx->scissortest = false; break;
     }
 }
 
@@ -767,23 +781,23 @@ void GetIntegerv(GLenum pname, GLint *params) {
         params[0] = 1 << 15;
         break;
     case GL_READ_FRAMEBUFFER_BINDING: {
-        auto i = current_framebuffer.find(GL_READ_FRAMEBUFFER);
-        params[0] = i != current_framebuffer.end() ? i->second : 0;
+        auto i = ctx->current_framebuffer.find(GL_READ_FRAMEBUFFER);
+        params[0] = i != ctx->current_framebuffer.end() ? i->second : 0;
         break;
     }
     case GL_DRAW_FRAMEBUFFER_BINDING: {
-        auto i = current_framebuffer.find(GL_DRAW_FRAMEBUFFER);
-        params[0] = i != current_framebuffer.end() ? i->second : 0;
+        auto i = ctx->current_framebuffer.find(GL_DRAW_FRAMEBUFFER);
+        params[0] = i != ctx->current_framebuffer.end() ? i->second : 0;
         break;
     }
     case GL_PIXEL_PACK_BUFFER_BINDING: {
-        auto i = current_buffer.find(GL_PIXEL_PACK_BUFFER);
-        params[0] = i != current_buffer.end() ? i->second : 0;
+        auto i = ctx->current_buffer.find(GL_PIXEL_PACK_BUFFER);
+        params[0] = i != ctx->current_buffer.end() ? i->second : 0;
         break;
     }
     case GL_PIXEL_UNPACK_BUFFER_BINDING: {
-        auto i = current_buffer.find(GL_PIXEL_UNPACK_BUFFER);
-        params[0] = i != current_buffer.end() ? i->second : 0;
+        auto i = ctx->current_buffer.find(GL_PIXEL_UNPACK_BUFFER);
+        params[0] = i != ctx->current_buffer.end() ? i->second : 0;
         break;
     }
     case GL_NUM_EXTENSIONS:
@@ -799,7 +813,7 @@ void GetBooleanv(GLenum pname, GLboolean *params) {
     assert(params);
     switch (pname) {
     case GL_DEPTH_WRITEMASK:
-        params[0] = depthmask;
+        params[0] = ctx->depthmask;
         break;
     default:
         debugf("unhandled glGetBooleanv parameter %x\n", pname);
@@ -857,12 +871,12 @@ GLenum remap_blendfunc(GLenum rgb, GLenum a) {
 }
 
 void BlendFunc(GLenum srgb, GLenum drgb, GLenum sa, GLenum da) {
-    blendfunc_srgb = srgb;
-    blendfunc_drgb = drgb;
+    ctx->blendfunc_srgb = srgb;
+    ctx->blendfunc_drgb = drgb;
     sa = remap_blendfunc(srgb, sa);
     da = remap_blendfunc(drgb, da);
-    blendfunc_sa = sa;
-    blendfunc_da = da;
+    ctx->blendfunc_sa = sa;
+    ctx->blendfunc_da = da;
 
     #define HASH_BLEND_KEY(x, y, z, w) ((x << 4) | (y) | (z << 24) | (w << 20))
     int hash = HASH_BLEND_KEY(srgb, drgb, 0, 0);
@@ -870,7 +884,7 @@ void BlendFunc(GLenum srgb, GLenum drgb, GLenum sa, GLenum da) {
     switch (hash) {
     #define MAP_BLEND_KEY(...) \
         case HASH_BLEND_KEY(__VA_ARGS__): \
-            blend_key = BLEND_KEY(__VA_ARGS__); \
+            ctx->blend_key = BLEND_KEY(__VA_ARGS__); \
             break;
     FOR_EACH_BLEND_KEY(MAP_BLEND_KEY)
     default:
@@ -882,16 +896,16 @@ void BlendFunc(GLenum srgb, GLenum drgb, GLenum sa, GLenum da) {
 
 void BlendColor(GLfloat r, GLfloat g, GLfloat b, GLfloat a) {
         __m128i c32 = _mm_cvtps_epi32(_mm_mul_ps(_mm_set_ps(a, b, g, r), _mm_set1_ps(255.49f)));
-        blendcolor = _mm_packs_epi32(c32, c32);
+        ctx->blendcolor = _mm_packs_epi32(c32, c32);
 }
 
 void BlendEquation(GLenum mode) {
         assert(mode == GL_FUNC_ADD);
-        blend_equation_mode = mode;
+        ctx->blend_equation = mode;
 }
 
 void DepthMask(GLboolean flag) {
-    depthmask = flag;
+    ctx->depthmask = flag;
 }
 
 void DepthFunc(GLenum func) {
@@ -902,38 +916,38 @@ void DepthFunc(GLenum func) {
     default:
         assert(false);
     }
-    depthfunc = func;
+    ctx->depthfunc = func;
 }
 
 void SetScissor(GLint x, GLint y, GLsizei width, GLsizei height) {
-    scissor.x = x;
-    scissor.y = y;
-    scissor.width = width;
-    scissor.height = height;
+    ctx->scissor.x = x;
+    ctx->scissor.y = y;
+    ctx->scissor.width = width;
+    ctx->scissor.height = height;
 }
 
 void ClearColor(GLfloat r, GLfloat g, GLfloat b, GLfloat a) {
-    clearcolor[0] = r;
-    clearcolor[1] = g;
-    clearcolor[2] = b;
-    clearcolor[3] = a;
+    ctx->clearcolor[0] = r;
+    ctx->clearcolor[1] = g;
+    ctx->clearcolor[2] = b;
+    ctx->clearcolor[3] = a;
 }
 
 void ClearDepth(GLdouble depth) {
-    cleardepth = depth;
+    ctx->cleardepth = depth;
 }
 
 void ActiveTexture(GLenum texture) {
         assert(texture >= GL_TEXTURE0);
         assert(texture <= GL_TEXTURE15);
-        active_texture_index = texture - GL_TEXTURE0;
+        ctx->active_texture_index = texture - GL_TEXTURE0;
 }
 
 void GenQueries(GLsizei n, GLuint *result) {
         for (int i = 0; i < n; i++) {
                 Query q;
-                queries.insert(pair<GLuint, Query>(query_count, q));
-                result[i] = query_count++;
+                ctx->queries.insert(pair<GLuint, Query>(ctx->query_count, q));
+                result[i] = ctx->query_count++;
         }
 }
 
@@ -941,12 +955,12 @@ void DeleteQuery(GLuint n) {
     if (!n) {
         return;
     }
-    auto i = queries.find(n);
-    if (i == queries.end()) {
+    auto i = ctx->queries.find(n);
+    if (i == ctx->queries.end()) {
         return;
     }
-    queries.erase(i);
-    for (auto& b : current_query) {
+    ctx->queries.erase(i);
+    for (auto& b : ctx->current_query) {
         if (b.second == n) {
             b.second = 0;
         }
@@ -956,8 +970,8 @@ void DeleteQuery(GLuint n) {
 void GenBuffers(int n, int *result) {
         for (int i = 0; i < n; i++) {
                 Buffer b;
-                buffers.insert(pair<GLuint, Buffer>(buffer_count, b));
-                result[i] = buffer_count++;
+                ctx->buffers.insert(pair<GLuint, Buffer>(ctx->buffer_count, b));
+                result[i] = ctx->buffer_count++;
         }
 }
 
@@ -965,12 +979,12 @@ void DeleteBuffer(GLuint n) {
     if (!n) {
         return;
     }
-    auto i = buffers.find(n);
-    if (i == buffers.end()) {
+    auto i = ctx->buffers.find(n);
+    if (i == ctx->buffers.end()) {
         return;
     }
-    buffers.erase(i);
-    for (auto& b : current_buffer) {
+    ctx->buffers.erase(i);
+    for (auto& b : ctx->current_buffer) {
         if (b.second == n) {
             b.second = 0;
         }
@@ -980,8 +994,8 @@ void DeleteBuffer(GLuint n) {
 void GenVertexArrays(int n, int *result) {
         for (int i = 0; i < n; i++) {
                 VertexArray v;
-                vertex_arrays.insert(pair<GLuint, VertexArray>(vertex_array_count, v));
-                result[i] = vertex_array_count++;
+                ctx->vertex_arrays.insert(pair<GLuint, VertexArray>(ctx->vertex_array_count, v));
+                result[i] = ctx->vertex_array_count++;
         }
 }
 
@@ -989,31 +1003,31 @@ void DeleteVertexArray(GLuint n) {
     if (!n) {
         return;
     }
-    auto i = vertex_arrays.find(n);
-    if (i == vertex_arrays.end()) {
+    auto i = ctx->vertex_arrays.find(n);
+    if (i == ctx->vertex_arrays.end()) {
         return;
     }
-    vertex_arrays.erase(i);
-    if (current_vertex_array == n) {
-        current_vertex_array = 0;
+    ctx->vertex_arrays.erase(i);
+    if (ctx->current_vertex_array == n) {
+        ctx->current_vertex_array = 0;
     }
 }
 
 GLuint CreateShader(GLenum type) {
         Shader s;
         s.type = type;
-        shaders.insert(pair<GLuint, Shader>(shader_count, s));
-        return shader_count++;
+        ctx->shaders.insert(pair<GLuint, Shader>(ctx->shader_count, s));
+        return ctx->shader_count++;
 }
 
 void ShaderSourceByName(GLuint shader, char* name) {
-    Shader &s = shaders[shader];
+    Shader &s = ctx->shaders[shader];
     s.name = name;
 }
 
 void AttachShader(GLuint program, GLuint shader) {
-    Program &p = programs[program];
-    Shader &s = shaders[shader];
+    Program &p = ctx->programs[program];
+    Shader &s = ctx->shaders[shader];
     if (s.type == GL_VERTEX_SHADER) {
         p.vs_name = s.name;
     } else if (s.type == GL_FRAGMENT_SHADER) {
@@ -1027,36 +1041,36 @@ void DeleteShader(GLuint shader) {
     if (!shader) {
         return;
     }
-    auto i = shaders.find(shader);
-    if (i == shaders.end()) {
+    auto i = ctx->shaders.find(shader);
+    if (i == ctx->shaders.end()) {
         return;
     }
-    shaders.erase(i);
+    ctx->shaders.erase(i);
 }
 
 GLuint CreateProgram() {
         Program p;
-        programs.insert(pair<GLuint, Program>(program_count, p));
-        return program_count++;
+        ctx->programs.insert(pair<GLuint, Program>(ctx->program_count, p));
+        return ctx->program_count++;
 }
 
 void DeleteProgram(GLuint program) {
     if (!program) {
         return;
     }
-    auto i = programs.find(program);
-    if (i == programs.end()) {
+    auto i = ctx->programs.find(program);
+    if (i == ctx->programs.end()) {
         return;
     }
-    if (current_program == program) {
+    if (ctx->current_program == program) {
         i->second.deleted = true;
     } else {
-        programs.erase(i);
+        ctx->programs.erase(i);
     }
 }
 
 void LinkProgram(GLuint program) {
-    Program &p = programs[program];
+    Program &p = ctx->programs[program];
     assert(p.vs_name == p.fs_name);
 
     p.impl = load_shader(p.vs_name);
@@ -1074,18 +1088,18 @@ void LinkProgram(GLuint program) {
 }
 
 void BindAttribLocation(GLuint program, GLuint index, char *name) {
-    Program &p = programs[program];
+    Program &p = ctx->programs[program];
     p.attribs[name] = index;
 }
 
 GLint GetAttribLocation(GLuint program, char* name) {
-    Program &p = programs[program];
+    Program &p = ctx->programs[program];
     auto i = p.attribs.find(name);
     return i != p.attribs.end() ? i->second : -1;
 }
 
 GLint GetUniformLocation(GLuint program, char* name) {
-    Program &p = programs[program];
+    Program &p = ctx->programs[program];
     assert(p.impl);
     GLint loc = p.impl->get_uniform(name);
     debugf("location: %d\n", loc);
@@ -1101,8 +1115,8 @@ static uint64_t get_time_value() {
 }
 
 void BeginQuery(GLenum target, GLuint id) {
-    current_query[target] = id;
-    Query &q = queries[id];
+    ctx->current_query[target] = id;
+    Query &q = ctx->queries[id];
     switch (target) {
     case GL_SAMPLES_PASSED:
         q.value = 0;
@@ -1117,7 +1131,7 @@ void BeginQuery(GLenum target, GLuint id) {
 }
 
 void EndQuery(GLenum target) {
-    Query &q = queries[current_query[target]];
+    Query &q = ctx->queries[ctx->current_query[target]];
     switch (target) {
     case GL_SAMPLES_PASSED:
         break;
@@ -1125,15 +1139,15 @@ void EndQuery(GLenum target) {
         q.value = get_time_value() - q.value;
         break;
     default:
-        debugf("unknown query target %x for query %d\n", target, current_query[target]);
+        debugf("unknown query target %x for query %d\n", target, ctx->current_query[target]);
         assert(false);
     }
-    current_query[target] = 0;
+    ctx->current_query[target] = 0;
 }
 
 void GetQueryObjectui64v(GLuint id, GLenum pname, GLuint64 *params)
 {
-    Query &q = queries[id];
+    Query &q = ctx->queries[id];
     switch (pname) {
     case GL_QUERY_RESULT:
         assert(params);
@@ -1145,10 +1159,10 @@ void GetQueryObjectui64v(GLuint id, GLenum pname, GLuint64 *params)
 }
 
 void BindVertexArray(GLuint vertex_array) {
-    if (vertex_array != current_vertex_array) {
-        validate_vertex_array = true;
+    if (vertex_array != ctx->current_vertex_array) {
+        ctx->validate_vertex_array = true;
     }
-    current_vertex_array = vertex_array;
+    ctx->current_vertex_array = vertex_array;
 }
 
 void BindTexture(GLenum target, GLuint texture) {
@@ -1157,33 +1171,31 @@ void BindTexture(GLenum target, GLuint texture) {
 
 void BindBuffer(GLenum target, GLuint buffer) {
     // XXX: I think we to set the element array buffer on the current vertex array for target == GL_ELEMENT_ARRAY_BUFFER
-    current_buffer[target] = buffer;
+    ctx->current_buffer[target] = buffer;
 }
 
 void BindFramebuffer(GLenum target, GLuint fb) {
     if (target == GL_FRAMEBUFFER) {
-        current_framebuffer[GL_READ_FRAMEBUFFER] = fb;
-        current_framebuffer[GL_DRAW_FRAMEBUFFER] = fb;
+        ctx->current_framebuffer[GL_READ_FRAMEBUFFER] = fb;
+        ctx->current_framebuffer[GL_DRAW_FRAMEBUFFER] = fb;
     } else {
         assert(target == GL_READ_FRAMEBUFFER || target == GL_DRAW_FRAMEBUFFER);
-        current_framebuffer[target] = fb;
+        ctx->current_framebuffer[target] = fb;
     }
 }
 
 void BindRenderbuffer(GLenum target, GLuint rb) {
-    current_renderbuffer[target] = rb;
+    ctx->current_renderbuffer[target] = rb;
 }
 
 #define GL_UNPACK_ROW_LENGTH              0x0CF2
 #define GL_UNPACK_ALIGNMENT               0x0CF5
 
-int unpack_row_length;
-
 void PixelStorei(GLenum name, GLint param) {
     if (name == GL_UNPACK_ALIGNMENT) {
         assert(param == 1);
     } else if (name == GL_UNPACK_ROW_LENGTH) {
-        unpack_row_length = param;
+        ctx->unpack_row_length = param;
     }
 }
 
@@ -1196,7 +1208,7 @@ void TexStorage3D(
         GLsizei height,
         GLsizei depth
     ) {
-    Texture &t = textures[active_texture(target)];
+    Texture &t = ctx->textures[active_texture(target)];
     t.levels = levels;
     t.internal_format = internal_format;
     t.width = width;
@@ -1226,7 +1238,7 @@ void TexStorage2D(
         GLsizei width,
         GLsizei height
     ) {
-    Texture &t = textures[active_texture(target)];
+    Texture &t = ctx->textures[active_texture(target)];
     set_tex_storage(t, levels, internal_format, width, height);
 }
 
@@ -1281,16 +1293,11 @@ void TexSubImage2D(
         GLenum format,
         GLenum ty,
         void *data) {
-        Texture &t = textures[active_texture(target)];
+        Texture &t = ctx->textures[active_texture(target)];
         assert(xoffset + width <= t.width);
         assert(yoffset + height <= t.height);
-        assert(unpack_row_length == 0 || unpack_row_length >= width);
-        GLsizei row_length;
-        if (unpack_row_length == 0) {
-                row_length = width;
-        } else {
-                row_length = unpack_row_length;
-        }
+        assert(ctx->unpack_row_length == 0 || ctx->unpack_row_length >= width);
+        GLsizei row_length = ctx->unpack_row_length != 0 ? ctx->unpack_row_length : width;
         assert(t.internal_format == internal_format_for_data(format, ty));
         int bpp = bytes_for_internal_format(t.internal_format);
         if (!bpp) return;
@@ -1338,14 +1345,9 @@ void TexSubImage3D(
         GLenum format,
         GLenum ty,
         void *data) {
-        Texture &t = textures[active_texture(target)];
-        assert(unpack_row_length == 0 || unpack_row_length >= width);
-        GLsizei row_length;
-        if (unpack_row_length == 0) {
-                row_length = width;
-        } else {
-                row_length = unpack_row_length;
-        }
+        Texture &t = ctx->textures[active_texture(target)];
+        assert(ctx->unpack_row_length == 0 || ctx->unpack_row_length >= width);
+        GLsizei row_length = ctx->unpack_row_length != 0 ? ctx->unpack_row_length : width;
 
         if (format == GL_BGRA) {
             assert(ty == GL_UNSIGNED_BYTE);
@@ -1395,7 +1397,7 @@ void TexImage3D(
 }
 
 void TexParameteri(GLenum target, GLenum pname, GLint param) {
-        Texture &t = textures[active_texture(target)];
+        Texture &t = ctx->textures[active_texture(target)];
         switch (pname) {
         case GL_TEXTURE_WRAP_S: assert(param == GL_CLAMP_TO_EDGE); break;
         case GL_TEXTURE_WRAP_T: assert(param == GL_CLAMP_TO_EDGE); break;
@@ -1436,8 +1438,8 @@ void TexParameteri(GLenum target, GLenum pname, GLint param) {
 void GenTextures(int n, int *result) {
         for (int i = 0; i < n; i++) {
                 Texture t;
-                textures.insert(pair<GLuint, Texture>(texture_count, t));
-                result[i] = texture_count++;
+                ctx->textures.insert(pair<GLuint, Texture>(ctx->texture_count, t));
+                result[i] = ctx->texture_count++;
         }
 }
 
@@ -1445,12 +1447,12 @@ void DeleteTexture(GLuint n) {
     if (!n) {
         return;
     }
-    auto i = textures.find(n);
-    if (i == textures.end()) {
+    auto i = ctx->textures.find(n);
+    if (i == ctx->textures.end()) {
         return;
     }
-    textures.erase(i);
-    for (auto& b : current_texture) {
+    ctx->textures.erase(i);
+    for (auto& b : ctx->current_texture) {
         if (b.second == n) {
             b.second = 0;
         }
@@ -1460,13 +1462,13 @@ void DeleteTexture(GLuint n) {
 void GenRenderbuffers(int n, int *result) {
         for (int i = 0; i < n; i++) {
                 Renderbuffer r;
-                renderbuffers.insert(pair<GLuint, Renderbuffer>(renderbuffer_count, r));
-                result[i] = renderbuffer_count++;
+                ctx->renderbuffers.insert(pair<GLuint, Renderbuffer>(ctx->renderbuffer_count, r));
+                result[i] = ctx->renderbuffer_count++;
         }
 }
 
 Renderbuffer::~Renderbuffer() {
-    for (auto& i : framebuffers) {
+    for (auto& i : ctx->framebuffers) {
         auto& fb = i.second;
         if (fb.color_attachment == texture) {
             fb.color_attachment = 0;
@@ -1483,12 +1485,12 @@ void DeleteRenderbuffer(GLuint n) {
     if (!n) {
         return;
     }
-    auto i = renderbuffers.find(n);
-    if (i == renderbuffers.end()) {
+    auto i = ctx->renderbuffers.find(n);
+    if (i == ctx->renderbuffers.end()) {
         return;
     }
-    renderbuffers.erase(i);
-    for (auto& b : current_renderbuffer) {
+    ctx->renderbuffers.erase(i);
+    for (auto& b : ctx->current_renderbuffer) {
         if (b.second == n) {
             b.second = 0;
         }
@@ -1498,8 +1500,8 @@ void DeleteRenderbuffer(GLuint n) {
 void GenFramebuffers(int n, int *result) {
         for (int i = 0; i < n; i++) {
                 Framebuffer f;
-                framebuffers.insert(pair<GLuint, Framebuffer>(framebuffer_count, f));
-                result[i] = framebuffer_count++;
+                ctx->framebuffers.insert(pair<GLuint, Framebuffer>(ctx->framebuffer_count, f));
+                result[i] = ctx->framebuffer_count++;
         }
 }
 
@@ -1507,12 +1509,12 @@ void DeleteFramebuffer(GLuint n) {
     if (!n) {
         return;
     }
-    auto i = framebuffers.find(n);
-    if (i == framebuffers.end()) {
+    auto i = ctx->framebuffers.find(n);
+    if (i == ctx->framebuffers.end()) {
         return;
     }
-    framebuffers.erase(i);
-    for (auto& b : current_framebuffer) {
+    ctx->framebuffers.erase(i);
+    for (auto& b : ctx->current_framebuffer) {
         if (b.second == n) {
             b.second = 0;
         }
@@ -1525,7 +1527,7 @@ void RenderbufferStorage(
         GLsizei width,
         GLsizei height) {
     // Just refer a renderbuffer to a texture to simplify things for now...
-    Renderbuffer &r = renderbuffers[current_renderbuffer[target]];
+    Renderbuffer &r = ctx->renderbuffers[ctx->current_renderbuffer[target]];
     GenTextures(1, &r.texture);
     active_texture(target) = r.texture;
     switch (internalformat) {
@@ -1546,18 +1548,18 @@ void VertexAttribPointer(GLuint index,
         GLsizei stride,
         GLuint offset)
 {
-        debugf("cva: %d\n", current_vertex_array);
-        VertexArray &v = vertex_arrays[current_vertex_array];
+        debugf("cva: %d\n", ctx->current_vertex_array);
+        VertexArray &v = ctx->vertex_arrays[ctx->current_vertex_array];
         VertexAttrib &va = v.attribs[index];
         va.size = size * bytes_per_type(type);
         va.type = type;
         va.normalized = normalized;
         va.stride = stride;
         va.offset = offset;
-        Buffer &vertex_buf = buffers[current_buffer[GL_ARRAY_BUFFER]];
-        va.vertex_buffer = current_buffer[GL_ARRAY_BUFFER];
-        va.vertex_array = current_vertex_array;
-        validate_vertex_array = true;
+        Buffer &vertex_buf = ctx->buffers[ctx->current_buffer[GL_ARRAY_BUFFER]];
+        va.vertex_buffer = ctx->current_buffer[GL_ARRAY_BUFFER];
+        va.vertex_array = ctx->current_vertex_array;
+        ctx->validate_vertex_array = true;
 }
 
 void VertexAttribIPointer(GLuint index,
@@ -1566,56 +1568,52 @@ void VertexAttribIPointer(GLuint index,
         GLsizei stride,
         GLuint offset)
 {
-        debugf("cva: %d\n", current_vertex_array);
-        VertexArray &v = vertex_arrays[current_vertex_array];
+        debugf("cva: %d\n", ctx->current_vertex_array);
+        VertexArray &v = ctx->vertex_arrays[ctx->current_vertex_array];
         VertexAttrib &va = v.attribs[index];
         va.size = size * bytes_per_type(type);
         va.type = type;
         va.normalized = false;
         va.stride = stride;
         va.offset = offset;
-        Buffer &vertex_buf = buffers[current_buffer[GL_ARRAY_BUFFER]];
-        va.vertex_buffer = current_buffer[GL_ARRAY_BUFFER];
-        va.vertex_array = current_vertex_array;
-        validate_vertex_array = true;
+        Buffer &vertex_buf = ctx->buffers[ctx->current_buffer[GL_ARRAY_BUFFER]];
+        va.vertex_buffer = ctx->current_buffer[GL_ARRAY_BUFFER];
+        va.vertex_array = ctx->current_vertex_array;
+        ctx->validate_vertex_array = true;
 }
 
 void EnableVertexAttribArray(GLuint index) {
-        VertexArray &v = vertex_arrays[current_vertex_array];
+        VertexArray &v = ctx->vertex_arrays[ctx->current_vertex_array];
         VertexAttrib &va = v.attribs[index];
         if (!va.enabled) {
-            validate_vertex_array = true;
+            ctx->validate_vertex_array = true;
         }
         va.enabled = true;
 }
 
 void DisableVertexAttribArray(GLuint index) {
-        VertexArray &v = vertex_arrays[current_vertex_array];
+        VertexArray &v = ctx->vertex_arrays[ctx->current_vertex_array];
         VertexAttrib &va = v.attribs[index];
         if (va.enabled) {
-            validate_vertex_array = true;
+            ctx->validate_vertex_array = true;
         }
         va.enabled = false;
 }
 
-
-
 void VertexAttribDivisor(GLuint index, GLuint divisor) {
-        VertexArray &v = vertex_arrays[current_vertex_array];
+        VertexArray &v = ctx->vertex_arrays[ctx->current_vertex_array];
         VertexAttrib &va = v.attribs[index];
         va.divisor = divisor;
 }
-
-
 
 void BufferData(GLenum target,
         GLsizeiptr size,
         void *data,
         GLenum usage)
 {
-    Buffer &b = buffers[current_buffer[target]];
+    Buffer &b = ctx->buffers[ctx->current_buffer[target]];
     if (b.allocate(size)) {
-        validate_vertex_array = true;
+        ctx->validate_vertex_array = true;
     }
     memcpy(b.buf, data, size);
 }
@@ -1625,16 +1623,14 @@ void BufferSubData(GLenum target,
         GLsizeiptr size,
         void *data)
 {
-    Buffer &b = buffers[current_buffer[target]];
+    Buffer &b = ctx->buffers[ctx->current_buffer[target]];
     assert(offset + size <= b.size);
     memcpy(&b.buf[offset], data, size);
 }
 
 void Uniform1i(GLint location, GLint V0) {
-    debugf("tex: %d\n", texture_count);
-    Program &p = programs[current_program];
-    assert(p.impl);
-    if (!p.impl->set_sampler(location, V0)) {
+    debugf("tex: %d\n", ctx->texture_count);
+    if (!program_impl->set_sampler(location, V0)) {
         vertex_shader->set_uniform_1i(location, V0);
         fragment_shader->set_uniform_1i(location, V0);
     }
@@ -1664,7 +1660,7 @@ void FramebufferTexture2D(
         GLint level)
 {
         assert(target == GL_READ_FRAMEBUFFER || target == GL_DRAW_FRAMEBUFFER);
-        Framebuffer &fb = framebuffers[current_framebuffer[target]];
+        Framebuffer &fb = ctx->framebuffers[ctx->current_framebuffer[target]];
         if (attachment == GL_COLOR_ATTACHMENT0) {
                 fb.color_attachment = texture;
                 fb.layer = 0;
@@ -1684,7 +1680,7 @@ void FramebufferTextureLayer(
 {
         assert(level == 0);
         assert(target == GL_READ_FRAMEBUFFER || target == GL_DRAW_FRAMEBUFFER);
-        Framebuffer &fb = framebuffers[current_framebuffer[target]];
+        Framebuffer &fb = ctx->framebuffers[ctx->current_framebuffer[target]];
         if (attachment == GL_COLOR_ATTACHMENT0) {
                 fb.color_attachment = texture;
                 fb.layer = layer;
@@ -1706,8 +1702,8 @@ void FramebufferRenderbuffer(
 {
     assert(target == GL_READ_FRAMEBUFFER || target == GL_DRAW_FRAMEBUFFER);
     assert(renderbuffertarget == GL_RENDERBUFFER);
-    Framebuffer &fb = framebuffers[current_framebuffer[target]];
-    Renderbuffer &rb = renderbuffers[renderbuffer];
+    Framebuffer &fb = ctx->framebuffers[ctx->current_framebuffer[target]];
+    Renderbuffer &rb = ctx->renderbuffers[renderbuffer];
     if (attachment == GL_COLOR_ATTACHMENT0) {
         fb.color_attachment = rb.texture;
         fb.layer = 0;
@@ -1723,12 +1719,12 @@ void FramebufferRenderbuffer(
 Framebuffer *get_framebuffer(GLenum target) {
     GLuint id = 0;
     {
-        auto i = current_framebuffer.find(target);
-        if (i != current_framebuffer.end()) id = i->second;
+        auto i = ctx->current_framebuffer.find(target);
+        if (i != ctx->current_framebuffer.end()) id = i->second;
     }
     {
-        auto i = framebuffers.find(id);
-        if (i != framebuffers.end()) return &i->second;
+        auto i = ctx->framebuffers.find(id);
+        if (i != ctx->framebuffers.end()) return &i->second;
     }
     return nullptr;
 }
@@ -1736,11 +1732,11 @@ Framebuffer *get_framebuffer(GLenum target) {
 template<typename T>
 static void clear_buffer(Texture& t, __m128i chunk, T value, int layer = 0) {
     int x0 = 0, y0 = 0, x1 = t.width, y1 = t.height;
-    if (scissortest) {
-        x0 = std::max(x0, scissor.x);
-        y0 = std::max(y0, scissor.y);
-        x1 = std::min(x1, scissor.x + scissor.width);
-        y1 = std::min(y1, scissor.y + scissor.height);
+    if (ctx->scissortest) {
+        x0 = std::max(x0, ctx->scissor.x);
+        y0 = std::max(y0, ctx->scissor.y);
+        x1 = std::min(x1, ctx->scissor.x + ctx->scissor.width);
+        y1 = std::min(y1, ctx->scissor.y + ctx->scissor.height);
     }
     const int chunk_size = sizeof(chunk) / sizeof(T);
     int stride = aligned_stride(sizeof(T) * t.width);
@@ -1761,12 +1757,12 @@ static void clear_buffer(Texture& t, __m128i chunk, T value, int layer = 0) {
 extern "C" {
 
 void Update(int width, int height) {
-    Framebuffer& fb = framebuffers[0];
+    Framebuffer& fb = ctx->framebuffers[0];
     if (!fb.color_attachment) {
         GenTextures(1, &fb.color_attachment);
         fb.layer = 0;
     }
-    Texture& colortex = textures[fb.color_attachment];
+    Texture& colortex = ctx->textures[fb.color_attachment];
     if (colortex.width != width || colortex.height != height) {
         colortex.cleanup();
         set_tex_storage(colortex, 1, GL_RGBA8, width, height);
@@ -1774,7 +1770,7 @@ void Update(int width, int height) {
     if (!fb.depth_attachment) {
         GenTextures(1, &fb.depth_attachment);
     }
-    Texture& depthtex = textures[fb.depth_attachment];
+    Texture& depthtex = ctx->textures[fb.depth_attachment];
     if (depthtex.width != width || depthtex.height != height) {
         depthtex.cleanup();
         set_tex_storage(depthtex, 1, GL_DEPTH_COMPONENT16, width, height);
@@ -1782,11 +1778,11 @@ void Update(int width, int height) {
 }
 
 void* GetColorBuffer(int32_t* width, int32_t* height) {
-    Framebuffer& fb = framebuffers[0];
+    Framebuffer& fb = ctx->framebuffers[0];
     if (!fb.color_attachment) {
         return nullptr;
     }
-    Texture& colortex = textures[fb.color_attachment];
+    Texture& colortex = ctx->textures[fb.color_attachment];
     *width = colortex.width;
     *height = colortex.height;
     return colortex.buf;
@@ -1814,16 +1810,16 @@ GLenum CheckFramebufferStatus(GLenum target) {
 void Clear(GLbitfield mask) {
     Framebuffer& fb = *get_framebuffer(GL_DRAW_FRAMEBUFFER);
     if ((mask & GL_COLOR_BUFFER_BIT) && fb.color_attachment) {
-        Texture& t = textures[fb.color_attachment];
+        Texture& t = ctx->textures[fb.color_attachment];
         if (t.internal_format == GL_RGBA8) {
-            __m128 colorf = _mm_loadu_ps(clearcolor);
+            __m128 colorf = _mm_loadu_ps(ctx->clearcolor);
             __m128i colori = _mm_cvtps_epi32(_mm_mul_ps(colorf, _mm_set1_ps(255.49f)));
             colori = _mm_packs_epi32(colori, colori);
             colori = _mm_packus_epi16(colori, colori);
             uint32_t color = _mm_cvtsi128_si32(colori);
             clear_buffer<uint32_t>(t, colori, color, fb.layer);
         } else if (t.internal_format == GL_R8) {
-            uint8_t color = uint8_t(clearcolor[0] * 255.49f);
+            uint8_t color = uint8_t(ctx->clearcolor[0] * 255.49f);
             __m128i colori = _mm_set1_epi8(color);
             clear_buffer<uint8_t>(t, colori, color, fb.layer);
         } else {
@@ -1831,9 +1827,9 @@ void Clear(GLbitfield mask) {
         }
     }
     if ((mask & GL_DEPTH_BUFFER_BIT) && fb.depth_attachment) {
-        Texture& t = textures[fb.depth_attachment];
+        Texture& t = ctx->textures[fb.depth_attachment];
         assert(t.internal_format == GL_DEPTH_COMPONENT16);
-        uint16_t depth = uint16_t(0xFFFF * cleardepth) - 0x8000;
+        uint16_t depth = uint16_t(0xFFFF * ctx->cleardepth) - 0x8000;
         __m128i depthi = _mm_set1_epi16(depth);
         clear_buffer<uint16_t>(t, depthi, depth);
     }
@@ -1843,9 +1839,9 @@ void ReadPixels(GLint x, GLint y, GLsizei width, GLsizei height, GLenum format, 
     Framebuffer *fb = get_framebuffer(GL_READ_FRAMEBUFFER);
     if (!fb) return;
     assert(format == GL_RED || format == GL_RGBA || format == GL_RGBA_INTEGER || format == GL_BGRA);
-    Texture &t = textures[fb->color_attachment];
+    Texture &t = ctx->textures[fb->color_attachment];
     if (!t.buf) return;
-    debugf("read pixels %d, %d, %d, %d from fb %d with format %x\n", x, y, width, height, current_framebuffer[GL_READ_FRAMEBUFFER], t.internal_format);
+    debugf("read pixels %d, %d, %d, %d from fb %d with format %x\n", x, y, width, height, ctx->current_framebuffer[GL_READ_FRAMEBUFFER], t.internal_format);
     assert(x + width <= t.width);
     assert(y + height <= t.height);
     if (internal_format_for_data(format, type) != t.internal_format) {
@@ -1885,16 +1881,16 @@ void CopyImageSubData(
     GLsizei srcDepth
 ) {
     if (srcTarget == GL_RENDERBUFFER) {
-        Renderbuffer &rb = renderbuffers[srcName];
+        Renderbuffer &rb = ctx->renderbuffers[srcName];
         srcName = rb.texture;
     }
     if (dstTarget == GL_RENDERBUFFER) {
-        Renderbuffer &rb = renderbuffers[dstName];
+        Renderbuffer &rb = ctx->renderbuffers[dstName];
         dstName = rb.texture;
     }
-    Texture &srctex = textures[srcName];
+    Texture &srctex = ctx->textures[srcName];
     if (!srctex.buf) return;
-    Texture &dsttex = textures[dstName];
+    Texture &dsttex = ctx->textures[dstName];
     assert(srctex.internal_format == dsttex.internal_format);
     assert(srcX + srcWidth <= srctex.width);
     assert(srcY + srcHeight <= srctex.height);
@@ -2000,13 +1996,13 @@ void Composite(
     GLboolean opaque,
     GLboolean flip
 ) {
-    Framebuffer& fb = framebuffers[0];
+    Framebuffer& fb = ctx->framebuffers[0];
     if (!fb.color_attachment) {
         return;
     }
-    Texture &srctex = textures[srcId];
+    Texture &srctex = ctx->textures[srcId];
     if (!srctex.buf) return;
-    Texture &dsttex = textures[fb.color_attachment];
+    Texture &dsttex = ctx->textures[fb.color_attachment];
     assert(bytes_for_internal_format(srctex.internal_format) == 4);
     const int bpp = 4;
     int src_stride = aligned_stride(bpp * srctex.width);
@@ -2099,7 +2095,7 @@ static inline int check_depth(uint16_t z, uint16_t* zbuf, __m128i& outmask, int 
     }
     __m128i src = _mm_set1_epi16(z);
     // Invert the depth test to check which pixels failed and should be discarded.
-    __m128i mask = depthfunc == GL_LEQUAL ?
+    __m128i mask = ctx->depthfunc == GL_LEQUAL ?
         // GL_LEQUAL: Not(LessEqual) = Greater
         _mm_cmpgt_epi16(src, dest) :
         // GL_LESS: Not(Less) = GreaterEqual
@@ -2110,10 +2106,10 @@ static inline int check_depth(uint16_t z, uint16_t* zbuf, __m128i& outmask, int 
         case 0xFFFF:
             return 0;
         case 0:
-            if (depthmask) _mm_storeu_si128((__m128i*)zbuf, src);
+            if (ctx->depthmask) _mm_storeu_si128((__m128i*)zbuf, src);
             return -1;
         }
-        if (depthmask) {
+        if (ctx->depthmask) {
             _mm_storeu_si128((__m128i*)zbuf,
                 _mm_or_si128(_mm_and_si128(mask, dest),
                              _mm_andnot_si128(mask, src)));
@@ -2132,7 +2128,7 @@ static inline int check_depth(uint16_t z, uint16_t* zbuf, __m128i& outmask, int 
                 return 0;
             }
         }
-        if (depthmask) {
+        if (ctx->depthmask) {
             _mm_storel_epi64((__m128i*)zbuf,
                 _mm_or_si128(_mm_and_si128(mask, dest),
                              _mm_andnot_si128(mask, src)));
@@ -2169,7 +2165,7 @@ static inline __m128i blend_pixels_RGBA8(__m128i dst) {
     #define alphas(c) _mm_shufflehi_epi16(_mm_shufflelo_epi16(c, 0xFF), 0xFF)
     #define rgb_mask _mm_set1_epi64x(0x0000FFFFFFFFFFFFULL)
     #define alpha_mask _mm_set1_epi64x(0xFFFF000000000000ULL)
-    switch (blend_key) {
+    switch (ctx->blend_key) {
     case BLEND_KEY_NONE:
         r = _mm_packus_epi16(slo, shi);
         break;
@@ -2221,8 +2217,8 @@ static inline __m128i blend_pixels_RGBA8(__m128i dst) {
         break;
     case BLEND_KEY(GL_CONSTANT_COLOR, GL_ONE_MINUS_SRC_COLOR):
         r = _mm_packus_epi16(
-                _mm_add_epi16(dlo, muldiv255(_mm_sub_epi16(blendcolor, dlo), slo)),
-                _mm_add_epi16(dhi, muldiv255(_mm_sub_epi16(blendcolor, dhi), shi)));
+                _mm_add_epi16(dlo, muldiv255(_mm_sub_epi16(ctx->blendcolor, dlo), slo)),
+                _mm_add_epi16(dhi, muldiv255(_mm_sub_epi16(ctx->blendcolor, dhi), shi)));
         break;
     case BLEND_KEY(GL_ONE, GL_ONE_MINUS_SRC1_COLOR): {
         auto secondary = fragment_shader->gl_SecondaryFragColor * 255.49f;
@@ -2248,7 +2244,7 @@ template<bool DISCARD>
 static inline void commit_output(uint32_t* buf, __m128i mask) {
     fragment_shader->run();
     __m128i dst = _mm_loadu_si128((__m128i*)buf);
-    __m128i r = blend ? blend_pixels_RGBA8(dst) : pack_pixels_RGBA8();
+    __m128i r = ctx->blend ? blend_pixels_RGBA8(dst) : pack_pixels_RGBA8();
     if (DISCARD) mask = _mm_or_si128(mask, fragment_shader->isPixelDiscarded);
     _mm_storeu_si128((__m128i*)buf,
         _mm_or_si128(_mm_and_si128(mask, dst),
@@ -2263,7 +2259,7 @@ static inline void commit_output(uint32_t* buf) {
 template<>
 static inline void commit_output<false>(uint32_t* buf) {
     fragment_shader->run();
-    __m128i r = blend ? blend_pixels_RGBA8(_mm_loadu_si128((__m128i*)buf)) : pack_pixels_RGBA8();
+    __m128i r = ctx->blend ? blend_pixels_RGBA8(_mm_loadu_si128((__m128i*)buf)) : pack_pixels_RGBA8();
     _mm_storeu_si128((__m128i*)buf, r);
 }
 
@@ -2299,7 +2295,7 @@ static inline __m128i blend_pixels_R8(__m128i dst) {
     auto output = fragment_shader->gl_FragColor * 255.49f;
     __m128i src = _mm_packs_epi32(_mm_cvtps_epi32(output.x), _mm_setzero_si128());
     __m128i r;
-    switch (blend_key) {
+    switch (ctx->blend_key) {
     case BLEND_KEY_NONE:
         r = src;
         break;
@@ -2323,7 +2319,7 @@ template<bool DISCARD>
 static inline void commit_output(uint8_t* buf, __m128i mask) {
     fragment_shader->run();
     __m128i dst = _mm_unpacklo_epi8(_mm_loadu_si32(buf), _mm_setzero_si128());
-    __m128i r = blend ? blend_pixels_R8(dst) : pack_pixels_R8();
+    __m128i r = ctx->blend ? blend_pixels_R8(dst) : pack_pixels_R8();
     if (DISCARD) mask = _mm_or_si128(mask, _mm_packs_epi32(fragment_shader->isPixelDiscarded, _mm_setzero_si128()));
     r = _mm_or_si128(_mm_and_si128(mask, dst), _mm_andnot_si128(mask, r));
     _mm_storeu_si32(buf, _mm_packus_epi16(r, r));
@@ -2337,7 +2333,7 @@ static inline void commit_output(uint8_t* buf) {
 template<>
 static inline void commit_output<false>(uint8_t* buf) {
     fragment_shader->run();
-    __m128i r = blend ? blend_pixels_R8(_mm_unpacklo_epi8(_mm_loadu_si32(buf), _mm_setzero_si128())) : pack_pixels_R8();
+    __m128i r = ctx->blend ? blend_pixels_R8(_mm_unpacklo_epi8(_mm_loadu_si32(buf), _mm_setzero_si128())) : pack_pixels_R8();
     _mm_storeu_si32(buf, _mm_packus_epi16(r, r));
 }
 
@@ -2369,9 +2365,6 @@ typedef float Flats[MAX_FLATS];
 
 static const size_t MAX_INTERPOLANTS = 16;
 typedef float Interpolants __attribute__((ext_vector_type(MAX_INTERPOLANTS)));
-
-static int shaded_rows = 0;
-static int shaded_pixels = 0;
 
 template<typename P>
 static inline void draw_quad_spans(int nump, Point p[4], uint16_t z, Interpolants interp_outs[4], Texture& colortex, int layer, Texture& depthtex, float fx0, float fy0, float fx1, float fy1) {
@@ -2453,8 +2446,8 @@ static inline void draw_quad_spans(int nump, Point p[4], uint16_t z, Interpolant
             int endx = int(std::min(std::max(lx, rx), fx1) + 0.5f);
             int span = endx - startx;
             if (span > 0) {
-                shaded_rows++;
-                shaded_pixels += span;
+                ctx->shaded_rows++;
+                ctx->shaded_pixels += span;
                 fragment_shader->gl_FragCoord.x = init_interp(startx + 0.5f, 1);
                 fragment_shader->gl_FragCoord.y = y;
                 {
@@ -2532,7 +2525,7 @@ void draw_quad(int nump, Texture& colortex, int layer, Texture& depthtex) {
         Float w = 1.0f / vertex_shader->gl_Position.w;
         vec3 clip = vertex_shader->gl_Position.sel(X, Y, Z) * w;
         Point p[4];
-        vec3 screen = (clip + 1)*vec3(viewport.width/2, viewport.height/2, 0.5f) + vec3(viewport.x, viewport.y, 0);
+        vec3 screen = (clip + 1)*vec3(ctx->viewport.width/2, ctx->viewport.height/2, 0.5f) + vec3(ctx->viewport.x, ctx->viewport.y, 0);
         for (int k = 0; k < 4; k++)
         {
         //        vec4 pos = vertex_shader->gl_Position;
@@ -2555,11 +2548,11 @@ void draw_quad(int nump, Texture& colortex, int layer, Texture& depthtex) {
         float fy0 = 0;
         float fx1 = colortex.width;
         float fy1 = colortex.height;
-        if (scissortest) {
-            fx0 = std::max(fx0, float(scissor.x));
-            fy0 = std::max(fy0, float(scissor.y));
-            fx1 = std::min(fx1, float(scissor.x + scissor.width));
-            fy1 = std::min(fy1, float(scissor.y + scissor.height));
+        if (ctx->scissortest) {
+            fx0 = std::max(fx0, float(ctx->scissor.x));
+            fy0 = std::max(fy0, float(ctx->scissor.y));
+            fx1 = std::min(fx1, float(ctx->scissor.x + ctx->scissor.width));
+            fy1 = std::min(fy1, float(ctx->scissor.y + ctx->scissor.height));
         }
 
         if (top_left.x >= fx1 || top_left.y >= fy1 || bot_right.x <= fx0 || bot_right.y <= fy0) {
@@ -2586,8 +2579,8 @@ void VertexArray::validate() {
     for (int i = 0; i < MAX_ATTRIBS; i++) {
         if (attribs[i].enabled) {
             VertexAttrib &attr = attribs[i];
-            VertexArray &v = vertex_arrays[attr.vertex_array];
-            Buffer &vertex_buf = buffers[attr.vertex_buffer];
+            VertexArray &v = ctx->vertex_arrays[attr.vertex_array];
+            Buffer &vertex_buf = ctx->buffers[attr.vertex_buffer];
             attr.buf = vertex_buf.buf;
             attr.buf_size = vertex_buf.size;
             //debugf("%d %x %d %d %d %d\n", i, attr.type, attr.size, attr.stride, attr.offset, attr.divisor);
@@ -2607,29 +2600,29 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
         }
 
         Framebuffer& fb = *get_framebuffer(GL_DRAW_FRAMEBUFFER);
-        Texture& colortex = textures[fb.color_attachment];
+        Texture& colortex = ctx->textures[fb.color_attachment];
         assert(colortex.internal_format == GL_RGBA8 || colortex.internal_format == GL_R8);
         static Texture nodepthtex;
-        Texture& depthtex = depthtest && fb.depth_attachment ? textures[fb.depth_attachment] : nodepthtex;
+        Texture& depthtex = ctx->depthtest && fb.depth_attachment ? ctx->textures[fb.depth_attachment] : nodepthtex;
         if (&depthtex != &nodepthtex) {
             assert(depthtex.internal_format == GL_DEPTH_COMPONENT16);
             assert(colortex.width == depthtex.width && colortex.height == depthtex.height);
         }
 
-        Buffer &indices_buf = buffers[current_buffer[GL_ELEMENT_ARRAY_BUFFER]];
+        Buffer &indices_buf = ctx->buffers[ctx->current_buffer[GL_ELEMENT_ARRAY_BUFFER]];
 
-        //debugf("current_vertex_array %d\n", current_vertex_array);
+        //debugf("current_vertex_array %d\n", ctx->current_vertex_array);
         //debugf("indices size: %d\n", indices_buf.size);
-        VertexArray &v = vertex_arrays[current_vertex_array];
-        if (validate_vertex_array) {
-            validate_vertex_array = false;
+        VertexArray &v = ctx->vertex_arrays[ctx->current_vertex_array];
+        if (ctx->validate_vertex_array) {
+            ctx->validate_vertex_array = false;
             v.validate();
         }
 
         uint64_t start = get_time_value();
 
-        shaded_rows = 0;
-        shaded_pixels = 0;
+        ctx->shaded_rows = 0;
+        ctx->shaded_pixels = 0;
 
         unsigned short *indices = (unsigned short*)indices_buf.buf;
         if (type == GL_UNSIGNED_INT) {
@@ -2646,24 +2639,22 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
             assert(0);
         }
 
-        Program &p = programs[current_program];
-        assert(p.impl);
-        vertex_shader->init_batch(p.impl);
-        fragment_shader->init_batch(p.impl);
+        vertex_shader->init_batch(program_impl);
+        fragment_shader->init_batch(program_impl);
         for (int instance = 0; instance < instancecount; instance++) {
             if (mode == GL_QUADS) for (int i = 0; i + 4 <= count; i += 4) {
-                vertex_shader->load_attribs(p.impl, v.attribs, indices, i, instance, 4);
+                vertex_shader->load_attribs(program_impl, v.attribs, indices, i, instance, 4);
                 //debugf("native quad %d %d %d %d\n", indices[i], indices[i+1], indices[i+2], indices[i+3]);
                 draw_quad(4, colortex, fb.layer, depthtex);
             } else for (int i = 0; i + 3 <= count; i += 3) {
                 if (i + 6 <= count && indices[i+3] == indices[i+2] && indices[i+4] == indices[i+1]) {
                     unsigned short quad_indices[4] = { indices[i], indices[i+1], indices[i+5], indices[i+2] };
-                    vertex_shader->load_attribs(p.impl, v.attribs, quad_indices, 0, instance, 4);
+                    vertex_shader->load_attribs(program_impl, v.attribs, quad_indices, 0, instance, 4);
                     //debugf("emulate quad %d %d %d %d\n", indices[i], indices[i+1], indices[i+5], indices[i+2]);
                     draw_quad(4, colortex, fb.layer, depthtex);
                     i += 3;
                 } else {
-                    vertex_shader->load_attribs(p.impl, v.attribs, indices, i, instance, 3);
+                    vertex_shader->load_attribs(program_impl, v.attribs, indices, i, instance, 3);
                     //debugf("triangle %d %d %d %d\n", indices[i], indices[i+1], indices[i+2]);
                     draw_quad(3, colortex, fb.layer, depthtex);
                 }
@@ -2674,17 +2665,33 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
             free(indices);
         }
 
-        auto qid = current_query.find(GL_SAMPLES_PASSED);
-        if (qid != current_query.end() && qid->second) {
-            Query &q = queries[qid->second];
-            q.value += shaded_pixels;
+        auto qid = ctx->current_query.find(GL_SAMPLES_PASSED);
+        if (qid != ctx->current_query.end() && qid->second) {
+            Query &q = ctx->queries[qid->second];
+            q.value += ctx->shaded_pixels;
         }
 
         uint64_t end = get_time_value();
-        debugf("draw(%d): %fms for %d pixels in %d rows (avg %f pixels/row, %f ns/pixel)\n", instancecount, double(end - start)/(1000.*1000.), shaded_pixels, shaded_rows, double(shaded_pixels)/shaded_rows, double(end - start)/std::max(shaded_pixels, 1));
+        debugf("draw(%d): %fms for %d pixels in %d rows (avg %f pixels/row, %f ns/pixel)\n", instancecount, double(end - start)/(1000.*1000.), ctx->shaded_pixels, ctx->shaded_rows, double(ctx->shaded_pixels)/ctx->shaded_rows, double(end - start)/std::max(ctx->shaded_pixels, 1));
 }
 
 void Finish() {
+}
+
+void MakeCurrent(void* ctx_ptr) {
+    ctx = (Context*)ctx_ptr;
+    setup_program(ctx->current_program);
+}
+
+void* CreateContext() {
+    return new Context;
+}
+
+void* DestroyContext(void* ctx_ptr) {
+    if (ctx == ctx_ptr) {
+        ctx = nullptr;
+    }
+    delete (Context*)ctx_ptr;
 }
 
 } // extern "C"

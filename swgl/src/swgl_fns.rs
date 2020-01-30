@@ -263,6 +263,25 @@ extern "C" {
         opaque: GLboolean,
         flip: GLboolean,
     );
+    fn CreateContext() -> *mut c_void;
+    fn DestroyContext(ctx: *mut c_void);
+    fn MakeCurrent(ctx: *mut c_void);
+}
+
+struct Context(*mut c_void);
+
+impl Context {
+    pub fn create() -> Self {
+        Context(unsafe { CreateContext() })
+    }
+
+    pub fn destroy(&self) {
+        unsafe { DestroyContext(self.0); }
+    }
+
+    pub fn make_current(&self) {
+        unsafe { MakeCurrent(self.0); }
+    }
 }
 
 impl SwGlFns {
