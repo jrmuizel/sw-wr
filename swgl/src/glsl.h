@@ -631,6 +631,22 @@ struct ivec2_scalar {
                 return ivec2_scalar{select(c1), select(c2)};
         }
 
+        ivec2_scalar& operator+=(int n) {
+                x += n;
+                y += n;
+                return *this;
+        }
+
+        ivec2_scalar& operator>>=(int shift) {
+                x >>= shift;
+                y >>= shift;
+                return *this;
+        }
+
+        friend ivec2_scalar operator&(ivec2_scalar a, int b) {
+                return ivec2_scalar{a.x&b, a.y&b};
+        }
+
         friend ivec2_scalar operator+(ivec2_scalar a, ivec2_scalar b) {
                 return ivec2_scalar{a.x+b.x, a.y+b.y};
         }
@@ -1994,10 +2010,10 @@ SI mat4 if_then_else(int32_t c, mat4 t, mat4 e) {
 }
 
 SI I32 clampCoord(I32 coord, int limit) {
-    return _mm_min_epi16(_mm_max_epi16(coord, _mm_setzero_si128()), _mm_set1_epi16(limit-1));
+    return _mm_min_epi16(_mm_max_epi16(coord, _mm_setzero_si128()), _mm_set1_epi32(limit-1));
 }
 SI int clampCoord(int coord, int limit) {
-    return std::min(std::max(coord, 0), limit);
+    return std::min(std::max(coord, 0), limit-1);
 }
 template<typename T, typename S> SI T clamp2D(T P, S sampler) {
     return T{clampCoord(P.x, sampler->width), clampCoord(P.y, sampler->height)};
@@ -2259,6 +2275,14 @@ vec4 textureLinearRGBA8(S sampler, vec2 P, I32 zoffset = 0) {
     row0 = _mm_add_epi32(row0, _mm_min_epi16(_mm_max_epi16(i.x, _mm_setzero_si128()), _mm_set1_epi32(sampler->width - 1)));
     row0 = _mm_add_epi32(row0, zoffset);
     //_mm_prefetch(&sampler->buf[_mm_cvtsi128_si32(row0)], _MM_HINT_T0);
+
+    if (!_mm_movemask_epi8(_mm_cmpeq_epi8(_mm_or_si128(frac.x, frac.y), _mm_setzero_si128()))) {
+        return pixel_to_vec4(sampler->swizzle_bgra,
+                             sampler->buf[_mm_cvtsi128_si32(_mm_shuffle_epi32(row0, _MM_SHUFFLE(0, 0, 0, 0)))],
+                             sampler->buf[_mm_cvtsi128_si32(_mm_shuffle_epi32(row0, _MM_SHUFFLE(1, 1, 1, 1)))],
+                             sampler->buf[_mm_cvtsi128_si32(_mm_shuffle_epi32(row0, _MM_SHUFFLE(2, 2, 2, 2)))],
+                             sampler->buf[_mm_cvtsi128_si32(_mm_shuffle_epi32(row0, _MM_SHUFFLE(3, 3, 3, 3)))]);
+    }
 
     __m128i yinside = _mm_andnot_si128(_mm_cmplt_epi32(i.y, _mm_setzero_si128()),
                                        _mm_cmplt_epi32(i.y, _mm_set1_epi32(sampler->height - 1)));
