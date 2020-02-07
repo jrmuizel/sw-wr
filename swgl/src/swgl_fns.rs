@@ -243,7 +243,7 @@ extern "C" {
     fn GetStringi(name: GLenum, index: GLuint) -> *const c_char;
     fn GetError() -> GLenum;
     fn Update(width: i32, height: i32);
-    fn GetColorBuffer(width: *mut i32, height: *mut i32) -> *mut c_void;
+    fn GetColorBuffer(fbo: GLuint, width: *mut i32, height: *mut i32) -> *mut c_void;
     fn DeleteTexture(n: GLuint);
     fn DeleteRenderbuffer(n: GLuint);
     fn DeleteFramebuffer(n: GLuint);
@@ -295,11 +295,11 @@ impl SwGlFns {
         }
     }
 
-    pub fn get_color_buffer() -> (*mut c_void, i32, i32) {
+    pub fn get_color_buffer(fbo: GLuint) -> (*mut c_void, i32, i32) {
         unsafe {
             let mut width: i32 = 0;
             let mut height: i32 = 0;
-            let data_ptr = GetColorBuffer(&mut width, &mut height);
+            let data_ptr = GetColorBuffer(fbo, &mut width, &mut height);
             (data_ptr, width, height)
         }
     }

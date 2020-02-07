@@ -1779,8 +1779,12 @@ void Update(int width, int height) {
     }
 }
 
-void* GetColorBuffer(int32_t* width, int32_t* height) {
-    Framebuffer& fb = ctx->framebuffers[0];
+void* GetColorBuffer(GLuint fbo, int32_t* width, int32_t* height) {
+    auto i = ctx->framebuffers.find(fbo);
+    if (i == ctx->framebuffers.end()) {
+        return nullptr;
+    }
+    Framebuffer& fb = i->second;
     if (!fb.color_attachment) {
         return nullptr;
     }
