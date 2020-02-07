@@ -113,7 +113,6 @@ const WR_SHADERS: &'static [&'static str] = &[
     "brush_yuv_imageYUV_PLANAR",
     "cs_blurALPHA_TARGET",
     "cs_blurCOLOR_TARGET",
-    "cs_blur",
     "cs_border_segment",
     "cs_border_solid",
     "cs_clip_box_shadow",

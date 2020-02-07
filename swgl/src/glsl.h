@@ -45,6 +45,10 @@ float make_float(uint32_t n) {
     return float(n);
 }
 
+float make_float(bool n) {
+    return float(n);
+}
+
 template<typename T> Float make_float(T v) {
         return __builtin_convertvector(v, Float);
 }
@@ -61,6 +65,10 @@ int32_t make_int(float n) {
     return int32_t(n);
 }
 
+int32_t make_int(bool n) {
+    return int32_t(n);
+}
+
 template<typename T> I32 make_int(T v) {
     return __builtin_convertvector(v, I32);
 }
@@ -74,6 +82,10 @@ uint32_t make_uint(int32_t n) {
 }
 
 uint32_t make_uint(float n) {
+    return uint32_t(n);
+}
+
+uint32_t make_uint(bool n) {
     return uint32_t(n);
 }
 
@@ -472,6 +484,8 @@ vec2 operator*(Float a, vec2_scalar b) {
 
 SI vec2 min(vec2 a, vec2 b)       { return vec2(min(a.x, b.x), min(a.y, b.y));    }
 
+SI vec2_scalar min(vec2_scalar a, vec2_scalar b) { return vec2_scalar{min(a.x, b.x), min(a.y, b.y)}; }
+
 SI vec2 if_then_else(I32 c, vec2 t, vec2 e) {
     return vec2(if_then_else(c, t.x, e.x),
                 if_then_else(c, t.y, e.y));
@@ -499,6 +513,8 @@ vec2 step(vec2 edge, vec2 x) {
 vec2 max(vec2 a, vec2 b) {
        return vec2(max(a.x, b.x), max(a.y, b.y));
 }
+
+SI vec2_scalar max(vec2_scalar a, vec2_scalar b) { return vec2_scalar{max(a.x, b.x), max(a.y, b.y)}; }
 
 Float length(vec2 a) {
        return sqrt(a.x*a.x+a.y*a.y);
@@ -1321,6 +1337,13 @@ struct vec4_scalar {
         friend vec4_scalar operator*(vec4_scalar a, float b) {
                 return vec4_scalar{a.x*b, a.y*b, a.z*b, a.w*b};
         }
+        vec4_scalar& operator*=(float a) {
+                x *= a;
+                y *= a;
+                z *= a;
+                w *= a;
+                return *this;
+        }
 
         friend vec4_scalar operator-(vec4_scalar a, vec4_scalar b) {
                 return vec4_scalar{a.x-b.x, a.y-b.y, a.z-b.z, a.w-b.w};
@@ -1604,6 +1627,12 @@ SI bvec4 lessThanEqual(vec4 x, vec4 y) {
                  lessThanEqual(x.w, y.w));
 }
 
+SI bvec4_scalar lessThanEqual(vec4_scalar x, vec4_scalar y) {
+     return bvec4_scalar{lessThanEqual(x.x, y.x),
+                         lessThanEqual(x.y, y.y),
+                         lessThanEqual(x.z, y.z),
+                         lessThanEqual(x.w, y.w)};
+}
 
 SI bvec2 lessThan(vec2 x, vec2 y) {
     return bvec2(lessThan(x.x, y.x),
@@ -1706,6 +1735,13 @@ struct mat2_scalar {
 
         friend vec2_scalar operator*(mat2_scalar m, vec2_scalar v) {
                 vec2_scalar u;
+                u.x = m[0].x * v.x + m[1].x * v.y;
+                u.y = m[0].y * v.x + m[1].y * v.y;
+                return u;
+        }
+
+        friend vec2 operator*(mat2_scalar m, vec2 v) {
+                vec2 u;
                 u.x = m[0].x * v.x + m[1].x * v.y;
                 u.y = m[0].y * v.x + m[1].y * v.y;
                 return u;
@@ -2478,6 +2514,10 @@ Bool any(bvec4 x) {
         return x.x | x.y | x.z | x.w;
 }
 
+bool any(bvec4_scalar x) {
+    return x.x | x.y | x.z | x.w;
+}
+
 Bool any(bvec2 x) {
         return x.x | x.y;
 }
@@ -2493,8 +2533,17 @@ bool all(bool x) {
 Bool all(bvec2 x) {
         return x.x & x.y;
 }
+
+bool all(bvec2_scalar x) {
+    return x.x & x.y;
+}
+
 Bool all(bvec4 x) {
         return x.x & x.y & x.z & x.w;
+}
+
+bool all(bvec4_scalar x) {
+    return x.x & x.y & x.z & x.w;
 }
 
 SI vec4 if_then_else(bvec4 c, vec4 t, vec4 e) {
@@ -2599,6 +2648,10 @@ mat3 transpose(mat3 m) {
 
 vec2 abs(vec2 v) {
         return vec2(abs(v.x), abs(v.y));
+}
+
+vec2_scalar abs(vec2_scalar v) {
+        return vec2_scalar{fabsf(v.x), fabsf(v.y)};
 }
 
 Float mod(Float a, Float b) {
