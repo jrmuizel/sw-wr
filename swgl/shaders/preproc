@@ -1,3 +1,0 @@
-for i in *.vert *.frag; do
-~/src/glslang/build/StandAlone/glslangValidator -E $i > $i.pp
-done
