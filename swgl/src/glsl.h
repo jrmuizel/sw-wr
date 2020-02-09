@@ -2275,15 +2275,15 @@ ivec4_scalar texelFetch(isampler2D sampler, ivec2_scalar P, int lod) {
 }
 
 SI vec4_scalar* texelFetchPtr(sampler2D sampler, ivec2_scalar P, int min_x, int max_x, int min_y, int max_y) {
-        P.x = std::min(std::max(P.x, -min_x), sampler->width - 1 - max_x);
-        P.y = std::min(std::max(P.y, -min_y), sampler->height - 1 - max_y);
+        P.x = std::min(std::max(P.x, -min_x), int(sampler->width) - 1 - max_x);
+        P.y = std::min(std::max(P.y, -min_y), int(sampler->height) - 1 - max_y);
         assert(sampler->format == TextureFormat::RGBA32F);
         return (vec4_scalar*)&sampler->buf[P.x*4 + P.y*sampler->stride];
 }
 
 SI ivec4_scalar* texelFetchPtr(isampler2D sampler, ivec2_scalar P, int min_x, int max_x, int min_y, int max_y) {
-        P.x = std::min(std::max(P.x, -min_x), sampler->width - 1 - max_x);
-        P.y = std::min(std::max(P.y, -min_y), sampler->height - 1 - max_y);
+        P.x = std::min(std::max(P.x, -min_x), int(sampler->width) - 1 - max_x);
+        P.y = std::min(std::max(P.y, -min_y), int(sampler->height) - 1 - max_y);
         assert(sampler->format == TextureFormat::RGBA32I);
         return (ivec4_scalar*)&sampler->buf[P.x*4 + P.y*sampler->stride];
 }
