@@ -228,6 +228,7 @@ struct Texture {
 #define NULL_ATTRIB 15
 struct VertexArray {
     VertexAttrib attribs[MAX_ATTRIBS];
+    int max_attrib = -1;
 
     void validate();
 };
@@ -1591,6 +1592,7 @@ void EnableVertexAttribArray(GLuint index) {
             ctx->validate_vertex_array = true;
         }
         va.enabled = true;
+        v.max_attrib = std::max(v.max_attrib, (int)index);
 }
 
 void DisableVertexAttribArray(GLuint index) {
@@ -2592,7 +2594,8 @@ void draw_quad(int nump, Texture& colortex, int layer, Texture& depthtex) {
 }
 
 void VertexArray::validate() {
-    for (int i = 0; i < MAX_ATTRIBS; i++) {
+    int last_enabled = -1;
+    for (int i = 0; i <= max_attrib; i++) {
         if (attribs[i].enabled) {
             VertexAttrib &attr = attribs[i];
             VertexArray &v = ctx->vertex_arrays[attr.vertex_array];
@@ -2600,8 +2603,10 @@ void VertexArray::validate() {
             attr.buf = vertex_buf.buf;
             attr.buf_size = vertex_buf.size;
             //debugf("%d %x %d %d %d %d\n", i, attr.type, attr.size, attr.stride, attr.offset, attr.divisor);
+            last_enabled = i;
         }
     }
+    max_attrib = last_enabled;
 }
 
 extern "C" {
