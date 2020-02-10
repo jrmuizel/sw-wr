@@ -201,19 +201,20 @@ struct Texture {
     int height = 0;
     int depth = 0;
     char *buf = nullptr;
+    bool should_free = true;
     GLenum min_filter = GL_NEAREST;
     GLenum mag_filter = GL_LINEAR;
     bool swizzle_bgra = false;
 
     void allocate() {
-        if (!buf) {
+        if (!buf && should_free) {
             size_t size = aligned_stride(bytes_for_internal_format(internal_format) * width) * height * std::max(depth, 1) * levels;
             buf = (char*)malloc(size + sizeof(__m128i));
         }
     }
 
     void cleanup() {
-        if (buf) {
+        if (buf && should_free) {
             free(buf);
             buf = nullptr;
         }
@@ -1225,12 +1226,21 @@ static void set_tex_storage(
         GLint levels,
         GLenum internal_format,
         GLsizei width,
-        GLsizei height
+        GLsizei height,
+        bool should_free = true,
+        void* buf = nullptr
     ) {
     t.levels = levels;
     t.internal_format = internal_format;
     t.width = width;
     t.height = height;
+    if (t.should_free != should_free || buf != nullptr) {
+        if (t.should_free) {
+            t.cleanup();
+        }
+        t.should_free = should_free;
+        t.buf = (char*)buf;
+    }
     t.allocate();
 }
 
@@ -1794,6 +1804,11 @@ void* GetColorBuffer(GLuint fbo, int32_t* width, int32_t* height) {
     *width = colortex.width;
     *height = colortex.height;
     return colortex.buf;
+}
+
+void SetTextureBuffer(GLuint texid, GLenum internal_format, GLsizei width, GLsizei height, void* buf) {
+    Texture &t = ctx->textures[texid];
+    set_tex_storage(t, 1, internal_format, width, height, false, buf);
 }
 
 #define GL_FRAMEBUFFER_COMPLETE                      0x8CD5

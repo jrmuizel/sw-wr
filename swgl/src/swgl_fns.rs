@@ -244,6 +244,7 @@ extern "C" {
     fn GetError() -> GLenum;
     fn Update(width: i32, height: i32);
     fn GetColorBuffer(fbo: GLuint, width: *mut i32, height: *mut i32) -> *mut c_void;
+    fn SetTextureBuffer(tex: GLuint, internal_format: GLenum, width: GLsizei, height: GLsizei, buf: *mut c_void);
     fn DeleteTexture(n: GLuint);
     fn DeleteRenderbuffer(n: GLuint);
     fn DeleteFramebuffer(n: GLuint);
@@ -301,6 +302,12 @@ impl SwGlFns {
             let mut height: i32 = 0;
             let data_ptr = GetColorBuffer(fbo, &mut width, &mut height);
             (data_ptr, width, height)
+        }
+    }
+
+    pub fn set_texture_buffer(tex: GLuint, internal_format: GLenum, width: GLsizei, height: GLsizei, buf: *mut c_void) {
+        unsafe {
+            SetTextureBuffer(tex, internal_format, width, height, buf);
         }
     }
 
