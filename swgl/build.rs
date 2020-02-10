@@ -40,6 +40,7 @@ fn translate_shader(shader: &str) {
     };
 
     let mut imported = String::new();
+    write!(imported, "#define SWGL 1\n");
     write!(imported, "#define GL_ES 1\n");
     write!(imported, "#define WR_MAX_VERTEX_TEXTURE_WIDTH 1024U\n");
     let basename = if let Some(feature_start) = shader.find(char::is_uppercase) {
