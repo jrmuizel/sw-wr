@@ -1743,6 +1743,15 @@ Framebuffer *get_framebuffer(GLenum target) {
     return nullptr;
 }
 
+static inline void memset32(void* dst, uint32_t val, size_t n) {
+    __asm__ __volatile__ (
+        "rep stosl\n"
+        : "+D"(dst), "+c"(n)
+        : "a"(val)
+        : "memory", "cc"
+    );
+}
+
 template<typename T>
 static void clear_buffer(Texture& t, __m128i chunk, T value, int layer = 0) {
     int x0 = 0, y0 = 0, x1 = t.width, y1 = t.height;
@@ -1752,9 +1761,17 @@ static void clear_buffer(Texture& t, __m128i chunk, T value, int layer = 0) {
         x1 = std::min(x1, ctx->scissor.x + ctx->scissor.width);
         y1 = std::min(y1, ctx->scissor.y + ctx->scissor.height);
     }
-    const int chunk_size = sizeof(chunk) / sizeof(T);
+    if (x1 - x0 <= 0) {
+        return;
+    }
     int stride = aligned_stride(sizeof(T) * t.width);
+    if (x1 - x0 == t.width && y1 - y0 > 1) {
+        x1 += (stride / sizeof(T)) * (y1 - y0 - 1);
+        y1 = y0 + 1;
+    }
     char* buf = t.buf + stride * (t.height * layer + y0) + x0 * sizeof(T);
+#if 0
+    const int chunk_size = sizeof(chunk) / sizeof(T);
     for (int y = y0; y < y1; y++) {
         T* cur = (T*)buf;
         T* end = cur + (x1 - x0);
@@ -1766,6 +1783,21 @@ static void clear_buffer(Texture& t, __m128i chunk, T value, int layer = 0) {
         }
         buf += stride;
     }
+#else
+    for (int y = y0; y < y1; y++) {
+        uint32_t val = sizeof(T) == 1 ? uint32_t(value) * 0x01010101U : (sizeof(T) == 2 ? uint32_t(value) | (uint32_t(value) << 16) : value);
+        memset32(buf, val, (x1 - x0) / (4 / sizeof(T)));
+        if (sizeof (T) < 4) {
+            T* cur = (T*)buf + ((x1 - x0) & ~(4 / sizeof(T) - 1));
+            T* end = (T*)buf + (x1 - x0);
+            for (; cur < end; cur++) {
+                *cur = value;
+            }
+        }
+        buf += stride;
+    }
+#endif
+
 }
 
 extern "C" {
