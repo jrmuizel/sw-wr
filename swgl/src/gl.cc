@@ -358,6 +358,7 @@ struct FragmentShaderImpl : ShaderImpl {
     typedef void (*RunFunc)(FragmentShaderImpl*);
     typedef void (*SkipFunc)(FragmentShaderImpl*);
     typedef bool (*UseDiscardFunc)(FragmentShaderImpl*);
+    typedef bool (*UseVaryingFunc)(FragmentShaderImpl*);
 
     InitBatchFunc init_batch_func = nullptr;
     InitPrimitiveFunc init_primitive_func = nullptr;
@@ -365,6 +366,7 @@ struct FragmentShaderImpl : ShaderImpl {
     RunFunc run_func = nullptr;
     SkipFunc skip_func = nullptr;
     UseDiscardFunc use_discard_func = nullptr;
+    UseVaryingFunc use_varying_func = nullptr;
 
     vec4 gl_FragCoord;
     Bool isPixelDiscarded;
@@ -397,6 +399,10 @@ struct FragmentShaderImpl : ShaderImpl {
 
     ALWAYS_INLINE bool use_discard() {
         return (*use_discard_func)(this);
+    }
+
+    ALWAYS_INLINE bool use_varying() {
+        return (*use_varying_func)(this);
     }
 };
 
@@ -2486,14 +2492,29 @@ static inline void commit_output(uint32_t* buf, int span) {
     commit_output<DISCARD>(buf, _mm_cmplt_epi32(_mm_set1_epi32(span), _mm_set_epi32(4, 3, 2, 1)));
 }
 
+static inline void commit_solid(uint32_t* buf, __m128i src, __m128i mask) {
+    __m128i dst = _mm_loadu_si128((__m128i*)buf);
+    __m128i r = ctx->blend ? blend_pixels_RGBA8(dst, src) : src;
+    _mm_storeu_si128((__m128i*)buf,
+        _mm_or_si128(_mm_and_si128(mask, dst),
+                     _mm_andnot_si128(mask, r)));
+}
+
+static inline void commit_solid(uint32_t* buf, __m128i src) {
+    __m128i r = ctx->blend ? blend_pixels_RGBA8(_mm_loadu_si128((__m128i*)buf), src) : src;
+    _mm_storeu_si128((__m128i*)buf, r);
+}
+
+static inline void commit_solid(uint32_t* buf, __m128i src, int span) {
+    commit_solid(buf, src, _mm_cmplt_epi32(_mm_set1_epi32(span), _mm_set_epi32(4, 3, 2, 1)));
+}
+
 static inline __m128i pack_pixels_R8() {
     auto output = fragment_shader->gl_FragColor * 255.49f;
     return _mm_packs_epi32(_mm_cvtps_epi32(output.x), _mm_setzero_si128());
 }
 
-static inline __m128i blend_pixels_R8(__m128i dst) {
-    auto output = fragment_shader->gl_FragColor * 255.49f;
-    __m128i src = _mm_packs_epi32(_mm_cvtps_epi32(output.x), _mm_setzero_si128());
+static inline __m128i blend_pixels_R8(__m128i dst, __m128i src) {
     __m128i r;
     switch (ctx->blend_key) {
     case BLEND_KEY_NONE:
@@ -2519,7 +2540,8 @@ template<bool DISCARD>
 static inline void commit_output(uint8_t* buf, __m128i mask) {
     fragment_shader->run();
     __m128i dst = _mm_unpacklo_epi8(_mm_loadu_si32(buf), _mm_setzero_si128());
-    __m128i r = ctx->blend ? blend_pixels_R8(dst) : pack_pixels_R8();
+    __m128i r = pack_pixels_R8();
+    if (ctx->blend) r = blend_pixels_R8(dst, r);
     if (DISCARD) mask = _mm_or_si128(mask, _mm_packs_epi32(fragment_shader->isPixelDiscarded, _mm_setzero_si128()));
     r = _mm_or_si128(_mm_and_si128(mask, dst), _mm_andnot_si128(mask, r));
     _mm_storeu_si32(buf, _mm_packus_epi16(r, r));
@@ -2533,7 +2555,8 @@ static inline void commit_output(uint8_t* buf) {
 template<>
 static inline void commit_output<false>(uint8_t* buf) {
     fragment_shader->run();
-    __m128i r = ctx->blend ? blend_pixels_R8(_mm_unpacklo_epi8(_mm_loadu_si32(buf), _mm_setzero_si128())) : pack_pixels_R8();
+    __m128i r = pack_pixels_R8();
+    if (ctx->blend) r = blend_pixels_R8(_mm_unpacklo_epi8(_mm_loadu_si32(buf), _mm_setzero_si128()), r);
     _mm_storeu_si32(buf, _mm_packus_epi16(r, r));
 }
 
@@ -2558,6 +2581,22 @@ static inline void commit_output(uint8_t* buf, uint16_t z, uint16_t* zbuf, int s
 template<bool DISCARD>
 static inline void commit_output(uint8_t* buf, int span) {
     commit_output<DISCARD>(buf, _mm_cmplt_epi16(_mm_set1_epi16(span), _mm_set_epi16(8, 7, 6, 5, 4, 3, 2, 1)));
+}
+
+static inline void commit_solid(uint8_t* buf, __m128i src, __m128i mask) {
+    __m128i dst = _mm_unpacklo_epi8(_mm_loadu_si32(buf), _mm_setzero_si128());
+    __m128i r = ctx->blend ? blend_pixels_R8(dst, src) : src;
+    r = _mm_or_si128(_mm_and_si128(mask, dst), _mm_andnot_si128(mask, r));
+    _mm_storeu_si32(buf, _mm_packus_epi16(r, r));
+}
+
+static inline void commit_solid(uint8_t* buf, __m128i src) {
+    __m128i r = ctx->blend ? blend_pixels_R8(_mm_loadu_si32(buf), src) : src;
+    _mm_storeu_si32((__m128i*)buf, _mm_packus_epi16(r, r));
+}
+
+static inline void commit_solid(uint8_t* buf, __m128i src, int span) {
+    commit_solid(buf, src, _mm_cmplt_epi16(_mm_set1_epi32(span), _mm_set_epi16(8, 7, 6, 5, 4, 3, 2, 1)));
 }
 
 static const size_t MAX_FLATS = 64;
@@ -2703,21 +2742,60 @@ static inline void draw_quad_spans(int nump, Point p[4], uint16_t z, Interpolant
                 }
                 if (!fragment_shader->use_discard()) {
                     if (use_depth) {
-                        for (; span >= 8; span -= 8, buf += 8, depth += 8) {
-                            __m128i zmask;
-                            switch (check_depth<2>(z, depth, zmask)) {
-                            case 0:
-                                fragment_shader->skip();
-                                fragment_shader->skip();
+                        if (!fragment_shader->use_varying()) {
+                            __m128i src = _mm_setzero_si128();
+                            for (; span >= 8; span -= 8, buf += 8, depth += 8) {
+                                __m128i zmask;
+                                switch (check_depth<2>(z, depth, zmask)) {
+                                case 0:
+                                    continue;
+                                case -1:
+                                    fragment_shader->run();
+                                    src = sizeof(P) == sizeof(uint32_t) ? pack_pixels_RGBA8() : pack_pixels_R8();
+                                    commit_solid(buf, src);
+                                    commit_solid(buf + 4, src);
+                                    break;
+                                default:
+                                    fragment_shader->run();
+                                    src = sizeof(P) == sizeof(uint32_t) ? pack_pixels_RGBA8() : pack_pixels_R8();
+                                    commit_solid(buf, src, sizeof(P) == sizeof(uint32_t) ? _mm_unpacklo_epi16(zmask, zmask) : zmask);
+                                    commit_solid(buf + 4, src, sizeof(P) == sizeof(uint32_t) ? _mm_unpackhi_epi16(zmask, zmask) : _mm_shuffle_epi32(zmask, _MM_SHUFFLE(3, 2, 3, 2)));
+                                    break;
+                                }
                                 break;
-                            case -1:
-                                commit_output<false>(buf);
-                                commit_output<false>(buf + 4);
-                                break;
-                            default:
-                                commit_output<false>(buf, sizeof(P) == sizeof(uint32_t) ? _mm_unpacklo_epi16(zmask, zmask) : zmask);
-                                commit_output<false>(buf + 4, sizeof(P) == sizeof(uint32_t) ? _mm_unpackhi_epi16(zmask, zmask) : _mm_shuffle_epi32(zmask, _MM_SHUFFLE(3, 2, 3, 2)));
-                                break;
+                            }
+                            for (; span >= 8; span -= 8, buf += 8, depth += 8) {
+                                __m128i zmask;
+                                switch (check_depth<2>(z, depth, zmask)) {
+                                case 0:
+                                    continue;
+                                case -1:
+                                    commit_solid(buf, src);
+                                    commit_solid(buf + 4, src);
+                                    break;
+                                default:
+                                    commit_solid(buf, src, sizeof(P) == sizeof(uint32_t) ? _mm_unpacklo_epi16(zmask, zmask) : zmask);
+                                    commit_solid(buf + 4, src, sizeof(P) == sizeof(uint32_t) ? _mm_unpackhi_epi16(zmask, zmask) : _mm_shuffle_epi32(zmask, _MM_SHUFFLE(3, 2, 3, 2)));
+                                    break;
+                                }
+                            }
+                        } else {
+                            for (; span >= 8; span -= 8, buf += 8, depth += 8) {
+                                __m128i zmask;
+                                switch (check_depth<2>(z, depth, zmask)) {
+                                case 0:
+                                    fragment_shader->skip();
+                                    fragment_shader->skip();
+                                    break;
+                                case -1:
+                                    commit_output<false>(buf);
+                                    commit_output<false>(buf + 4);
+                                    break;
+                                default:
+                                    commit_output<false>(buf, sizeof(P) == sizeof(uint32_t) ? _mm_unpacklo_epi16(zmask, zmask) : zmask);
+                                    commit_output<false>(buf + 4, sizeof(P) == sizeof(uint32_t) ? _mm_unpackhi_epi16(zmask, zmask) : _mm_shuffle_epi32(zmask, _MM_SHUFFLE(3, 2, 3, 2)));
+                                    break;
+                                }
                             }
                         }
                         for (; span >= 4; span -= 4, buf += 4, depth += 4) {
@@ -2725,6 +2803,15 @@ static inline void draw_quad_spans(int nump, Point p[4], uint16_t z, Interpolant
                         }
                         if (span > 0) {
                             commit_output<false>(buf, z, depth, span);
+                        }
+                    } else if (!fragment_shader->use_varying()) {
+                        fragment_shader->run();
+                        __m128i src = sizeof(P) == sizeof(uint32_t) ? pack_pixels_RGBA8() : pack_pixels_R8();
+                        for (; span >= 4; span -= 4, buf += 4) {
+                            commit_solid(buf, src);
+                        }
+                        if (span > 0) {
+                            commit_solid(buf, src, span);
                         }
                     } else {
                         for (; span >= 4; span -= 4, buf += 4) {
