@@ -201,20 +201,33 @@ struct Texture {
     int height = 0;
     int depth = 0;
     char *buf = nullptr;
-    bool should_free = true;
     GLenum min_filter = GL_NEAREST;
     GLenum mag_filter = GL_LINEAR;
-    bool swizzle_bgra = false;
+
+    enum FLAGS {
+        SWIZZLE_BGRA = 1 << 0,
+        SHOULD_FREE  = 1 << 1,
+    };
+    int flags = SHOULD_FREE;
+    bool swizzle_bgra() const { return bool(flags & SWIZZLE_BGRA); }
+    bool should_free() const { return bool(flags & SHOULD_FREE); }
+
+    void set_flag(int flag, bool val) {
+        if (val) { flags |= flag; }
+        else { flags &= ~flag; }
+    }
+    void set_swizzle_bgra(bool val) { set_flag(SWIZZLE_BGRA, val); }
+    void set_should_free(bool val) { set_flag(SHOULD_FREE, val); }
 
     void allocate() {
-        if (!buf && should_free) {
+        if (!buf && should_free()) {
             size_t size = aligned_stride(bytes_for_internal_format(internal_format) * width) * height * std::max(depth, 1) * levels;
             buf = (char*)malloc(size + sizeof(__m128i));
         }
     }
 
     void cleanup() {
-        if (buf && should_free) {
+        if (buf && should_free()) {
             free(buf);
             buf = nullptr;
         }
@@ -547,7 +560,7 @@ S *lookup_sampler(S *s, int texture) {
             s->buf = (uint32_t*)t.buf; //XXX: wrong
             s->format = gl_format_to_texture_format(t.internal_format);
             s->filter = gl_filter_to_texture_filter(t.mag_filter);
-            s->swizzle_bgra = t.swizzle_bgra;
+            s->swizzle_bgra = t.swizzle_bgra();
         }
         return s;
 }
@@ -599,7 +612,7 @@ S *lookup_sampler_array(S *s, int texture) {
             s->buf = (uint32_t*)t.buf; //XXX: wrong
             s->format = gl_format_to_texture_format(t.internal_format);
             s->filter = gl_filter_to_texture_filter(t.mag_filter);
-            s->swizzle_bgra = t.swizzle_bgra;
+            s->swizzle_bgra = t.swizzle_bgra();
         }
         return s;
 }
@@ -1234,11 +1247,11 @@ static void set_tex_storage(
     t.internal_format = internal_format;
     t.width = width;
     t.height = height;
-    if (t.should_free != should_free || buf != nullptr) {
-        if (t.should_free) {
+    if (t.should_free() != should_free || buf != nullptr) {
+        if (t.should_free()) {
             t.cleanup();
         }
-        t.should_free = should_free;
+        t.set_should_free(should_free);
         t.buf = (char*)buf;
     }
     t.allocate();
@@ -1425,7 +1438,7 @@ void TexParameteri(GLenum target, GLenum pname, GLint param) {
         case GL_TEXTURE_SWIZZLE_R:
             if (t.internal_format == GL_RGBA8) {
                 assert(param == GL_BLUE || param == GL_RED);
-                t.swizzle_bgra = (param == GL_BLUE);
+                t.set_swizzle_bgra(param == GL_BLUE);
             } else {
                 assert(param == GL_RED);
             }
@@ -2523,7 +2536,7 @@ static inline void draw_quad_spans(int nump, Point p[4], uint16_t z, Interpolant
                 P* buf = fbuf + startx;
                 uint16_t* depth = fdepth + startx;
                 if (!fragment_shader->use_discard()) {
-                    if (fdepth) {
+                    if (depthtex.buf) {
                         for (; span >= 8; span -= 8, buf += 8, depth += 8) {
                             __m128i zmask;
                             switch (check_depth<2>(z, depth, zmask)) {
@@ -2556,7 +2569,7 @@ static inline void draw_quad_spans(int nump, Point p[4], uint16_t z, Interpolant
                         }
                     }
                 } else {
-                    if (fdepth) {
+                    if (depthtex.buf) {
                         for (; span >= 4; span -= 4, buf += 4, depth += 4) {
                             commit_output<true>(buf, z, depth);
                         }
