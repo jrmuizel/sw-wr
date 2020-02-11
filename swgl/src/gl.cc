@@ -219,6 +219,31 @@ struct Texture {
     void set_swizzle_bgra(bool val) { set_flag(SWIZZLE_BGRA, val); }
     void set_should_free(bool val) { set_flag(SHOULD_FREE, val); }
 
+    int delay_clear = 0;
+    uint32_t clear_val = 0;
+    uint32_t* cleared_rows = nullptr;
+
+    void enable_delayed_clear(uint32_t val) {
+        delay_clear = height;
+        clear_val = val;
+        if (cleared_rows) {
+            memset(cleared_rows, 0, ((height + 31) / 32) * sizeof(uint32_t));
+        } else {
+            cleared_rows = (uint32_t*)calloc((height + 31) / 32, sizeof(uint32_t));
+        }
+        if (height & 31) {
+            cleared_rows[height / 32] = ~0U << (height & 31);
+        }
+    }
+
+    void disable_delayed_clear() {
+        if (cleared_rows) {
+            free(cleared_rows);
+            cleared_rows = nullptr;
+            delay_clear = 0;
+        }
+    }
+
     void allocate() {
         if (!buf && should_free()) {
             size_t size = aligned_stride(bytes_for_internal_format(internal_format) * width) * height * std::max(depth, 1) * levels;
@@ -231,6 +256,7 @@ struct Texture {
             free(buf);
             buf = nullptr;
         }
+        disable_delayed_clear();
     }
 
     ~Texture() {
@@ -539,6 +565,8 @@ ProgramImpl *program_impl = nullptr;
 VertexShaderImpl *vertex_shader = nullptr;
 FragmentShaderImpl *fragment_shader = nullptr;
 
+static void prepare_texture(Texture& t);
+
 template<typename S>
 S *lookup_sampler(S *s, int texture) {
         int tid = ctx->current_texture[GL_TEXTURE_2D + (texture << 16)];
@@ -552,6 +580,7 @@ S *lookup_sampler(S *s, int texture) {
             s->swizzle_bgra = false;
         } else {
             Texture &t = ctx->textures[tid];
+            prepare_texture(t);
             s->width = t.width;
             s->height = t.height;
             int bpp = bytes_for_internal_format(t.internal_format);
@@ -576,6 +605,7 @@ S *lookup_isampler(S *s, int texture) {
             s->format = TextureFormat::RGBA32I;
         } else {
             Texture &t = ctx->textures[tid];
+            prepare_texture(t);
             s->width = t.width;
             s->height = t.height;
             int bpp = bytes_for_internal_format(t.internal_format);
@@ -602,6 +632,7 @@ S *lookup_sampler_array(S *s, int texture) {
             s->swizzle_bgra = false;
         } else {
             Texture &t = ctx->textures[tid];
+            prepare_texture(t);
             s->width = t.width;
             s->height = t.height;
             s->depth = t.depth;
@@ -1231,6 +1262,7 @@ void TexStorage3D(
     t.width = width;
     t.height = height;
     t.depth = depth;
+    t.disable_delayed_clear();
     t.allocate();
 }
 
@@ -1254,6 +1286,7 @@ static void set_tex_storage(
         t.set_should_free(should_free);
         t.buf = (char*)buf;
     }
+    t.disable_delayed_clear();
     t.allocate();
 }
 
@@ -1320,6 +1353,7 @@ void TexSubImage2D(
         GLenum ty,
         void *data) {
         Texture &t = ctx->textures[active_texture(target)];
+        prepare_texture(t);
         assert(xoffset + width <= t.width);
         assert(yoffset + height <= t.height);
         assert(ctx->unpack_row_length == 0 || ctx->unpack_row_length >= width);
@@ -1372,6 +1406,7 @@ void TexSubImage3D(
         GLenum ty,
         void *data) {
         Texture &t = ctx->textures[active_texture(target)];
+        prepare_texture(t);
         assert(ctx->unpack_row_length == 0 || ctx->unpack_row_length >= width);
         GLsizei row_length = ctx->unpack_row_length != 0 ? ctx->unpack_row_length : width;
 
@@ -1766,17 +1801,7 @@ static inline void memset32(void* dst, uint32_t val, size_t n) {
 }
 
 template<typename T>
-static void clear_buffer(Texture& t, __m128i chunk, T value, int layer = 0) {
-    int x0 = 0, y0 = 0, x1 = t.width, y1 = t.height;
-    if (ctx->scissortest) {
-        x0 = std::max(x0, ctx->scissor.x);
-        y0 = std::max(y0, ctx->scissor.y);
-        x1 = std::min(x1, ctx->scissor.x + ctx->scissor.width);
-        y1 = std::min(y1, ctx->scissor.y + ctx->scissor.height);
-    }
-    if (x1 - x0 <= 0) {
-        return;
-    }
+static void clear_buffer(Texture& t, T value, int x0, int x1, int y0, int y1, int layer = 0) {
     int stride = aligned_stride(sizeof(T) * t.width);
     if (x1 - x0 == t.width && y1 - y0 > 1) {
         x1 += (stride / sizeof(T)) * (y1 - y0 - 1);
@@ -1784,6 +1809,7 @@ static void clear_buffer(Texture& t, __m128i chunk, T value, int layer = 0) {
     }
     char* buf = t.buf + stride * (t.height * layer + y0) + x0 * sizeof(T);
 #if 0
+    __m128i chunk = sizeof(T) == 1 ? _mm_set1_epi8(value) : (sizeof(T) == 2 ? _mm_set1_epi16(value) : _mm_set1_epi32(value));
     const int chunk_size = sizeof(chunk) / sizeof(T);
     for (int y = y0; y < y1; y++) {
         T* cur = (T*)buf;
@@ -1797,9 +1823,9 @@ static void clear_buffer(Texture& t, __m128i chunk, T value, int layer = 0) {
         buf += stride;
     }
 #else
+    uint32_t chunk = sizeof(T) == 1 ? uint32_t(value) * 0x01010101U : (sizeof(T) == 2 ? uint32_t(value) | (uint32_t(value) << 16) : value);
     for (int y = y0; y < y1; y++) {
-        uint32_t val = sizeof(T) == 1 ? uint32_t(value) * 0x01010101U : (sizeof(T) == 2 ? uint32_t(value) | (uint32_t(value) << 16) : value);
-        memset32(buf, val, (x1 - x0) / (4 / sizeof(T)));
+        memset32(buf, chunk, (x1 - x0) / (4 / sizeof(T)));
         if (sizeof (T) < 4) {
             T* cur = (T*)buf + ((x1 - x0) & ~(4 / sizeof(T) - 1));
             T* end = (T*)buf + (x1 - x0);
@@ -1810,7 +1836,76 @@ static void clear_buffer(Texture& t, __m128i chunk, T value, int layer = 0) {
         buf += stride;
     }
 #endif
+}
 
+template<typename T>
+static inline void clear_buffer(Texture& t, T value, int layer = 0) {
+    int x0 = 0, y0 = 0, x1 = t.width, y1 = t.height;
+    if (ctx->scissortest) {
+        x0 = std::max(x0, ctx->scissor.x);
+        y0 = std::max(y0, ctx->scissor.y);
+        x1 = std::min(x1, ctx->scissor.x + ctx->scissor.width);
+        y1 = std::min(y1, ctx->scissor.y + ctx->scissor.height);
+    }
+    if (x1 - x0 > 0) {
+        clear_buffer<T>(t, value, x0, x1, y0, y1, layer);
+    }
+}
+
+template<typename T>
+static void force_clear(Texture& t) {
+    if (!t.delay_clear) {
+        return;
+    }
+    int num_masks = (t.height + 31) / 32;
+    for (int i = 0; i < num_masks; i++) {
+        uint32_t mask = t.cleared_rows[i];
+        if (mask != ~0U) {
+            int start = 0;
+            for (int end = 0; mask; end++) {
+                if (mask & 1) {
+                    if (start < end) {
+                        clear_buffer<T>(t, t.clear_val, 0, t.width, start + i*32, end + i*32);
+                    }
+                    start = end + 1;
+                }
+                mask >>= 1;
+            }
+            if (start < 32) {
+                clear_buffer<T>(t, t.clear_val, 0, t.width, start + i*32, 32 + i*32);
+            }
+        }
+    }
+    t.disable_delayed_clear();
+}
+
+static void prepare_texture(Texture& t) {
+    if (t.delay_clear) {
+        switch (t.internal_format) {
+        case GL_RGBA8:
+            force_clear<uint32_t>(t);
+            break;
+        case GL_R8:
+            force_clear<uint8_t>(t);
+            break;
+        case GL_DEPTH_COMPONENT16:
+            force_clear<uint16_t>(t);
+            break;
+        default:
+            assert(false);
+            break;
+        }
+    }
+}
+
+static inline void prepare_texture(Texture& t, int x, int y, int w, int h) {
+    if (t.delay_clear) {
+        if (x > 0 || y > 0 || w < t.width || h < t.height) {
+            prepare_texture(t);
+        } else {
+            t.disable_delayed_clear();
+        }
+    }
 }
 
 extern "C" {
@@ -1846,6 +1941,7 @@ void* GetColorBuffer(GLuint fbo, int32_t* width, int32_t* height) {
         return nullptr;
     }
     Texture& colortex = ctx->textures[fb.color_attachment];
+    prepare_texture(colortex);
     *width = colortex.width;
     *height = colortex.height;
     return colortex.buf;
@@ -1875,6 +1971,10 @@ GLenum CheckFramebufferStatus(GLenum target) {
 #define GL_DEPTH_BUFFER_BIT         0x00000100
 #define GL_STENCIL_BUFFER_BIT       0x00000400
 
+static inline bool clear_requires_scissor(Texture& t) {
+    return ctx->scissortest && (ctx->scissor.x > 0 || ctx->scissor.y > 0 || ctx->scissor.width < t.width || ctx->scissor.height < t.height);
+}
+
 void Clear(GLbitfield mask) {
     Framebuffer& fb = *get_framebuffer(GL_DRAW_FRAMEBUFFER);
     if ((mask & GL_COLOR_BUFFER_BIT) && fb.color_attachment) {
@@ -1885,11 +1985,26 @@ void Clear(GLbitfield mask) {
             colori = _mm_packs_epi32(colori, colori);
             colori = _mm_packus_epi16(colori, colori);
             uint32_t color = _mm_cvtsi128_si32(colori);
-            clear_buffer<uint32_t>(t, colori, color, fb.layer);
+            if (clear_requires_scissor(t)) {
+                force_clear<uint32_t>(t);
+                clear_buffer<uint32_t>(t, color, fb.layer);
+            } else if (t.depth > 1) {
+                t.disable_delayed_clear();
+                clear_buffer<uint32_t>(t, color, fb.layer);
+            } else {
+                t.enable_delayed_clear(color);
+            }
         } else if (t.internal_format == GL_R8) {
             uint8_t color = uint8_t(ctx->clearcolor[0] * 255.49f);
-            __m128i colori = _mm_set1_epi8(color);
-            clear_buffer<uint8_t>(t, colori, color, fb.layer);
+            if (clear_requires_scissor(t)) {
+                force_clear<uint8_t>(t);
+                clear_buffer<uint8_t>(t, color, fb.layer);
+            } else if (t.depth > 1) {
+                t.disable_delayed_clear();
+                clear_buffer<uint8_t>(t, color, fb.layer);
+            } else {
+                t.enable_delayed_clear(color);
+            }
         } else {
             assert(false);
         }
@@ -1898,8 +2013,12 @@ void Clear(GLbitfield mask) {
         Texture& t = ctx->textures[fb.depth_attachment];
         assert(t.internal_format == GL_DEPTH_COMPONENT16);
         uint16_t depth = uint16_t(0xFFFF * ctx->cleardepth) - 0x8000;
-        __m128i depthi = _mm_set1_epi16(depth);
-        clear_buffer<uint16_t>(t, depthi, depth);
+        if (clear_requires_scissor(t)) {
+            force_clear<uint16_t>(t);
+            clear_buffer<uint16_t>(t, depth);
+        } else {
+            t.enable_delayed_clear(depth);
+        }
     }
 }
 
@@ -1909,6 +2028,7 @@ void ReadPixels(GLint x, GLint y, GLsizei width, GLsizei height, GLenum format, 
     assert(format == GL_RED || format == GL_RGBA || format == GL_RGBA_INTEGER || format == GL_BGRA);
     Texture &t = ctx->textures[fb->color_attachment];
     if (!t.buf) return;
+    prepare_texture(t);
     debugf("read pixels %d, %d, %d, %d from fb %d with format %x\n", x, y, width, height, ctx->current_framebuffer[GL_READ_FRAMEBUFFER], t.internal_format);
     assert(x + width <= t.width);
     assert(y + height <= t.height);
@@ -1958,7 +2078,9 @@ void CopyImageSubData(
     }
     Texture &srctex = ctx->textures[srcName];
     if (!srctex.buf) return;
+    prepare_texture(srctex);
     Texture &dsttex = ctx->textures[dstName];
+    prepare_texture(dsttex, dstX, dstY, srcWidth, std::abs(srcHeight));
     assert(srctex.internal_format == dsttex.internal_format);
     assert(srcX + srcWidth <= srctex.width);
     assert(srcY + srcHeight <= srctex.height);
@@ -2070,6 +2192,7 @@ void Composite(
     }
     Texture &srctex = ctx->textures[srcId];
     if (!srctex.buf) return;
+    prepare_texture(srctex);
     Texture &dsttex = ctx->textures[fb.color_attachment];
     assert(bytes_for_internal_format(srctex.internal_format) == 4);
     const int bpp = 4;
@@ -2091,6 +2214,7 @@ void Composite(
     if (dstY + srcHeight > dsttex.height) {
         srcHeight = dsttex.height - dstY;
     }
+    prepare_texture(dsttex, dstX, dstY, srcWidth, srcHeight);
     char *dest = dsttex.buf + (flip ? dsttex.height - 1 - dstY : dstY) * dest_stride + dstX * bpp;
     char *src = srctex.buf + srcY * src_stride + srcX * bpp;
     if (flip) {
@@ -2535,8 +2659,50 @@ static inline void draw_quad_spans(int nump, Point p[4], uint16_t z, Interpolant
                 }
                 P* buf = fbuf + startx;
                 uint16_t* depth = fdepth + startx;
+                bool use_depth = depthtex.buf != nullptr;
+                if (depthtex.delay_clear) {
+                    int yi = int(y);
+                    uint32_t& mask = depthtex.cleared_rows[yi / 32];
+                    if ((mask & (1 << (yi & 31))) == 0) {
+                        mask |= 1 << (yi & 31);
+                        depthtex.delay_clear--;
+                        switch (ctx->depthfunc) {
+                        case GL_LESS: if (int16_t(z) < int16_t(depthtex.clear_val)) { use_depth = false; } else { span = 0; } break;
+                        case GL_LEQUAL: if (int16_t(z) <= int16_t(depthtex.clear_val)) { use_depth = false; } else { span = 0; } break;
+                        }
+                        if (ctx->depthmask && !use_depth) {
+                            if (startx > 0) {
+                                clear_buffer<uint16_t>(depthtex, depthtex.clear_val, 0, startx, yi, yi+1);
+                            }
+                            clear_buffer<uint16_t>(depthtex, z, startx, endx, yi, yi + 1);
+                            if (endx < depthtex.width) {
+                                clear_buffer<uint16_t>(depthtex, depthtex.clear_val, endx, depthtex.width, yi, yi+1);
+                            }
+                        } else {
+                            clear_buffer<uint16_t>(depthtex, depthtex.clear_val, 0, depthtex.width, yi, yi+1);
+                        }
+                    }
+                }
+                if (colortex.delay_clear) {
+                    int yi = int(y);
+                    uint32_t& mask = colortex.cleared_rows[yi / 32];
+                    if ((mask & (1 << (yi & 31))) == 0) {
+                        mask |= 1 << (yi & 31);
+                        colortex.delay_clear--;
+                        if (use_depth || ctx->blend || fragment_shader->use_discard()) {
+                            clear_buffer<P>(colortex, colortex.clear_val, 0, colortex.width, yi, yi + 1);
+                        } else {
+                            if (startx > 0) {
+                                clear_buffer<P>(colortex, colortex.clear_val, 0, startx, yi, yi+1);
+                            }
+                            if (endx < colortex.width) {
+                                clear_buffer<P>(colortex, colortex.clear_val, endx, colortex.width, yi, yi+1);
+                            }
+                        }
+                    }
+                }
                 if (!fragment_shader->use_discard()) {
-                    if (depthtex.buf) {
+                    if (use_depth) {
                         for (; span >= 8; span -= 8, buf += 8, depth += 8) {
                             __m128i zmask;
                             switch (check_depth<2>(z, depth, zmask)) {
@@ -2569,7 +2735,7 @@ static inline void draw_quad_spans(int nump, Point p[4], uint16_t z, Interpolant
                         }
                     }
                 } else {
-                    if (depthtex.buf) {
+                    if (use_depth) {
                         for (; span >= 4; span -= 4, buf += 4, depth += 4) {
                             commit_output<true>(buf, z, depth);
                         }
