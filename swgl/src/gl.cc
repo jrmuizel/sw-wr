@@ -247,7 +247,7 @@ struct Texture {
     void allocate() {
         if (!buf && should_free()) {
             size_t size = aligned_stride(bytes_for_internal_format(internal_format) * width) * height * std::max(depth, 1) * levels;
-            buf = (char*)malloc(size + sizeof(__m128i));
+            buf = (char*)malloc(size + sizeof(Float));
         }
     }
 
@@ -544,7 +544,7 @@ struct Context {
     GLenum blendfunc_sa = GL_ONE;
     GLenum blendfunc_da = GL_ZERO;
     GLenum blend_equation = GL_FUNC_ADD;
-    __m128i blendcolor = _mm_set1_epi16(0);
+    I32 blendcolor = 0;
     BlendKey blend_key = BLEND_KEY_NONE;
 
     bool depthtest = false;
@@ -554,7 +554,7 @@ struct Context {
     bool scissortest = false;
     Scissor scissor = { 0, 0, 0, 0 };
 
-    GLfloat clearcolor[4] = { 0, 0, 0, 0 };
+    I32 clearcolor = 0;
     GLdouble cleardepth = 1;
 
     int active_texture_index = 0;
@@ -949,8 +949,8 @@ void BlendFunc(GLenum srgb, GLenum drgb, GLenum sa, GLenum da) {
 }
 
 void BlendColor(GLfloat r, GLfloat g, GLfloat b, GLfloat a) {
-        __m128i c32 = _mm_cvtps_epi32(_mm_mul_ps(_mm_set_ps(a, b, g, r), _mm_set1_ps(255.49f)));
-        ctx->blendcolor = _mm_packs_epi32(c32, c32);
+        I32 c = roundto((Float){r, g, b, a}, 255.49f);
+        ctx->blendcolor = I32(c.r | (c.g << 8) | (c.b << 16) | (c.a << 24));
 }
 
 void BlendEquation(GLenum mode) {
@@ -981,10 +981,8 @@ void SetScissor(GLint x, GLint y, GLsizei width, GLsizei height) {
 }
 
 void ClearColor(GLfloat r, GLfloat g, GLfloat b, GLfloat a) {
-    ctx->clearcolor[0] = r;
-    ctx->clearcolor[1] = g;
-    ctx->clearcolor[2] = b;
-    ctx->clearcolor[3] = a;
+    I32 c = roundto((Float){r, g, b, a}, 255.49f);
+    ctx->clearcolor = I32(c.r | (c.g << 8) | (c.b << 16) | (c.a << 24));
 }
 
 void ClearDepth(GLdouble depth) {
@@ -1333,13 +1331,8 @@ GLenum internal_format_for_data(GLenum format, GLenum ty) {
 
 static inline void copy_bgra8_to_rgba8(uint32_t *dest, uint32_t *src, int width) {
         for (; width >= 4; width -= 4, dest += 4, src += 4) {
-            const __m128i rbmask = _mm_set1_epi32(0x00FF00FF);
-            __m128i p = _mm_loadu_si128((__m128i*)src);
-            __m128i rb = _mm_and_si128(rbmask, p);
-            __m128i ga = _mm_andnot_si128(rbmask, p);
-            rb = _mm_shufflelo_epi16(rb, _MM_SHUFFLE(2, 3, 0, 1));
-            rb = _mm_shufflehi_epi16(rb, _MM_SHUFFLE(2, 3, 0, 1));
-            _mm_storeu_si128((__m128i*)dest, _mm_or_si128(rb, ga));
+            I32 p = *(I32*)src;
+            *(I32*)dest = (p & 0xFF00FF00) | ((p & 0x00FF0000) >> 16) | ((p & 0x000000FF) << 16);
         }
         for (; width > 0; width--, dest++, src++) {
             uint32_t p = *src;
@@ -1814,21 +1807,6 @@ static void clear_buffer(Texture& t, T value, int x0, int x1, int y0, int y1, in
         y1 = y0 + 1;
     }
     char* buf = t.buf + stride * (t.height * layer + y0) + x0 * sizeof(T);
-#if 0
-    __m128i chunk = sizeof(T) == 1 ? _mm_set1_epi8(value) : (sizeof(T) == 2 ? _mm_set1_epi16(value) : _mm_set1_epi32(value));
-    const int chunk_size = sizeof(chunk) / sizeof(T);
-    for (int y = y0; y < y1; y++) {
-        T* cur = (T*)buf;
-        T* end = cur + (x1 - x0);
-        for (; cur + chunk_size <= end; cur += chunk_size) {
-            _mm_storeu_si128((__m128i*)cur, chunk);
-        }
-        for (; cur < end; cur++) {
-            *cur = value;
-        }
-        buf += stride;
-    }
-#else
     uint32_t chunk = sizeof(T) == 1 ? uint32_t(value) * 0x01010101U : (sizeof(T) == 2 ? uint32_t(value) | (uint32_t(value) << 16) : value);
     for (int y = y0; y < y1; y++) {
         memset32(buf, chunk, (x1 - x0) / (4 / sizeof(T)));
@@ -1841,7 +1819,6 @@ static void clear_buffer(Texture& t, T value, int x0, int x1, int y0, int y1, in
         }
         buf += stride;
     }
-#endif
 }
 
 template<typename T>
@@ -1986,11 +1963,7 @@ void Clear(GLbitfield mask) {
     if ((mask & GL_COLOR_BUFFER_BIT) && fb.color_attachment) {
         Texture& t = ctx->textures[fb.color_attachment];
         if (t.internal_format == GL_RGBA8) {
-            __m128 colorf = _mm_loadu_ps(ctx->clearcolor);
-            __m128i colori = _mm_cvtps_epi32(_mm_mul_ps(colorf, _mm_set1_ps(255.49f)));
-            colori = _mm_packs_epi32(colori, colori);
-            colori = _mm_packus_epi16(colori, colori);
-            uint32_t color = _mm_cvtsi128_si32(colori);
+            uint32_t color = ctx->clearcolor.x;
             if (clear_requires_scissor(t)) {
                 force_clear<uint32_t>(t);
                 clear_buffer<uint32_t>(t, color, fb.layer);
@@ -2001,7 +1974,7 @@ void Clear(GLbitfield mask) {
                 t.enable_delayed_clear(color);
             }
         } else if (t.internal_format == GL_R8) {
-            uint8_t color = uint8_t(ctx->clearcolor[0] * 255.49f);
+            uint8_t color = uint8_t(ctx->clearcolor.x & 0xFF);
             if (clear_requires_scissor(t)) {
                 force_clear<uint8_t>(t);
                 clear_buffer<uint8_t>(t, color, fb.layer);

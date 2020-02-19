@@ -4,7 +4,6 @@
 #include <assert.h>
 #include <math.h>
 #include <array>
-#include "sse_math.h"
 
 // Some of this is copied from Skia and is governed by a BSD-style license
 // Every function in this file should be marked static and inline using SI.
@@ -111,17 +110,16 @@ SI float if_then_else(int32_t c, float t, float e) {
 }
 
 SI Float if_then_else(I32 c, float t, float e) {
-    return _mm_or_ps(_mm_and_ps(c, Float(t)), _mm_andnot_ps(c, Float(e)));
+    return Float((c & I32(Float(t))) | (~c & I32(Float(e))));
 }
 
 SI I32 if_then_else(I32 c, int32_t t, int32_t e) {
-    return _mm_or_ps(_mm_and_ps(c, I32(t)), _mm_andnot_ps(c, I32(e)));
+    return (c & I32(t)) | (~c & I32(e));
 }
 
 
-
 SI Float if_then_else(I32 c, Float t, Float e) {
-    return _mm_or_ps(_mm_and_ps(c, t), _mm_andnot_ps(c, e));
+    return Float((c & I32(t)) | (~c & I32(e)));
 }
 
 SI Float if_then_else(int32_t c, Float t, Float e) {
@@ -129,7 +127,7 @@ SI Float if_then_else(int32_t c, Float t, Float e) {
 }
 
 SI Bool if_then_else(I32 c, Bool t, Bool e) {
-    return _mm_or_ps(_mm_and_ps(c, t), _mm_andnot_ps(c, e));
+    return (c & t) | (~c & e);
 }
 
 SI Bool if_then_else(int32_t c, Bool t, Bool e) {
@@ -530,7 +528,7 @@ SI vec2 normalize(vec2 a) {
 
 
 Float abs(Float v) {
-        return _mm_and_ps(v, 0-v);
+        return Float(I32(v) & I32(0-v));
 }
 
 template <typename T, typename P>
@@ -550,14 +548,10 @@ Float   cast  (U32 v) { return      __builtin_convertvector((I32)v,   Float); }
 Float   cast  (I32 v) { return      __builtin_convertvector((I32)v,   Float); }
 I32   cast  (Float v) { return      __builtin_convertvector(v,   I32); }
 
-    Float floor(Float v) {
-    #if defined(JUMPER_IS_SSE41)
-        return _mm_floor_ps(v);
-    #else
-        Float roundtrip = _mm_cvtepi32_ps(_mm_cvttps_epi32(v));
-        return roundtrip - if_then_else(roundtrip > v, Float(1), Float(0));
-    #endif
-    }
+Float floor(Float v) {
+    Float roundtrip = cast(cast(v));
+    return roundtrip - if_then_else(roundtrip > v, Float(1), Float(0));
+}
 
 vec2 floor(vec2 v) {
         return vec2(floor(v.x), floor(v.y));
@@ -568,16 +562,12 @@ vec2_scalar floor(vec2_scalar v) {
 }
 
 Float ceil(Float v) {
-    #if defined(JUMPER_IS_SSE41)
-        return _mm_ceil_ps(v);
-    #else
-        Float roundtrip = _mm_cvtepi32_ps(_mm_cvttps_epi32(v));
-        return roundtrip + if_then_else(roundtrip < v, Float(1), Float(0));
-    #endif
-    }
+    Float roundtrip = cast(cast(v));
+    return roundtrip + if_then_else(roundtrip < v, Float(1), Float(0));
+}
 
 
-    I32 roundto(Float v, Float scale) { return _mm_cvtps_epi32(v*scale); }
+I32 roundto(Float v, Float scale) { return _mm_cvtps_epi32(v*scale); }
 
 Float round(Float v) { return floor(v + 0.5f); }
 
@@ -2637,13 +2627,23 @@ Float dot(vec2 a, vec2 b) {
 }
 
 
-/* sin_ps and cos_ps are based on the same implementation used
- * by llvmpipe */
-Float sin(Float x) {
-        return sin_ps(x);
+#define sin __glsl_sin
+#define cos __glsl_cos
+
+float sin(float x) {
+    return sinf(x);
 }
-Float cos(Float x) {
-        return cos_ps(x);
+
+Float sin(Float v) {
+    return {sinf(v.x), sinf(v.y), sinf(v.z), sinf(v.w)};
+}
+
+float cos(float x) {
+    return cosf(x);
+}
+
+Float cos(Float v) {
+    return {cosf(v.x), cosf(v.y), cosf(v.z), cosf(v.w)};
 }
 
 bvec4 notEqual(ivec4 a, ivec4 b) {
