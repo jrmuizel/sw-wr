@@ -950,7 +950,9 @@ void BlendFunc(GLenum srgb, GLenum drgb, GLenum sa, GLenum da) {
 
 void BlendColor(GLfloat r, GLfloat g, GLfloat b, GLfloat a) {
         I32 c = roundto((Float){r, g, b, a}, 255.49f);
-        ctx->blendcolor = I32(c.r | (c.g << 8) | (c.b << 16) | (c.a << 24));
+        int32_t rg = c.r | (c.g << 16);
+        int32_t ba = c.b | (c.a << 16);
+        ctx->blendcolor = (I32){rg, ba, rg, ba};
 }
 
 void BlendEquation(GLenum mode) {
