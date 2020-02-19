@@ -1916,7 +1916,7 @@ static inline void prepare_texture(Texture& t, int x, int y, int w, int h) {
 
 extern "C" {
 
-void Update(int width, int height) {
+void InitDefaultFramebuffer(int width, int height) {
     Framebuffer& fb = ctx->framebuffers[0];
     if (!fb.color_attachment) {
         GenTextures(1, &fb.color_attachment);
@@ -3013,6 +3013,9 @@ void Finish() {
 }
 
 void MakeCurrent(void* ctx_ptr) {
+    if (!ctx_ptr) {
+        return;
+    }
     ctx = (Context*)ctx_ptr;
     setup_program(ctx->current_program);
 }
@@ -3021,9 +3024,12 @@ void* CreateContext() {
     return new Context;
 }
 
-void* DestroyContext(void* ctx_ptr) {
+void DestroyContext(void* ctx_ptr) {
+    if (!ctx_ptr) {
+        return;
+    }
     if (ctx == ctx_ptr) {
-        ctx = nullptr;
+        MakeCurrent(&default_ctx);
     }
     delete (Context*)ctx_ptr;
 }

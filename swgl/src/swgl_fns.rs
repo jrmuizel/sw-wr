@@ -13,9 +13,6 @@ use gleam::gl::*;
 #[allow(unused)]
 macro_rules! debug { ($($x:tt)*) => () }
 
-pub struct SwGlFns {
-}
-
 extern {
 }
 
@@ -242,7 +239,7 @@ extern "C" {
     fn GetString(name: GLenum) -> *const c_char;
     fn GetStringi(name: GLenum, index: GLuint) -> *const c_char;
     fn GetError() -> GLenum;
-    fn Update(width: i32, height: i32);
+    fn InitDefaultFramebuffer(width: i32, height: i32);
     fn GetColorBuffer(fbo: GLuint, width: *mut i32, height: *mut i32) -> *mut c_void;
     fn SetTextureBuffer(tex: GLuint, internal_format: GLenum, width: GLsizei, height: GLsizei, buf: *mut c_void);
     fn DeleteTexture(n: GLuint);
@@ -269,7 +266,8 @@ extern "C" {
     fn MakeCurrent(ctx: *mut c_void);
 }
 
-struct Context(*mut c_void);
+#[derive(Clone)]
+pub struct Context(*mut c_void);
 
 impl Context {
     pub fn create() -> Self {
@@ -283,20 +281,14 @@ impl Context {
     pub fn make_current(&self) {
         unsafe { MakeCurrent(self.0); }
     }
-}
 
-impl SwGlFns {
-    pub fn load() -> Rc<Gl> {
-        Rc::new(SwGlFns {}) as Rc<Gl>
-    }
-
-    pub fn update(width: i32, height: i32) {
+    pub fn init_default_framebuffer(&self, width: i32, height: i32) {
         unsafe {
-            Update(width, height);
+            InitDefaultFramebuffer(width, height);
         }
     }
 
-    pub fn get_color_buffer(fbo: GLuint) -> (*mut c_void, i32, i32) {
+    pub fn get_color_buffer(&self, fbo: GLuint) -> (*mut c_void, i32, i32) {
         unsafe {
             let mut width: i32 = 0;
             let mut height: i32 = 0;
@@ -305,13 +297,14 @@ impl SwGlFns {
         }
     }
 
-    pub fn set_texture_buffer(tex: GLuint, internal_format: GLenum, width: GLsizei, height: GLsizei, buf: *mut c_void) {
+    pub fn set_texture_buffer(&self, tex: GLuint, internal_format: GLenum, width: GLsizei, height: GLsizei, buf: *mut c_void) {
         unsafe {
             SetTextureBuffer(tex, internal_format, width, height, buf);
         }
     }
 
     pub fn composite(
+        &self,
         src_id: GLuint,
         src_x: GLint,
         src_y: GLint,
@@ -325,6 +318,18 @@ impl SwGlFns {
         unsafe {
             Composite(src_id, src_x, src_y, src_width, src_height, dst_x, dst_y, opaque as GLboolean, flip as GLboolean);
         }
+    }
+}
+
+impl From<*mut c_void> for Context {
+    fn from(ptr: *mut c_void) -> Self {
+        Context(ptr)
+    }
+}
+
+impl From<Context> for *mut c_void {
+    fn from(ctx: Context) -> Self {
+        ctx.0
     }
 }
 
@@ -354,7 +359,7 @@ fn calculate_length(width: GLsizei, height: GLsizei, format: GLenum, pixel_type:
     return (width * height * colors * depth) as usize;
 }
 
-impl Gl for SwGlFns {
+impl Gl for Context {
     fn get_type(&self) -> GlType {
         GlType::Gl
     }
