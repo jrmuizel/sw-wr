@@ -8,6 +8,7 @@
 
 #include <map>
 #include <string>
+#include <algorithm>
 #include "glsl.h"
 
 #ifdef NDEBUG
@@ -1793,12 +1794,16 @@ Framebuffer *get_framebuffer(GLenum target) {
 }
 
 static inline void memset32(void* dst, uint32_t val, size_t n) {
+#if USE_SSE2
     __asm__ __volatile__ (
         "rep stosl\n"
         : "+D"(dst), "+c"(n)
         : "a"(val)
         : "memory", "cc"
     );
+#else
+    std::fill_n((uint32_t*)dst, n, val);
+#endif
 }
 
 template<typename T>

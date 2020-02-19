@@ -1,9 +1,23 @@
 #include <string.h>
 #include <stdint.h>
-#include <xmmintrin.h>
 #include <assert.h>
 #include <math.h>
 #include <array>
+
+#ifdef __SSE2__
+    #include <xmmintrin.h>
+    #define USE_SSE2 1
+
+    #ifdef __MACH__
+        #define _mm_loadu_si32(ptr) (_mm_cvtsi32_si128(*(const uint32_t*)(ptr)))
+        #define _mm_storeu_si32(ptr, val) (*(uint32_t*)(ptr) = _mm_cvtsi128_si32(val))
+    #endif
+#endif
+
+#ifdef __ARM_NEON
+    #include <arm_neon.h>
+    #define USE_NEON 1
+#endif
 
 // Some of this is copied from Skia and is governed by a BSD-style license
 // Every function in this file should be marked static and inline using SI.
@@ -15,11 +29,6 @@
 #define SI ALWAYS_INLINE static
 
 #define UNREACHABLE __builtin_unreachable()
-
-#ifdef __MACH__
-#define _mm_loadu_si32(ptr) (_mm_cvtsi32_si128(*(const uint32_t*)(ptr)))
-#define _mm_storeu_si32(ptr, val) (*(uint32_t*)(ptr) = _mm_cvtsi128_si32(val))
-#endif
 
 namespace glsl {
 
@@ -141,8 +150,25 @@ SI float clamp(float a, float minVal, float maxVal) {
         return min(max(a, minVal), maxVal);
 }
 
-SI Float   min(Float a, Float b)       { return _mm_min_ps(a,b);    }
-SI Float   max(Float a, Float b)       { return _mm_max_ps(a,b);    }
+SI Float min(Float a, Float b) {
+#if USE_SSE2
+    return _mm_min_ps(a,b);
+#elif USE_NEON
+    return vminq_f32(a,b);
+#else
+    return if_then_else(a < b, a, b);
+#endif
+}
+
+SI Float max(Float a, Float b) {
+#if USE_SSE2
+    return _mm_max_ps(a,b);
+#elif USE_NEON
+    return vmaxq_f32(a,b);
+#else
+    return if_then_else(a > b, a, b);
+#endif
+}
 
 SI Float clamp(Float a, Float minVal, Float maxVal) {
         return min(max(a, minVal), maxVal);
@@ -154,16 +180,32 @@ SI float sqrt(float x) {
     return sqrtf(x);
 }
 
-SI Float sqrt(Float x) {
-        return _mm_sqrt_ps(x);
+SI Float sqrt(Float v) {
+#if USE_SSE2
+    return _mm_sqrt_ps(v);
+#elif USE_NEON
+    Float e = vrsqrteq_f32(v);
+    e *= vrsqrtsq_f32(v, e * e);
+    e *= vrsqrtsq_f32(v, e * e);
+    return v * e;
+#else
+    return (Float){sqrtf(v.x), sqrtf(v.y), sqrtf(v.z), sqrtf(v.w)};
+#endif
 }
 
 SI float inversesqrt(float x) {
     return 1.0f/sqrtf(x);
 }
 
-SI Float inversesqrt(Float x) {
-        return _mm_rsqrt_ps(x);
+SI Float inversesqrt(Float v) {
+#if USE_SSE2
+    return _mm_rsqrt_ps(v);
+#elif USE_NEON
+    Float e = vrsqrteq_f32(v);
+    return vrsqrtsq_f32(v, e * e) * e;
+#else
+    return 1.0f / sqrt(v);
+#endif
 }
 
 
@@ -528,7 +570,11 @@ SI vec2 normalize(vec2 a) {
 
 
 Float abs(Float v) {
-        return Float(I32(v) & I32(0-v));
+#if USE_NEON
+    return vabsq_f32(v);
+#else
+    return Float(I32(v) & I32(0-v));
+#endif
 }
 
 template <typename T, typename P>
@@ -567,7 +613,13 @@ Float ceil(Float v) {
 }
 
 
-I32 roundto(Float v, Float scale) { return _mm_cvtps_epi32(v*scale); }
+I32 roundto(Float v, Float scale) {
+#if USE_SSE2
+    return _mm_cvtps_epi32(v * scale);
+#else
+    return cast(v * scale + 0.5f);
+#endif
+}
 
 Float round(Float v) { return floor(v + 0.5f); }
 
@@ -2036,7 +2088,11 @@ SI mat4 if_then_else(int32_t c, mat4 t, mat4 e) {
 }
 
 SI I32 clampCoord(I32 coord, int limit) {
+#if USE_SSE2
     return _mm_min_epi16(_mm_max_epi16(coord, _mm_setzero_si128()), _mm_set1_epi32(limit-1));
+#else
+    return min(max(coord, 0), limit-1);
+#endif
 }
 SI int clampCoord(int coord, int limit) {
     return std::min(std::max(coord, 0), limit-1);
