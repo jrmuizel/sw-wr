@@ -2141,17 +2141,10 @@ ivec4 pixel_int_to_ivec4(I32 a, I32 b, I32 c, I32 d) {
 
 
 vec4_scalar pixel_to_vec4(bool bgra, uint32_t p) {
-    if (bgra) {
-        return vec4_scalar{to_float((p >> 16) & 0xFF),
-                           to_float((p >> 8) & 0xFF),
-                           to_float((p >> 0) & 0xFF),
-                           to_float((p >> 24) & 0xFF)};
-    } else {
-        return vec4_scalar{to_float((p >> 0) & 0xFF),
-                           to_float((p >> 8) & 0xFF),
-                           to_float((p >> 16) & 0xFF),
-                           to_float((p >> 24) & 0xFF)};
-    }
+    U32 i = bgra ?
+        U32{ (p >> 16) & 0xFF, (p >> 8) & 0xFF, p & 0xFF, p >> 24 } :
+        U32{ p & 0xFF, (p >> 8) & 0xFF, (p >> 16) & 0xFF, p >> 24 };
+    return bit_cast<vec4_scalar>(cast(i) * (1.0f / 255.0f));
 }
 
 template<typename S>
@@ -2176,11 +2169,13 @@ vec4 texelFetchRGBA8(sampler2DArray sampler, ivec3 P, int lod) {
 
 template<typename S>
 SI Float fetchOffsetsR8(S sampler, I32 offset) {
-        return (Float){
-                to_float(((uint8_t*)sampler->buf)[offset.x]),
-                to_float(((uint8_t*)sampler->buf)[offset.y]),
-                to_float(((uint8_t*)sampler->buf)[offset.z]),
-                to_float(((uint8_t*)sampler->buf)[offset.w])};
+        U32 i = {
+                ((uint8_t*)sampler->buf)[offset.x],
+                ((uint8_t*)sampler->buf)[offset.y],
+                ((uint8_t*)sampler->buf)[offset.z],
+                ((uint8_t*)sampler->buf)[offset.w]
+        };
+        return cast(i) * (1.0f / 255.0f);
 }
 
 vec4 texelFetchR8(sampler2D sampler, ivec2 P, int lod) {
