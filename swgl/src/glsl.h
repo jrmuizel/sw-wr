@@ -2154,8 +2154,8 @@ vec4_scalar pixel_to_vec4(bool bgra, uint32_t p) {
     }
 }
 
-vec4 texelFetchRGBA8(sampler2D sampler, ivec2 P, int lod) {
-        I32 offset = P.x + P.y*sampler->stride;
+template<typename S>
+SI vec4 fetchOffsetsRGBA8(S sampler, I32 offset) {
         return pixel_to_vec4(
                       sampler->swizzle_bgra,
                       sampler->buf[offset.x],
@@ -2164,56 +2164,53 @@ vec4 texelFetchRGBA8(sampler2D sampler, ivec2 P, int lod) {
                       sampler->buf[offset.w]);
 }
 
-vec4 texelFetchR8(sampler2D sampler, ivec2 P, int lod) {
+vec4 texelFetchRGBA8(sampler2D sampler, ivec2 P, int lod) {
         I32 offset = P.x + P.y*sampler->stride;
-        return vec4((Float){
-                to_float(((uint8_t*)sampler->buf)[offset.x]),
-                to_float(((uint8_t*)sampler->buf)[offset.y]),
-                to_float(((uint8_t*)sampler->buf)[offset.z]),
-                to_float(((uint8_t*)sampler->buf)[offset.w])
-        }, 0.0f, 0.0f, 1.0f);
-}
-
-vec4 texelFetchR8(sampler2DArray sampler, ivec3 P, int lod) {
-        I32 offset = P.x + P.y*sampler->stride + P.z*sampler->height_stride;
-        return vec4((Float){
-                to_float(((uint8_t*)sampler->buf)[offset.x]),
-                to_float(((uint8_t*)sampler->buf)[offset.y]),
-                to_float(((uint8_t*)sampler->buf)[offset.z]),
-                to_float(((uint8_t*)sampler->buf)[offset.w])
-        }, 0.0f, 0.0f, 1.0f);
+        return fetchOffsetsRGBA8(sampler, offset);
 }
 
 vec4 texelFetchRGBA8(sampler2DArray sampler, ivec3 P, int lod) {
         I32 offset = P.x + P.y*sampler->stride + P.z*sampler->height_stride;
-        return pixel_to_vec4(
-                      sampler->swizzle_bgra,
-                      sampler->buf[offset.x],
-                      sampler->buf[offset.y],
-                      sampler->buf[offset.z],
-                      sampler->buf[offset.w]);
+        return fetchOffsetsRGBA8(sampler, offset);
 }
 
+template<typename S>
+SI Float fetchOffsetsR8(S sampler, I32 offset) {
+        return (Float){
+                to_float(((uint8_t*)sampler->buf)[offset.x]),
+                to_float(((uint8_t*)sampler->buf)[offset.y]),
+                to_float(((uint8_t*)sampler->buf)[offset.z]),
+                to_float(((uint8_t*)sampler->buf)[offset.w])};
+}
 
-vec4 texelFetchFloat(sampler2D sampler, ivec2 P, int lod) {
-        I32 offset = P.x*4 + P.y*sampler->stride;
+vec4 texelFetchR8(sampler2D sampler, ivec2 P, int lod) {
+        I32 offset = P.x + P.y*sampler->stride;
+        return vec4(fetchOffsetsR8(sampler, offset), 0.0f, 0.0f, 1.0f);
+}
+
+vec4 texelFetchR8(sampler2DArray sampler, ivec3 P, int lod) {
+        I32 offset = P.x + P.y*sampler->stride + P.z*sampler->height_stride;
+        return vec4(fetchOffsetsR8(sampler, offset), 0.0f, 0.0f, 1.0f);
+}
+
+template<typename S>
+SI vec4 fetchOffsetsFloat(S sampler, I32 offset) {
         return pixel_float_to_vec4(
                       *(Float*)&sampler->buf[offset.x],
                       *(Float*)&sampler->buf[offset.y],
                       *(Float*)&sampler->buf[offset.z],
                       *(Float*)&sampler->buf[offset.w]);
+}
+
+vec4 texelFetchFloat(sampler2D sampler, ivec2 P, int lod) {
+        I32 offset = P.x*4 + P.y*sampler->stride;
+        return fetchOffsetsFloat(sampler, offset);
 }
 
 vec4 texelFetchFloat(sampler2DArray sampler, ivec3 P, int lod) {
         I32 offset = P.x*4 + P.y*sampler->stride + P.z*sampler->height_stride;
-        return pixel_float_to_vec4(
-                      *(Float*)&sampler->buf[offset.x],
-                      *(Float*)&sampler->buf[offset.y],
-                      *(Float*)&sampler->buf[offset.z],
-                      *(Float*)&sampler->buf[offset.w]);
+        return fetchOffsetsFloat(sampler, offset);
 }
-
-
 
 vec4 texelFetch(sampler2D sampler, ivec2 P, int lod) {
         P = clamp2D(P, sampler);
@@ -2303,15 +2300,20 @@ vec4 texelFetch(sampler2DArrayR8 sampler, ivec3 P, int lod) {
         return texelFetchR8(sampler, P, lod);
 }
 
-ivec4 texelFetch(isampler2D sampler, ivec2 P, int lod) {
-        P = clamp2D(P, sampler);
-        assert(sampler->format == TextureFormat::RGBA32I);
-        I32 offset = P.x*4 + P.y*sampler->stride;
+template<typename S>
+SI ivec4 fetchOffsetsInt(S sampler, I32 offset) {
         return pixel_int_to_ivec4(
                       *(I32*)&sampler->buf[offset.x],
                       *(I32*)&sampler->buf[offset.y],
                       *(I32*)&sampler->buf[offset.z],
                       *(I32*)&sampler->buf[offset.w]);
+}
+
+ivec4 texelFetch(isampler2D sampler, ivec2 P, int lod) {
+        P = clamp2D(P, sampler);
+        assert(sampler->format == TextureFormat::RGBA32I);
+        I32 offset = P.x*4 + P.y*sampler->stride;
+        return fetchOffsetsInt(sampler, offset);
 }
 
 ivec4_scalar texelFetch(isampler2D sampler, ivec2_scalar P, int lod) {
@@ -2366,6 +2368,7 @@ vec4 textureLinearRGBA8(S sampler, vec2 P, I32 zoffset = 0) {
     ivec2 frac = i & (I32)0xFF;
     i >>= 8;
 
+#if USE_SSE2
     __m128i row0 = _mm_min_epi16(_mm_max_epi16(i.y, _mm_setzero_si128()), _mm_set1_epi32(sampler->height - 1));
     row0 = _mm_madd_epi16(row0, _mm_set1_epi32(sampler->stride));
     row0 = _mm_add_epi32(row0, _mm_min_epi16(_mm_max_epi16(i.x, _mm_setzero_si128()), _mm_set1_epi32(sampler->width - 1)));
@@ -2419,12 +2422,21 @@ vec4 textureLinearRGBA8(S sampler, vec2 P, I32 zoffset = 0) {
 
     _MM_TRANSPOSE4_PS(r0, r1, r2, r3);
     return (sampler->swizzle_bgra ? vec4(r2, r1, r0, r3) : vec4(r0, r1, r2, r3)) * (1.0f / 0xFF00);
+#else
+    i = clamp2D(i, sampler);
+    I32 offset = i.x + i.y*sampler->stride + zoffset;
+    I32 xstep = (i.x + 1 < sampler->width) & I32(1);
+    I32 ystep = (i.y + 1 < sampler->height) & I32(sampler->stride);
 
-//    vec4 c00 = texelFetch(sampler, i, 0);
-//    vec4 c10 = texelFetch(sampler, i + ivec2(1, 0), 0);
-//    vec4 c01 = texelFetch(sampler, i + ivec2(0, 1), 0);
-//    vec4 c11 = texelFetch(sampler, i + ivec2(1, 1), 0);
-//    return mix(mix(c00, c10, r.x), mix(c10, c11, r.x), r.y);
+    vec4 c = fetchOffsetsRGBA8(sampler, offset);
+    vec4 cx = fetchOffsetsRGBA8(sampler, offset + xstep);
+    vec4 cy = fetchOffsetsRGBA8(sampler, offset + ystep);
+    vec4 cxy = fetchOffsetsRGBA8(sampler, offset + xstep + ystep);
+
+    vec2 fracf(frac);
+    fracf *= 1.0f / 256.0f;
+    return mix(mix(c, cx, fracf.x), mix(cy, cxy, fracf.x), fracf.y);
+#endif
 }
 
 template<typename S>
@@ -2437,6 +2449,7 @@ vec4 textureLinearR8(S sampler, vec2 P, I32 zoffset = 0) {
     ivec2 frac = i & (I32)0xFF;
     i >>= 8;
 
+#if USE_SSE2
     __m128i row0 = _mm_min_epi16(_mm_max_epi16(i.y, _mm_setzero_si128()), _mm_set1_epi32(sampler->height - 1));
     row0 = _mm_madd_epi16(row0, _mm_set1_epi32(sampler->stride));
     row0 = _mm_add_epi32(row0, _mm_min_epi16(_mm_max_epi16(i.x, _mm_setzero_si128()), _mm_set1_epi32(sampler->width - 1)));
@@ -2473,6 +2486,21 @@ vec4 textureLinearR8(S sampler, vec2 P, I32 zoffset = 0) {
                                                fracy));
     __m128 r = _mm_cvtepi32_ps(_mm_madd_epi16(cc, fracx));
     return vec4((Float)r * (1.0f / 0xFF00), 0.0f, 0.0f, 1.0f);
+#else
+    i = clamp2D(i, sampler);
+    I32 offset = i.x + i.y*sampler->stride + zoffset;
+    I32 xstep = (i.x + 1 < sampler->width) & I32(1);
+    I32 ystep = (i.y + 1 < sampler->height) & I32(sampler->stride);
+
+    Float c = fetchOffsetsR8(sampler, offset);
+    Float cx = fetchOffsetsR8(sampler, offset + xstep);
+    Float cy = fetchOffsetsR8(sampler, offset + ystep);
+    Float cxy = fetchOffsetsR8(sampler, offset + xstep + ystep);
+
+    vec2 fracf(frac);
+    fracf *= 1.0f / 256.0f;
+    return vec4(mix(mix(c, cx, fracf.x), mix(cy, cxy, fracf.x), fracf.y), 0.0f, 0.0f, 1.0f);
+#endif
 }
 
 template<typename S>
