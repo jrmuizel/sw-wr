@@ -2091,7 +2091,7 @@ SI I32 clampCoord(I32 coord, int limit) {
 #if USE_SSE2
     return _mm_min_epi16(_mm_max_epi16(coord, _mm_setzero_si128()), _mm_set1_epi32(limit-1));
 #else
-    return min(max(coord, 0), limit-1);
+    return clamp(coord, 0, limit-1);
 #endif
 }
 SI int clampCoord(int coord, int limit) {
