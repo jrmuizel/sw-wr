@@ -2577,7 +2577,7 @@ static inline void commit_solid(uint8_t* buf, __m128i src) {
 }
 
 static inline void commit_solid(uint8_t* buf, __m128i src, int span) {
-    commit_solid(buf, src, _mm_cmplt_epi16(_mm_set1_epi32(span), _mm_set_epi16(8, 7, 6, 5, 4, 3, 2, 1)));
+    commit_solid(buf, src, _mm_cmplt_epi16(_mm_set1_epi16(span), _mm_set_epi16(8, 7, 6, 5, 4, 3, 2, 1)));
 }
 
 static const size_t MAX_FLATS = 64;
