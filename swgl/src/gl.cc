@@ -545,7 +545,7 @@ struct Context {
     GLenum blendfunc_sa = GL_ONE;
     GLenum blendfunc_da = GL_ZERO;
     GLenum blend_equation = GL_FUNC_ADD;
-    I32 blendcolor = 0;
+    V8<uint16_t> blendcolor = 0;
     BlendKey blend_key = BLEND_KEY_NONE;
 
     bool depthtest = false;
@@ -555,7 +555,7 @@ struct Context {
     bool scissortest = false;
     Scissor scissor = { 0, 0, 0, 0 };
 
-    I32 clearcolor = 0;
+    uint32_t clearcolor = 0;
     GLdouble cleardepth = 1;
 
     int active_texture_index = 0;
@@ -951,9 +951,7 @@ void BlendFunc(GLenum srgb, GLenum drgb, GLenum sa, GLenum da) {
 
 void BlendColor(GLfloat r, GLfloat g, GLfloat b, GLfloat a) {
         I32 c = roundto((Float){r, g, b, a}, 255.49f);
-        int32_t rg = c.r | (c.g << 16);
-        int32_t ba = c.b | (c.a << 16);
-        ctx->blendcolor = (I32){rg, ba, rg, ba};
+        ctx->blendcolor = __builtin_convertvector(c, U16).rgbargba;
 }
 
 void BlendEquation(GLenum mode) {
@@ -985,7 +983,7 @@ void SetScissor(GLint x, GLint y, GLsizei width, GLsizei height) {
 
 void ClearColor(GLfloat r, GLfloat g, GLfloat b, GLfloat a) {
     I32 c = roundto((Float){r, g, b, a}, 255.49f);
-    ctx->clearcolor = I32(c.r | (c.g << 8) | (c.b << 16) | (c.a << 24));
+    ctx->clearcolor = bit_cast<uint32_t>(__builtin_convertvector(c, U8));
 }
 
 void ClearDepth(GLdouble depth) {
@@ -1971,7 +1969,7 @@ void Clear(GLbitfield mask) {
     if ((mask & GL_COLOR_BUFFER_BIT) && fb.color_attachment) {
         Texture& t = ctx->textures[fb.color_attachment];
         if (t.internal_format == GL_RGBA8) {
-            uint32_t color = ctx->clearcolor.x;
+            uint32_t color = ctx->clearcolor;
             if (clear_requires_scissor(t)) {
                 force_clear<uint32_t>(t);
                 clear_buffer<uint32_t>(t, color, fb.layer);
@@ -1982,7 +1980,7 @@ void Clear(GLbitfield mask) {
                 t.enable_delayed_clear(color);
             }
         } else if (t.internal_format == GL_R8) {
-            uint8_t color = uint8_t(ctx->clearcolor.x & 0xFF);
+            uint8_t color = uint8_t(ctx->clearcolor & 0xFF);
             if (clear_requires_scissor(t)) {
                 force_clear<uint8_t>(t);
                 clear_buffer<uint8_t>(t, color, fb.layer);
@@ -2162,92 +2160,6 @@ void BlitFramebuffer(
         dstWidth, dstHeight, 1);
 }
 
-void Composite(
-    GLuint srcId,
-    GLint srcX,
-    GLint srcY,
-    GLsizei srcWidth,
-    GLsizei srcHeight,
-    GLint dstX,
-    GLint dstY,
-    GLboolean opaque,
-    GLboolean flip
-) {
-    Framebuffer& fb = ctx->framebuffers[0];
-    if (!fb.color_attachment) {
-        return;
-    }
-    Texture &srctex = ctx->textures[srcId];
-    if (!srctex.buf) return;
-    prepare_texture(srctex);
-    Texture &dsttex = ctx->textures[fb.color_attachment];
-    assert(bytes_for_internal_format(srctex.internal_format) == 4);
-    const int bpp = 4;
-    int src_stride = aligned_stride(bpp * srctex.width);
-    int dest_stride = aligned_stride(bpp * dsttex.width);
-    if (srcY < 0) {
-        dstY -= srcY;
-        srcHeight += srcY;
-        srcY = 0;
-    }
-    if (dstY < 0) {
-        srcY -= dstY;
-        srcHeight += dstY;
-        dstY = 0;
-    }
-    if (srcY + srcHeight > srctex.height) {
-        srcHeight = srctex.height - srcY;
-    }
-    if (dstY + srcHeight > dsttex.height) {
-        srcHeight = dsttex.height - dstY;
-    }
-    prepare_texture(dsttex, dstX, dstY, srcWidth, srcHeight);
-    char *dest = dsttex.buf + (flip ? dsttex.height - 1 - dstY : dstY) * dest_stride + dstX * bpp;
-    char *src = srctex.buf + srcY * src_stride + srcX * bpp;
-    if (flip) {
-        dest_stride = -dest_stride;
-    }
-    if (opaque) {
-        for (int y = 0; y < srcHeight; y++) {
-            memcpy(dest, src, srcWidth * bpp);
-            dest += dest_stride;
-            src += src_stride;
-        }
-    } else {
-        #define MULDIV255(x, y) ({ __m128i b = x; _mm_srli_epi16(_mm_add_epi16(_mm_mullo_epi16(b, y), b), 8); })
-        #define ALPHAS(c) _mm_shufflehi_epi16(_mm_shufflelo_epi16(c, 0xFF), 0xFF)
-        for (int y = 0; y < srcHeight; y++) {
-            char *end = src + srcWidth * bpp;
-            while (src + 4 * bpp <= end) {
-                __m128i srcpx = _mm_loadu_si128((__m128i*)src);
-                __m128i slo = _mm_unpacklo_epi8(srcpx, _mm_setzero_si128());
-                __m128i shi = _mm_unpackhi_epi8(srcpx, _mm_setzero_si128());
-                __m128i dstpx = _mm_loadu_si128((__m128i*)dest);
-                __m128i dlo = _mm_unpacklo_epi8(dstpx, _mm_setzero_si128());
-                __m128i dhi = _mm_unpackhi_epi8(dstpx, _mm_setzero_si128());
-                __m128i r = _mm_packus_epi16(
-                        _mm_add_epi16(slo, _mm_sub_epi16(dlo, MULDIV255(dlo, ALPHAS(slo)))),
-                        _mm_add_epi16(shi, _mm_sub_epi16(dhi, MULDIV255(dhi, ALPHAS(shi)))));
-                _mm_storeu_si128((__m128i*)dest, r);
-                src += 4 * bpp;
-                dest += 4 * bpp;
-            }
-            while (src < end) {
-                __m128i slo = _mm_unpacklo_epi8(_mm_loadu_si32(src), _mm_setzero_si128());
-                __m128i dlo = _mm_unpacklo_epi8(_mm_loadu_si32(dest), _mm_setzero_si128());
-                __m128i r = _mm_packus_epi16(
-                        _mm_add_epi16(slo, _mm_sub_epi16(dlo, MULDIV255(dlo, ALPHAS(slo)))),
-                        _mm_setzero_si128());
-                _mm_storeu_si32(dest, r);
-                src += bpp;
-                dest += bpp;
-            }
-            dest += dest_stride - srcWidth * bpp;
-            src += src_stride - srcWidth * bpp;
-        }
-    }
-}
-
 #define GL_POINTS                         0x0000
 #define GL_LINES                          0x0001
 #define GL_LINE_LOOP                      0x0002
@@ -2264,197 +2176,290 @@ struct Point {
         float y;
 };
 
-template<int FULL_SPANS>
-static inline int check_depth(uint16_t z, uint16_t* zbuf, __m128i& outmask, int span = 0) {
-    __m128i dest;
-    if (FULL_SPANS > 1) {
-        dest = _mm_loadu_si128((__m128i*)zbuf);
-    } else {
-        dest = _mm_loadl_epi64((__m128i*)zbuf);
-    }
-    __m128i src = _mm_set1_epi16(z);
+using PackedRGBA8 = V16<uint8_t>;
+using WideRGBA8 = V16<uint16_t>;
+using HalfRGBA8 = V8<uint16_t>;
+
+static inline WideRGBA8 unpack(PackedRGBA8 p) {
+    return __builtin_convertvector(p, WideRGBA8);
+}
+
+static inline HalfRGBA8 lowHalf(WideRGBA8 p) {
+    return __builtin_shufflevector(p, p, 0, 1, 2, 3, 4, 5, 6, 7);
+}
+
+static inline HalfRGBA8 highHalf(WideRGBA8 p) {
+    return __builtin_shufflevector(p, p, 8, 9, 10, 11, 12, 13, 14, 15);
+}
+
+static inline WideRGBA8 combine(HalfRGBA8 a, HalfRGBA8 b) {
+    return __builtin_shufflevector(a, b, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15);
+}
+
+static inline PackedRGBA8 pack(WideRGBA8 p) {
+#if USE_SSE2
+    return _mm_packus_epi16(lowHalf(p), highHalf(p));
+#elif USE_NEON
+    return vcombine_u8(vqmovn_u16(lowHalf(p)), vqmovn_u16(highHalf(p)));
+#else
+    return __builtin_convertvector(p, PackedRGBA8);
+#endif
+}
+
+static inline HalfRGBA8 packRGBA8(I32 a, I32 b) {
+#if USE_SSE2
+    return _mm_packs_epi32(a, b);
+#elif USE_NEON
+    return vcombine_u16(vqmovun_s32(a), vqmovun_s32(b));
+#else
+    return __builtin_convertvector(__builtin_shufflevector(a, b, 0, 1, 2, 3, 4, 5, 6, 7), HalfRGBA8);
+#endif
+}
+
+static inline HalfRGBA8 zipLow(HalfRGBA8 a, HalfRGBA8 b) {
+#if USE_SSE2
+    return _mm_unpacklo_epi16(a, b);
+#else
+    return __builtin_shufflevector(a, b, 0, 8, 1, 9, 2, 10, 3, 11);
+#endif
+}
+
+static inline HalfRGBA8 zipHigh(HalfRGBA8 a, HalfRGBA8 b) {
+#if USE_SSE2
+    return _mm_unpackhi_epi16(a, b);
+#else
+    return __builtin_shufflevector(a, b, 4, 12, 5, 13, 6, 14, 7, 15);
+#endif
+}
+
+static inline HalfRGBA8 zipLow32(HalfRGBA8 a, HalfRGBA8 b) {
+#if USE_SSE2
+    return _mm_unpacklo_epi32(a, b);
+#else
+    return __builtin_shufflevector(a, b, 0, 1, 8, 9, 2, 3, 10, 11);
+#endif
+}
+
+static inline HalfRGBA8 zipHigh32(HalfRGBA8 a, HalfRGBA8 b) {
+#if USE_SSE2
+    return _mm_unpackhi_epi32(a, b);
+#else
+    return __builtin_shufflevector(a, b, 4, 5, 12, 13, 6, 7, 14, 15);
+#endif
+}
+
+using PackedR8 = V4<uint8_t>;
+using WideR8 = V4<uint16_t>;
+
+static inline WideR8 unpack(PackedR8 p) {
+    return __builtin_convertvector(p, WideR8);
+}
+
+static inline WideR8 packR8(I32 a) {
+#if USE_SSE2
+    return bit_cast<WideR8>(_mm_packs_epi32(a, a));
+#elif USE_NEON
+    return vqmovun_s32(a);
+#else
+    return __builtin_convertvector(a, WideR8);
+#endif
+}
+
+static inline PackedR8 pack(WideR8 p) {
+#if USE_SSE2
+    __m128i m = __builtin_shufflevector(p, p, 0, 1, 2, 3, -1, -1, -1, -1);
+    return bit_cast<PackedR8>(_mm_packus_epi16(m, m));
+#elif USE_NEON
+    return vqmovn_u16(p);
+#else
+    return __builtin_convertvector(p, PackedR8);
+#endif
+}
+
+using ZMask4 = V4<int16_t>;
+using ZMask8 = V8<int16_t>;
+
+static inline ZMask4 lowHalf(ZMask8 mask) {
+    return __builtin_shufflevector(mask, mask, 0, 1, 2, 3);
+}
+
+static inline ZMask4 highHalf(ZMask8 mask) {
+    return __builtin_shufflevector(mask, mask, 4, 5, 6, 7);
+}
+
+static inline PackedRGBA8 unpack(ZMask4 mask, uint32_t*) {
+    return bit_cast<PackedRGBA8>(mask.xxyyzzww);
+}
+
+static inline WideR8 unpack(ZMask4 mask, uint8_t*) {
+    return bit_cast<WideR8>(mask);
+}
+
+#if USE_SSE2
+#define ZMASK_NONE_PASSED 0xFFFF
+#define ZMASK_ALL_PASSED  0
+static inline uint32_t zmask_code(ZMask8 mask) {
+    return _mm_movemask_epi8(mask);
+}
+static inline uint32_t zmask_code(ZMask4 mask) {
+    return zmask_code(mask.xyzwxyzw);
+}
+#else
+using ZMask4Code = V4<uint8_t>;
+using ZMask8Code = V8<uint8_t>;
+#define ZMASK_NONE_PASSED 0xFFFFFFFFU
+#define ZMASK_ALL_PASSED  0
+static inline uint32_t zmask_code(ZMask4 mask) {
+    return bit_cast<uint32_t>(__builtin_convertvector(mask, ZMask4Code));
+}
+static inline uint32_t zmask_code(ZMask8 mask) {
+    return zmask_code(ZMask4((U16(lowHalf(mask)) >> 12) | (U16(highHalf(mask)) << 4)));
+}
+#endif
+
+template<int FULL_SPANS, typename MASK>
+static inline int check_depth(uint16_t z, uint16_t* zbuf, MASK& outmask, int span = 0) {
+    MASK dest = unaligned_load<MASK>(zbuf);
+    MASK src = int16_t(z);
     // Invert the depth test to check which pixels failed and should be discarded.
-    __m128i mask = ctx->depthfunc == GL_LEQUAL ?
+    MASK mask = ctx->depthfunc == GL_LEQUAL ?
         // GL_LEQUAL: Not(LessEqual) = Greater
-        _mm_cmpgt_epi16(src, dest) :
+        MASK(src > dest) :
         // GL_LESS: Not(Less) = GreaterEqual
-        // No GreaterEqual in SSE2, so use Not(Less) directly.
-        _mm_xor_si128(_mm_cmplt_epi16(src, dest), _mm_set1_epi16(0xFFFF));
+        MASK(src >= dest);
     if (FULL_SPANS > 1) {
-        switch (_mm_movemask_epi8(mask)) {
-        case 0xFFFF:
+        switch (zmask_code(mask)) {
+        case ZMASK_NONE_PASSED:
             return 0;
-        case 0:
-            if (ctx->depthmask) _mm_storeu_si128((__m128i*)zbuf, src);
+        case ZMASK_ALL_PASSED:
+            if (ctx->depthmask) {
+                unaligned_store(zbuf, src);
+            }
             return -1;
         }
-        if (ctx->depthmask) {
-            _mm_storeu_si128((__m128i*)zbuf,
-                _mm_or_si128(_mm_and_si128(mask, dest),
-                             _mm_andnot_si128(mask, src)));
-        }
-        outmask = mask;
     } else {
-        if (FULL_SPANS) {
-            mask = _mm_move_epi64(mask);
-            if (_mm_movemask_epi8(mask) == 0xFF) {
-                return 0;
-            }
-        } else {
-            mask = _mm_or_si128(mask,
-                                _mm_cmplt_epi16(_mm_set1_epi16(span), _mm_set_epi16(8, 7, 6, 5, 4, 3, 2, 1)));
-            if (_mm_movemask_epi8(mask) == 0xFFFF) {
-                return 0;
-            }
+        if (!FULL_SPANS) {
+            mask |= MASK(span) < MASK{1, 2, 3, 4};
         }
-        if (ctx->depthmask) {
-            _mm_storel_epi64((__m128i*)zbuf,
-                _mm_or_si128(_mm_and_si128(mask, dest),
-                             _mm_andnot_si128(mask, src)));
+        if (zmask_code(mask) == ZMASK_NONE_PASSED) {
+            return 0;
         }
-        outmask = mask;
     }
+    if (ctx->depthmask) {
+        unaligned_store(zbuf, (mask & dest) | (~mask & src));
+    }
+    outmask = mask;
     return 1;
 }
 
-static inline __m128i pack_pixels_RGBA8() {
-    auto output = fragment_shader->gl_FragColor * 255.49f;
-    __m128i rxz = _mm_packs_epi32(_mm_cvtps_epi32(output.x), _mm_cvtps_epi32(output.z));
-    __m128i ryw = _mm_packs_epi32(_mm_cvtps_epi32(output.y), _mm_cvtps_epi32(output.w));
-    __m128i rxy = _mm_unpacklo_epi16(rxz, ryw);
-    __m128i rzw = _mm_unpackhi_epi16(rxz, ryw);
-    __m128i rlo = _mm_unpacklo_epi32(rxy, rzw);
-    __m128i rhi = _mm_unpackhi_epi32(rxy, rzw);
-    return _mm_packus_epi16(rlo, rhi);
+static inline WideRGBA8 pack_pixels_RGBA8(const vec4& v) {
+    ivec4 i = roundto(v, 255.49f);
+    HalfRGBA8 xz = packRGBA8(i.x, i.z);
+    HalfRGBA8 yw = packRGBA8(i.y, i.w);
+    HalfRGBA8 xy = zipLow(xz, yw);
+    HalfRGBA8 zw = zipHigh(xz, yw);
+    HalfRGBA8 lo = zipLow32(xy, zw);
+    HalfRGBA8 hi = zipHigh32(xy, zw);
+    return combine(lo, hi);
 }
 
-static inline __m128i blend_pixels_RGBA8(__m128i dst, __m128i slo, __m128i shi) {
-    __m128i dlo = _mm_unpacklo_epi8(dst, _mm_setzero_si128());
-    __m128i dhi = _mm_unpackhi_epi8(dst, _mm_setzero_si128());
-    __m128i r;
+static inline PackedRGBA8 pack_pixels(uint32_t*) {
+    return pack(pack_pixels_RGBA8(fragment_shader->gl_FragColor));
+}
+
+static inline PackedRGBA8 blend_pixels_RGBA8(PackedRGBA8 pdst, WideRGBA8 src) {
+    WideRGBA8 dst = unpack(pdst);
+    PackedRGBA8 r;
     // (x*y + x) >> 8, cheap approximation of (x*y) / 255
-    #define MULDIV255(x, y) ({ __m128i b = x; _mm_srli_epi16(_mm_add_epi16(_mm_mullo_epi16(b, y), b), 8); })
-    #define ALPHAS(c) _mm_shufflehi_epi16(_mm_shufflelo_epi16(c, 0xFF), 0xFF)
-    #define RGB_MASK _mm_set1_epi64x(0x0000FFFFFFFFFFFFULL)
-    #define ALPHA_MASK _mm_set1_epi64x(0xFFFF000000000000ULL)
+    #define MULDIV255(x, y) ({ WideRGBA8 b = x; (b*y + b) >> 8; })
+    #define ALPHAS(c) __builtin_shufflevector(c, c, 3, 3, 3, 3, 7, 7, 7, 7, 11, 11, 11, 11, 15, 15, 15, 15)
+    const WideRGBA8 RGB_MASK = {0xFFFF, 0xFFFF, 0xFFFF, 0, 0xFFFF, 0xFFFF, 0xFFFF, 0, 0xFFFF, 0xFFFF, 0xFFFF, 0, 0xFFFF, 0xFFFF, 0xFFFF, 0};
+    const WideRGBA8 ALPHA_MASK = {0, 0, 0, 0xFFFF, 0, 0, 0, 0xFFFF, 0, 0, 0, 0xFFFF, 0, 0, 0, 0xFFFF};
     switch (ctx->blend_key) {
     case BLEND_KEY_NONE:
-        r = _mm_packus_epi16(slo, shi);
+        r = pack(src);
         break;
     case BLEND_KEY(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE):
-        r = _mm_packus_epi16(
-                _mm_add_epi16(dlo, MULDIV255(_mm_or_si128(_mm_sub_epi16(slo, dlo), ALPHA_MASK), ALPHAS(slo))),
-                _mm_add_epi16(dhi, MULDIV255(_mm_or_si128(_mm_sub_epi16(shi, dhi), ALPHA_MASK), ALPHAS(shi))));
+        r = pack(dst + MULDIV255((src - dst) | ALPHA_MASK, ALPHAS(src)));
         break;
     case BLEND_KEY(GL_ONE, GL_ONE_MINUS_SRC_ALPHA):
-        r = _mm_packus_epi16(
-                _mm_add_epi16(slo, _mm_sub_epi16(dlo, MULDIV255(dlo, ALPHAS(slo)))),
-                _mm_add_epi16(shi, _mm_sub_epi16(dhi, MULDIV255(dhi, ALPHAS(shi)))));
+        r = pack(src + dst - MULDIV255(dst, ALPHAS(src)));
         break;
     case BLEND_KEY(GL_ZERO, GL_ONE_MINUS_SRC_COLOR):
-        r = _mm_packus_epi16(
-                _mm_sub_epi16(dlo, MULDIV255(dlo, slo)),
-                _mm_sub_epi16(dhi, MULDIV255(dhi, shi)));
+        r = pack(dst - MULDIV255(dst, src));
         break;
     case BLEND_KEY(GL_ZERO, GL_ONE_MINUS_SRC_COLOR, GL_ZERO, GL_ONE):
-        r = _mm_packus_epi16(
-                _mm_sub_epi16(dlo, _mm_and_si128(MULDIV255(dlo, slo), RGB_MASK)),
-                _mm_sub_epi16(dhi, _mm_and_si128(MULDIV255(dhi, shi), RGB_MASK)));
+        r = pack(dst - (MULDIV255(dst, src) & RGB_MASK));
         break;
     case BLEND_KEY(GL_ZERO, GL_ONE_MINUS_SRC_ALPHA):
-        r = _mm_packus_epi16(
-                _mm_sub_epi16(dlo, MULDIV255(dlo, ALPHAS(slo))),
-                _mm_sub_epi16(dhi, MULDIV255(dhi, ALPHAS(shi))));
+        r = pack(dst - MULDIV255(dst, ALPHAS(src)));
         break;
     case BLEND_KEY(GL_ZERO, GL_SRC_COLOR):
-        r = _mm_packus_epi16(
-                MULDIV255(slo, dlo),
-                MULDIV255(shi, dhi));
+        r = pack(MULDIV255(src, dst));
         break;
     case BLEND_KEY(GL_ONE, GL_ONE):
-        r = _mm_packus_epi16(_mm_add_epi16(slo, dlo), _mm_add_epi16(shi, dhi));
+        r = pack(src + dst);
         break;
     case BLEND_KEY(GL_ONE, GL_ONE, GL_ONE, GL_ONE_MINUS_SRC_ALPHA):
-        r = _mm_packus_epi16(
-                _mm_add_epi16(slo, _mm_sub_epi16(dlo, _mm_and_si128(MULDIV255(dlo, slo), ALPHA_MASK))),
-                _mm_add_epi16(shi, _mm_sub_epi16(dhi, _mm_and_si128(MULDIV255(dhi, shi), ALPHA_MASK))));
+        r = pack(src + dst - (MULDIV255(dst, src) & ALPHA_MASK));
         break;
     case BLEND_KEY(GL_ONE, GL_ZERO):
-        r = _mm_packus_epi16(slo, shi);
+        r = pack(src);
         break;
     case BLEND_KEY(GL_ONE_MINUS_DST_ALPHA, GL_ONE, GL_ZERO, GL_ONE):
-        r = _mm_packus_epi16(
-                _mm_add_epi16(dlo, _mm_and_si128(_mm_sub_epi16(slo, MULDIV255(slo, ALPHAS(slo))), RGB_MASK)),
-                _mm_add_epi16(dhi, _mm_and_si128(_mm_sub_epi16(shi, MULDIV255(shi, ALPHAS(shi))), RGB_MASK)));
+        r = pack(dst + ((src - MULDIV255(src, ALPHAS(src))) & RGB_MASK));
         break;
     case BLEND_KEY(GL_CONSTANT_COLOR, GL_ONE_MINUS_SRC_COLOR):
-        r = _mm_packus_epi16(
-                _mm_add_epi16(dlo, MULDIV255(_mm_sub_epi16(ctx->blendcolor, dlo), slo)),
-                _mm_add_epi16(dhi, MULDIV255(_mm_sub_epi16(ctx->blendcolor, dhi), shi)));
+        r = pack(dst + MULDIV255(combine(ctx->blendcolor, ctx->blendcolor) - dst, src));
         break;
     case BLEND_KEY(GL_ONE, GL_ONE_MINUS_SRC1_COLOR): {
-        auto secondary = fragment_shader->gl_SecondaryFragColor * 255.49f;
-        __m128i s1xz = _mm_packs_epi32(_mm_cvtps_epi32(secondary.x), _mm_cvtps_epi32(secondary.z));
-        __m128i s1yw = _mm_packs_epi32(_mm_cvtps_epi32(secondary.y), _mm_cvtps_epi32(secondary.w));
-        __m128i s1xy = _mm_unpacklo_epi16(s1xz, s1yw);
-        __m128i s1zw = _mm_unpackhi_epi16(s1xz, s1yw);
-        __m128i s1lo = _mm_unpacklo_epi32(s1xy, s1zw);
-        __m128i s1hi = _mm_unpackhi_epi32(s1xy, s1zw);
-        r = _mm_packus_epi16(
-                _mm_add_epi16(slo, _mm_sub_epi16(dlo, MULDIV255(dlo, s1lo))),
-                _mm_add_epi16(shi, _mm_sub_epi16(dhi, MULDIV255(dhi, s1hi))));
+        WideRGBA8 secondary = pack_pixels_RGBA8(fragment_shader->gl_SecondaryFragColor);
+        r = pack(src + dst - MULDIV255(dst, secondary));
         break;
     }
     default:
         UNREACHABLE;
         break;
     }
+    #undef MULDIV255
+    #undef ALPHAS
     return r;
 }
 
-static inline __m128i blend_pixels_RGBA8(__m128i dst) {
-    auto output = fragment_shader->gl_FragColor * 255.49f;
-    __m128i sxz = _mm_packs_epi32(_mm_cvtps_epi32(output.x), _mm_cvtps_epi32(output.z));
-    __m128i syw = _mm_packs_epi32(_mm_cvtps_epi32(output.y), _mm_cvtps_epi32(output.w));
-    __m128i sxy = _mm_unpacklo_epi16(sxz, syw);
-    __m128i szw = _mm_unpackhi_epi16(sxz, syw);
-    __m128i slo = _mm_unpacklo_epi32(sxy, szw);
-    __m128i shi = _mm_unpackhi_epi32(sxy, szw);
-    return blend_pixels_RGBA8(dst, slo, shi);
+static inline PackedRGBA8 blend_pixels_RGBA8(PackedRGBA8 dst) {
+    return blend_pixels_RGBA8(dst, pack_pixels_RGBA8(fragment_shader->gl_FragColor));
 }
 
-static inline __m128i blend_pixels_RGBA8(__m128i dst, __m128i src) {
-    return blend_pixels_RGBA8(dst, _mm_unpacklo_epi16(src, _mm_setzero_si128()), _mm_unpackhi_epi16(src, _mm_setzero_si128()));
+static inline PackedRGBA8 blend_pixels_RGBA8(PackedRGBA8 dst, PackedRGBA8 src) {
+    return blend_pixels_RGBA8(dst, unpack(src));
 }
 
 template<bool DISCARD>
-static inline void commit_output(uint32_t* buf, __m128i mask) {
+static inline void commit_output(uint32_t* buf, PackedRGBA8 mask) {
     fragment_shader->run();
-    __m128i dst = _mm_loadu_si128((__m128i*)buf);
-    __m128i r = ctx->blend ? blend_pixels_RGBA8(dst) : pack_pixels_RGBA8();
-    if (DISCARD) mask = _mm_or_si128(mask, fragment_shader->isPixelDiscarded);
-    _mm_storeu_si128((__m128i*)buf,
-        _mm_or_si128(_mm_and_si128(mask, dst),
-                     _mm_andnot_si128(mask, r)));
+    PackedRGBA8 dst = unaligned_load<PackedRGBA8>(buf);
+    PackedRGBA8 r = ctx->blend ? blend_pixels_RGBA8(dst) : pack_pixels(buf);
+    if (DISCARD) mask |= bit_cast<PackedRGBA8>(fragment_shader->isPixelDiscarded);
+    unaligned_store(buf, (mask & dst) | (~mask & r));
 }
 
 template<bool DISCARD>
 static inline void commit_output(uint32_t* buf) {
-    commit_output<DISCARD>(buf, _mm_setzero_si128());
+    commit_output<DISCARD>(buf, 0);
 }
 
 template<>
 static inline void commit_output<false>(uint32_t* buf) {
     fragment_shader->run();
-    __m128i r = ctx->blend ? blend_pixels_RGBA8(_mm_loadu_si128((__m128i*)buf)) : pack_pixels_RGBA8();
-    _mm_storeu_si128((__m128i*)buf, r);
+    PackedRGBA8 r = ctx->blend ? blend_pixels_RGBA8(unaligned_load<PackedRGBA8>(buf)) : pack_pixels(buf);
+    unaligned_store(buf, r);
 }
 
 template<bool DISCARD>
 static inline void commit_output(uint32_t* buf, uint16_t z, uint16_t* zbuf) {
-    __m128i mask;
-    if (check_depth<1>(z, zbuf, mask)) {
-        commit_output<DISCARD>(buf, _mm_unpacklo_epi16(mask, mask));
+    ZMask4 zmask;
+    if (check_depth<1>(z, zbuf, zmask)) {
+        commit_output<DISCARD>(buf, unpack(zmask, buf));
     } else {
         fragment_shader->skip();
     }
@@ -2462,41 +2467,43 @@ static inline void commit_output(uint32_t* buf, uint16_t z, uint16_t* zbuf) {
 
 template<bool DISCARD>
 static inline void commit_output(uint32_t* buf, uint16_t z, uint16_t* zbuf, int span) {
-    __m128i mask;
-    if (check_depth<0>(z, zbuf, mask, span)) {
-        commit_output<DISCARD>(buf, _mm_unpacklo_epi16(mask, mask));
+    ZMask4 zmask;
+    if (check_depth<0>(z, zbuf, zmask, span)) {
+        commit_output<DISCARD>(buf, unpack(zmask, buf));
     }
+}
+
+static inline PackedRGBA8 span_mask_RGBA8(int span) {
+    return bit_cast<PackedRGBA8>(I32(span) < I32{1, 2, 3, 4});
 }
 
 template<bool DISCARD>
 static inline void commit_output(uint32_t* buf, int span) {
-    commit_output<DISCARD>(buf, _mm_cmplt_epi32(_mm_set1_epi32(span), _mm_set_epi32(4, 3, 2, 1)));
+    commit_output<DISCARD>(buf, span_mask_RGBA8(span));
 }
 
-static inline void commit_solid(uint32_t* buf, __m128i src, __m128i mask) {
-    __m128i dst = _mm_loadu_si128((__m128i*)buf);
-    __m128i r = ctx->blend ? blend_pixels_RGBA8(dst, src) : src;
-    _mm_storeu_si128((__m128i*)buf,
-        _mm_or_si128(_mm_and_si128(mask, dst),
-                     _mm_andnot_si128(mask, r)));
+static inline void commit_solid(uint32_t* buf, PackedRGBA8 src, PackedRGBA8 mask) {
+    PackedRGBA8 dst = unaligned_load<PackedRGBA8>(buf);
+    PackedRGBA8 r = ctx->blend ? blend_pixels_RGBA8(dst, src) : src;
+    unaligned_store(buf, (mask & dst) | (~mask & r));
 }
 
-static inline void commit_solid(uint32_t* buf, __m128i src) {
-    __m128i r = ctx->blend ? blend_pixels_RGBA8(_mm_loadu_si128((__m128i*)buf), src) : src;
-    _mm_storeu_si128((__m128i*)buf, r);
+static inline void commit_solid(uint32_t* buf, PackedRGBA8 src) {
+    PackedRGBA8 r = ctx->blend ? blend_pixels_RGBA8(unaligned_load<PackedRGBA8>(buf), src) : src;
+    unaligned_store(buf, r);
 }
 
-static inline void commit_solid(uint32_t* buf, __m128i src, int span) {
-    commit_solid(buf, src, _mm_cmplt_epi32(_mm_set1_epi32(span), _mm_set_epi32(4, 3, 2, 1)));
+static inline void commit_solid(uint32_t* buf, PackedRGBA8 src, int span) {
+    commit_solid(buf, src, span_mask_RGBA8(span));
 }
 
-static inline __m128i pack_pixels_R8() {
-    auto output = fragment_shader->gl_FragColor * 255.49f;
-    return _mm_packs_epi32(_mm_cvtps_epi32(output.x), _mm_setzero_si128());
+static inline WideR8 pack_pixels(uint8_t*) {
+    return packR8(roundto(fragment_shader->gl_FragColor.x, 255.49f));
 }
 
-static inline __m128i blend_pixels_R8(__m128i dst, __m128i src) {
-    __m128i r;
+static inline WideR8 blend_pixels_R8(WideR8 dst, WideR8 src) {
+    WideR8 r;
+    #define MULDIV255(x, y) ({ WideR8 b = x; (b*y + b) >> 8; })
     switch (ctx->blend_key) {
     case BLEND_KEY_NONE:
         r = src;
@@ -2505,7 +2512,7 @@ static inline __m128i blend_pixels_R8(__m128i dst, __m128i src) {
         r = MULDIV255(src, dst);
         break;
     case BLEND_KEY(GL_ONE, GL_ONE):
-        r = _mm_add_epi16(src, dst);
+        r = src + dst;
         break;
     case BLEND_KEY(GL_ONE, GL_ZERO):
         r = src;
@@ -2514,38 +2521,39 @@ static inline __m128i blend_pixels_R8(__m128i dst, __m128i src) {
         UNREACHABLE;
         break;
     }
+    #undef MULDIV255
     return r;
 }
 
 template<bool DISCARD>
-static inline void commit_output(uint8_t* buf, __m128i mask) {
+static inline void commit_output(uint8_t* buf, WideR8 mask) {
     fragment_shader->run();
-    __m128i dst = _mm_unpacklo_epi8(_mm_loadu_si32(buf), _mm_setzero_si128());
-    __m128i r = pack_pixels_R8();
+    WideR8 dst = unpack(unaligned_load<PackedR8>(buf));
+    WideR8 r = pack_pixels(buf);
     if (ctx->blend) r = blend_pixels_R8(dst, r);
-    if (DISCARD) mask = _mm_or_si128(mask, _mm_packs_epi32(fragment_shader->isPixelDiscarded, _mm_setzero_si128()));
-    r = _mm_or_si128(_mm_and_si128(mask, dst), _mm_andnot_si128(mask, r));
-    _mm_storeu_si32(buf, _mm_packus_epi16(r, r));
+    if (DISCARD) mask |= packR8(fragment_shader->isPixelDiscarded);
+    r = (mask & dst) | (~mask & r);
+    unaligned_store(buf, pack(r));
 }
 
 template<bool DISCARD>
 static inline void commit_output(uint8_t* buf) {
-    commit_output<DISCARD>(buf, _mm_setzero_si128());
+    commit_output<DISCARD>(buf, 0);
 }
 
 template<>
 static inline void commit_output<false>(uint8_t* buf) {
     fragment_shader->run();
-    __m128i r = pack_pixels_R8();
-    if (ctx->blend) r = blend_pixels_R8(_mm_unpacklo_epi8(_mm_loadu_si32(buf), _mm_setzero_si128()), r);
-    _mm_storeu_si32(buf, _mm_packus_epi16(r, r));
+    WideR8 r = pack_pixels(buf);
+    if (ctx->blend) r = blend_pixels_R8(unpack(unaligned_load<PackedR8>(buf)), r);
+    unaligned_store(buf, pack(r));
 }
 
 template<bool DISCARD>
 static inline void commit_output(uint8_t* buf, uint16_t z, uint16_t* zbuf) {
-    __m128i mask;
-    if (check_depth<1>(z, zbuf, mask)) {
-        commit_output<DISCARD>(buf, _mm_unpacklo_epi16(mask, mask));
+    ZMask4 zmask;
+    if (check_depth<1>(z, zbuf, zmask)) {
+        commit_output<DISCARD>(buf, unpack(zmask, buf));
     } else {
         fragment_shader->skip();
     }
@@ -2553,31 +2561,35 @@ static inline void commit_output(uint8_t* buf, uint16_t z, uint16_t* zbuf) {
 
 template<bool DISCARD>
 static inline void commit_output(uint8_t* buf, uint16_t z, uint16_t* zbuf, int span) {
-    __m128i mask;
-    if (check_depth<0>(z, zbuf, mask, span)) {
-        commit_output<DISCARD>(buf, _mm_unpacklo_epi16(mask, mask));
+    ZMask4 zmask;
+    if (check_depth<0>(z, zbuf, zmask, span)) {
+        commit_output<DISCARD>(buf, unpack(zmask, buf));
     }
+}
+
+static inline WideR8 span_mask_R8(int span) {
+    return bit_cast<WideR8>(WideR8(span) < WideR8{1, 2, 3, 4});
 }
 
 template<bool DISCARD>
 static inline void commit_output(uint8_t* buf, int span) {
-    commit_output<DISCARD>(buf, _mm_cmplt_epi16(_mm_set1_epi16(span), _mm_set_epi16(8, 7, 6, 5, 4, 3, 2, 1)));
+    commit_output<DISCARD>(buf, span_mask_R8(span));
 }
 
-static inline void commit_solid(uint8_t* buf, __m128i src, __m128i mask) {
-    __m128i dst = _mm_unpacklo_epi8(_mm_loadu_si32(buf), _mm_setzero_si128());
-    __m128i r = ctx->blend ? blend_pixels_R8(dst, src) : src;
-    r = _mm_or_si128(_mm_and_si128(mask, dst), _mm_andnot_si128(mask, r));
-    _mm_storeu_si32(buf, _mm_packus_epi16(r, r));
+static inline void commit_solid(uint8_t* buf, WideR8 src, WideR8 mask) {
+    WideR8 dst = unpack(unaligned_load<PackedR8>(buf));
+    WideR8 r = ctx->blend ? blend_pixels_R8(dst, src) : src;
+    r = (mask & dst) | (~mask & r);
+    unaligned_store(buf, pack(r));
 }
 
-static inline void commit_solid(uint8_t* buf, __m128i src) {
-    __m128i r = ctx->blend ? blend_pixels_R8(_mm_loadu_si32(buf), src) : src;
-    _mm_storeu_si32((__m128i*)buf, _mm_packus_epi16(r, r));
+static inline void commit_solid(uint8_t* buf, WideR8 src) {
+    WideR8 r = ctx->blend ? blend_pixels_R8(unpack(unaligned_load<PackedR8>(buf)), src) : src;
+    unaligned_store(buf, pack(r));
 }
 
-static inline void commit_solid(uint8_t* buf, __m128i src, int span) {
-    commit_solid(buf, src, _mm_cmplt_epi16(_mm_set1_epi16(span), _mm_set_epi16(8, 7, 6, 5, 4, 3, 2, 1)));
+static inline void commit_solid(uint8_t* buf, WideR8 src, int span) {
+    commit_solid(buf, src, span_mask_R8(span));
 }
 
 static const size_t MAX_FLATS = 64;
@@ -2724,29 +2736,29 @@ static inline void draw_quad_spans(int nump, Point p[4], uint16_t z, Interpolant
                 if (!fragment_shader->use_discard()) {
                     if (use_depth) {
                         if (!fragment_shader->use_varying()) {
-                            __m128i src = _mm_setzero_si128();
+                            decltype(pack_pixels(buf)) src = 0;
                             for (; span >= 8; span -= 8, buf += 8, depth += 8) {
-                                __m128i zmask;
+                                ZMask8 zmask;
                                 switch (check_depth<2>(z, depth, zmask)) {
                                 case 0:
                                     continue;
                                 case -1:
                                     fragment_shader->run();
-                                    src = sizeof(P) == sizeof(uint32_t) ? pack_pixels_RGBA8() : pack_pixels_R8();
+                                    src = pack_pixels(buf);
                                     commit_solid(buf, src);
                                     commit_solid(buf + 4, src);
                                     break;
                                 default:
                                     fragment_shader->run();
-                                    src = sizeof(P) == sizeof(uint32_t) ? pack_pixels_RGBA8() : pack_pixels_R8();
-                                    commit_solid(buf, src, sizeof(P) == sizeof(uint32_t) ? _mm_unpacklo_epi16(zmask, zmask) : zmask);
-                                    commit_solid(buf + 4, src, sizeof(P) == sizeof(uint32_t) ? _mm_unpackhi_epi16(zmask, zmask) : _mm_shuffle_epi32(zmask, _MM_SHUFFLE(3, 2, 3, 2)));
+                                    src = pack_pixels(buf);
+                                    commit_solid(buf, unpack(lowHalf(zmask), buf));
+                                    commit_solid(buf + 4, src, unpack(highHalf(zmask), buf));
                                     break;
                                 }
                                 break;
                             }
                             for (; span >= 8; span -= 8, buf += 8, depth += 8) {
-                                __m128i zmask;
+                                ZMask8 zmask;
                                 switch (check_depth<2>(z, depth, zmask)) {
                                 case 0:
                                     continue;
@@ -2755,14 +2767,14 @@ static inline void draw_quad_spans(int nump, Point p[4], uint16_t z, Interpolant
                                     commit_solid(buf + 4, src);
                                     break;
                                 default:
-                                    commit_solid(buf, src, sizeof(P) == sizeof(uint32_t) ? _mm_unpacklo_epi16(zmask, zmask) : zmask);
-                                    commit_solid(buf + 4, src, sizeof(P) == sizeof(uint32_t) ? _mm_unpackhi_epi16(zmask, zmask) : _mm_shuffle_epi32(zmask, _MM_SHUFFLE(3, 2, 3, 2)));
+                                    commit_solid(buf, src, unpack(lowHalf(zmask), buf));
+                                    commit_solid(buf + 4, src, unpack(highHalf(zmask), buf));
                                     break;
                                 }
                             }
                         } else {
                             for (; span >= 8; span -= 8, buf += 8, depth += 8) {
-                                __m128i zmask;
+                                ZMask8 zmask;
                                 switch (check_depth<2>(z, depth, zmask)) {
                                 case 0:
                                     fragment_shader->skip();
@@ -2773,8 +2785,8 @@ static inline void draw_quad_spans(int nump, Point p[4], uint16_t z, Interpolant
                                     commit_output<false>(buf + 4);
                                     break;
                                 default:
-                                    commit_output<false>(buf, sizeof(P) == sizeof(uint32_t) ? _mm_unpacklo_epi16(zmask, zmask) : zmask);
-                                    commit_output<false>(buf + 4, sizeof(P) == sizeof(uint32_t) ? _mm_unpackhi_epi16(zmask, zmask) : _mm_shuffle_epi32(zmask, _MM_SHUFFLE(3, 2, 3, 2)));
+                                    commit_output<false>(buf, unpack(lowHalf(zmask), buf));
+                                    commit_output<false>(buf + 4, unpack(highHalf(zmask), buf));
                                     break;
                                 }
                             }
@@ -2787,7 +2799,7 @@ static inline void draw_quad_spans(int nump, Point p[4], uint16_t z, Interpolant
                         }
                     } else if (!fragment_shader->use_varying()) {
                         fragment_shader->run();
-                        __m128i src = sizeof(P) == sizeof(uint32_t) ? pack_pixels_RGBA8() : pack_pixels_R8();
+                        auto src = pack_pixels(buf);
                         for (; span >= 4; span -= 4, buf += 4) {
                             commit_solid(buf, src);
                         }
@@ -3013,6 +3025,92 @@ void DestroyContext(void* ctx_ptr) {
         MakeCurrent(&default_ctx);
     }
     delete (Context*)ctx_ptr;
+}
+
+void Composite(
+    GLuint srcId,
+    GLint srcX,
+    GLint srcY,
+    GLsizei srcWidth,
+    GLsizei srcHeight,
+    GLint dstX,
+    GLint dstY,
+    GLboolean opaque,
+    GLboolean flip
+) {
+    Framebuffer& fb = ctx->framebuffers[0];
+    if (!fb.color_attachment) {
+        return;
+    }
+    Texture &srctex = ctx->textures[srcId];
+    if (!srctex.buf) return;
+    prepare_texture(srctex);
+    Texture &dsttex = ctx->textures[fb.color_attachment];
+    assert(bytes_for_internal_format(srctex.internal_format) == 4);
+    const int bpp = 4;
+    int src_stride = aligned_stride(bpp * srctex.width);
+    int dest_stride = aligned_stride(bpp * dsttex.width);
+    if (srcY < 0) {
+        dstY -= srcY;
+        srcHeight += srcY;
+        srcY = 0;
+    }
+    if (dstY < 0) {
+        srcY -= dstY;
+        srcHeight += dstY;
+        dstY = 0;
+    }
+    if (srcY + srcHeight > srctex.height) {
+        srcHeight = srctex.height - srcY;
+    }
+    if (dstY + srcHeight > dsttex.height) {
+        srcHeight = dsttex.height - dstY;
+    }
+    prepare_texture(dsttex, dstX, dstY, srcWidth, srcHeight);
+    char *dest = dsttex.buf + (flip ? dsttex.height - 1 - dstY : dstY) * dest_stride + dstX * bpp;
+    char *src = srctex.buf + srcY * src_stride + srcX * bpp;
+    if (flip) {
+        dest_stride = -dest_stride;
+    }
+    if (opaque) {
+        for (int y = 0; y < srcHeight; y++) {
+            memcpy(dest, src, srcWidth * bpp);
+            dest += dest_stride;
+            src += src_stride;
+        }
+    } else {
+        #define MULDIV255(x, y) ({ WideRGBA8 b = x; (b*y + b) >> 8; })
+        #define ALPHAS(c) __builtin_shufflevector(c, c, 3, 3, 3, 3, 7, 7, 7, 7, 11, 11, 11, 11, 15, 15, 15, 15)
+        for (int y = 0; y < srcHeight; y++) {
+            char *end = src + srcWidth * bpp;
+            while (src + 4 * bpp <= end) {
+                WideRGBA8 srcpx = unpack(unaligned_load<PackedRGBA8>(src));
+                WideRGBA8 dstpx = unpack(unaligned_load<PackedRGBA8>(dest));
+                PackedRGBA8 r = pack(srcpx + dstpx - MULDIV255(dstpx, ALPHAS(srcpx)));
+                unaligned_store(dest, r);
+                src += 4 * bpp;
+                dest += 4 * bpp;
+            }
+            if (src < end) {
+                WideRGBA8 srcpx = unpack(unaligned_load<PackedRGBA8>(src));
+                WideRGBA8 dstpx = unpack(unaligned_load<PackedRGBA8>(dest));
+                U32 r = bit_cast<U32>(pack(srcpx + dstpx - MULDIV255(dstpx, ALPHAS(srcpx))));
+                unaligned_store(dest, r.x);
+                if (src + bpp < end) {
+                    unaligned_store(dest + bpp, r.y);
+                    if (src + 2 * bpp < end) {
+                        unaligned_store(dest + 2 * bpp, r.z);
+                    }
+                }
+                dest += end - src;
+                src = end;
+            }
+            dest += dest_stride - srcWidth * bpp;
+            src += src_stride - srcWidth * bpp;
+        }
+        #undef MULDIV255
+        #undef ALPHAS
+    }
 }
 
 } // extern "C"

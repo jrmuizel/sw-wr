@@ -7,11 +7,6 @@
 #ifdef __SSE2__
     #include <xmmintrin.h>
     #define USE_SSE2 1
-
-    #ifdef __MACH__
-        #define _mm_loadu_si32(ptr) (_mm_cvtsi32_si128(*(const uint32_t*)(ptr)))
-        #define _mm_storeu_si32(ptr, val) (*(uint32_t*)(ptr) = _mm_cvtsi128_si32(val))
-    #endif
 #endif
 
 #ifdef __ARM_NEON
@@ -32,14 +27,18 @@
 
 namespace glsl {
 
-template <typename T> using V = T __attribute__((ext_vector_type(4)));
-using Float   = V<float   >;
-using I32 = V< int32_t>;
-using U64 = V<uint64_t>;
-using U32 = V<uint32_t>;
-using U16 = V<uint16_t>;
-using U8  = V<uint8_t >;
-using Bool = V<int>;
+template <typename T> using V2 = T __attribute__((ext_vector_type(2)));
+template <typename T> using V4 = T __attribute__((ext_vector_type(4)));
+using Float = V4<float>;
+using I32 = V4<int32_t>;
+using I16 = V4<int16_t>;
+using U64 = V4<uint64_t>;
+using U32 = V4<uint32_t>;
+using U16 = V4<uint16_t>;
+using U8  = V4<uint8_t>;
+using Bool = V4<int>;
+template <typename T> using V8 = T __attribute__((ext_vector_type(8)));
+template <typename T> using V16 = T __attribute__((ext_vector_type(16)));
 
 float make_float(float n) {
     return n;
@@ -578,15 +577,20 @@ Float abs(Float v) {
 }
 
 template <typename T, typename P>
-T unaligned_load(const P* p) {  // const void* would work too, but const P* helps ARMv7 codegen.
+SI T unaligned_load(const P* p) {  // const void* would work too, but const P* helps ARMv7 codegen.
     T v;
     memcpy(&v, p, sizeof(v));
     return v;
 }
 
+template <typename T, typename P>
+SI void unaligned_store(P* p, T v) {
+    memcpy(p, &v, sizeof(v));
+}
+
 template <typename Dst, typename Src>
-Dst bit_cast(const Src& src) {
-    static_assert(sizeof(Dst) == sizeof(Src), "");
+SI Dst bit_cast(const Src& src) {
+    static_assert(sizeof(Dst) <= sizeof(Src), "");
     return unaligned_load<Dst>(&src);
 }
 
@@ -613,7 +617,7 @@ Float ceil(Float v) {
 }
 
 
-I32 roundto(Float v, Float scale) {
+SI I32 roundto(Float v, Float scale) {
 #if USE_SSE2
     return _mm_cvtps_epi32(v * scale);
 #else
@@ -1594,6 +1598,10 @@ template<typename X, typename Y, typename Z, typename W> vec4 make_vec4(const X&
     return vec4(x, y, z, w);
 }
 
+SI ivec4 roundto(vec4 v, Float scale) {
+    return ivec4(roundto(v.x, scale), roundto(v.y, scale), roundto(v.z, scale), roundto(v.w, scale));
+}
+
 vec4 operator*(vec4_scalar a, Float b) {
     return vec4(a.x*b, a.y*b, a.z*b, a.w*b);
 }
@@ -2356,6 +2364,8 @@ SI T mix(T x, T y, vec4_scalar a) {
 template<typename S>
 vec4 textureLinearRGBA8(S sampler, vec2 P, I32 zoffset = 0) {
     assert(sampler->format == TextureFormat::RGBA8);
+
+#if USE_SSE2
     P.x *= sampler->width * 256.0f;
     P.y *= sampler->height * 256.0f;
     P -= 0.5f * 256.0f;
@@ -2363,7 +2373,6 @@ vec4 textureLinearRGBA8(S sampler, vec2 P, I32 zoffset = 0) {
     ivec2 frac = i & (I32)0xFF;
     i >>= 8;
 
-#if USE_SSE2
     __m128i row0 = _mm_min_epi16(_mm_max_epi16(i.y, _mm_setzero_si128()), _mm_set1_epi32(sampler->height - 1));
     row0 = _mm_madd_epi16(row0, _mm_set1_epi32(sampler->stride));
     row0 = _mm_add_epi32(row0, _mm_min_epi16(_mm_max_epi16(i.x, _mm_setzero_si128()), _mm_set1_epi32(sampler->width - 1)));
@@ -2418,25 +2427,58 @@ vec4 textureLinearRGBA8(S sampler, vec2 P, I32 zoffset = 0) {
     _MM_TRANSPOSE4_PS(r0, r1, r2, r3);
     return (sampler->swizzle_bgra ? vec4(r2, r1, r0, r3) : vec4(r0, r1, r2, r3)) * (1.0f / 0xFF00);
 #else
-    i = clamp2D(i, sampler);
-    I32 offset = i.x + i.y*sampler->stride + zoffset;
-    I32 xstep = (i.x + 1 < sampler->width) & I32(1);
-    I32 ystep = (i.y + 1 < sampler->height) & I32(sampler->stride);
+    P.x *= sampler->width * 128.0f;
+    P.y *= sampler->height * 128.0f;
+    P -= 0.5f * 128.0f;
+    ivec2 i(P);
+    ivec2 frac = i & (I32)0x7F;
+    i >>= 7;
 
-    vec4 c = fetchOffsetsRGBA8(sampler, offset);
-    vec4 cx = fetchOffsetsRGBA8(sampler, offset + xstep);
-    vec4 cy = fetchOffsetsRGBA8(sampler, offset + ystep);
-    vec4 cxy = fetchOffsetsRGBA8(sampler, offset + xstep + ystep);
+    I32 row0 = clampCoord(i.x, sampler->width) + clampCoord(i.y, sampler->height)*sampler->stride + zoffset;
+    I32 row1 = row0 + ((i.y > 0 && i.y < int32_t(sampler->height)-1) & I32(sampler->stride));
+    I16 fracx = __builtin_convertvector(frac.x & (i.x > 0 && i.x < int32_t(sampler->width)-1), I16);
+    I16 fracy = __builtin_convertvector(frac.y, I16);
 
-    vec2 fracf(frac);
-    fracf *= 1.0f / 256.0f;
-    return mix(mix(c, cx, fracf.x), mix(cy, cxy, fracf.x), fracf.y);
+    auto a0 = __builtin_convertvector(unaligned_load<V8<uint8_t>>(&sampler->buf[row0.x]), V8<int16_t>);
+    auto a1 = __builtin_convertvector(unaligned_load<V8<uint8_t>>(&sampler->buf[row1.x]), V8<int16_t>);
+    a0 += ((a1 - a0) * fracy.x) >> 7;
+
+    auto b0 = __builtin_convertvector(unaligned_load<V8<uint8_t>>(&sampler->buf[row0.y]), V8<int16_t>);
+    auto b1 = __builtin_convertvector(unaligned_load<V8<uint8_t>>(&sampler->buf[row1.y]), V8<int16_t>);
+    b0 += ((b1 - b0) * fracy.y) >> 7;
+
+    auto abl = __builtin_shufflevector(a0, b0, 0, 8, 1, 9, 2, 10, 3, 11);
+    auto abh = __builtin_shufflevector(a0, b0, 4, 12, 5, 13, 6, 14, 7, 15);
+    abl += ((abh - abl) * fracx.xyxyxyxy) >> 7;
+
+    auto c0 = __builtin_convertvector(unaligned_load<V8<uint8_t>>(&sampler->buf[row0.z]), V8<int16_t>);
+    auto c1 = __builtin_convertvector(unaligned_load<V8<uint8_t>>(&sampler->buf[row1.z]), V8<int16_t>);
+    c0 += ((c1 - c0) * fracy.z) >> 7;
+
+    auto d0 = __builtin_convertvector(unaligned_load<V8<uint8_t>>(&sampler->buf[row0.w]), V8<int16_t>);
+    auto d1 = __builtin_convertvector(unaligned_load<V8<uint8_t>>(&sampler->buf[row1.w]), V8<int16_t>);
+    d0 += ((d1 - d0) * fracy.w) >> 7;
+
+    auto cdl = __builtin_shufflevector(c0, d0, 0, 8, 1, 9, 2, 10, 3, 11);
+    auto cdh = __builtin_shufflevector(c0, d0, 4, 12, 5, 13, 6, 14, 7, 15);
+    cdl += ((cdh - cdl) * fracx.zwzwzwzw) >> 7;
+
+    auto rg = __builtin_convertvector(V8<uint16_t>(__builtin_shufflevector(abl, cdl, 0, 1, 8, 9, 2, 3, 10, 11)), V8<float>);
+    auto ba = __builtin_convertvector(V8<uint16_t>(__builtin_shufflevector(abl, cdl, 4, 5, 12, 13, 6, 7, 14, 15)), V8<float>);
+
+    auto r = __builtin_shufflevector(rg, rg, 0, 1, 2, 3);
+    auto g = __builtin_shufflevector(rg, rg, 4, 5, 6, 7);
+    auto b = __builtin_shufflevector(ba, ba, 0, 1, 2, 3);
+    auto a = __builtin_shufflevector(ba, ba, 4, 5, 6, 7);
+    return (sampler->swizzle_bgra ? vec4(b, g, r, a) : vec4(r, g, b, a)) * (1.0f / 255.0f);
 #endif
 }
 
 template<typename S>
 vec4 textureLinearR8(S sampler, vec2 P, I32 zoffset = 0) {
     assert(sampler->format == TextureFormat::R8);
+
+#if USE_SSE2
     P.x *= sampler->width * 256.0f;
     P.y *= sampler->height * 256.0f;
     P -= 0.5f * 256.0f;
@@ -2444,7 +2486,6 @@ vec4 textureLinearR8(S sampler, vec2 P, I32 zoffset = 0) {
     ivec2 frac = i & (I32)0xFF;
     i >>= 8;
 
-#if USE_SSE2
     __m128i row0 = _mm_min_epi16(_mm_max_epi16(i.y, _mm_setzero_si128()), _mm_set1_epi32(sampler->height - 1));
     row0 = _mm_madd_epi16(row0, _mm_set1_epi32(sampler->stride));
     row0 = _mm_add_epi32(row0, _mm_min_epi16(_mm_max_epi16(i.x, _mm_setzero_si128()), _mm_set1_epi32(sampler->width - 1)));
@@ -2482,19 +2523,43 @@ vec4 textureLinearR8(S sampler, vec2 P, I32 zoffset = 0) {
     __m128 r = _mm_cvtepi32_ps(_mm_madd_epi16(cc, fracx));
     return vec4((Float)r * (1.0f / 0xFF00), 0.0f, 0.0f, 1.0f);
 #else
-    i = clamp2D(i, sampler);
-    I32 offset = i.x + i.y*sampler->stride + zoffset;
-    I32 xstep = (i.x + 1 < sampler->width) & I32(1);
-    I32 ystep = (i.y + 1 < sampler->height) & I32(sampler->stride);
+    P.x *= sampler->width * 128.0f;
+    P.y *= sampler->height * 128.0f;
+    P -= 0.5f * 128.0f;
+    ivec2 i(P);
+    ivec2 frac = i & (I32)0x7F;
+    i >>= 7;
 
-    Float c = fetchOffsetsR8(sampler, offset);
-    Float cx = fetchOffsetsR8(sampler, offset + xstep);
-    Float cy = fetchOffsetsR8(sampler, offset + ystep);
-    Float cxy = fetchOffsetsR8(sampler, offset + xstep + ystep);
+    I32 row0 = clampCoord(i.x, sampler->width) + clampCoord(i.y, sampler->height)*sampler->stride + zoffset;
+    I32 row1 = row0 + ((i.y > 0 && i.y < int32_t(sampler->height)-1) & I32(sampler->stride));
+    I16 fracx = __builtin_convertvector(frac.x & (i.x > 0 && i.x < int32_t(sampler->width)-1), I16);
+    I16 fracy = __builtin_convertvector(frac.y, I16);
 
-    vec2 fracf(frac);
-    fracf *= 1.0f / 256.0f;
-    return vec4(mix(mix(c, cx, fracf.x), mix(cy, cxy, fracf.x), fracf.y), 0.0f, 0.0f, 1.0f);
+    uint8_t* buf = (uint8_t*)sampler->buf;
+    auto a0 = unaligned_load<V2<uint8_t>>(&buf[row0.x]);
+    auto b0 = unaligned_load<V2<uint8_t>>(&buf[row0.y]);
+    auto c0 = unaligned_load<V2<uint8_t>>(&buf[row0.z]);
+    auto d0 = unaligned_load<V2<uint8_t>>(&buf[row0.w]);
+    auto ab0 = __builtin_shufflevector(a0, b0, 0, 1, 2, 3);
+    auto cd0 = __builtin_shufflevector(c0, d0, 0, 1, 2, 3);
+    auto abcd0 = __builtin_convertvector(__builtin_shufflevector(ab0, cd0, 0, 1, 2, 3, 4, 5, 6, 7), V8<int16_t>);
+
+    auto a1 = unaligned_load<V2<uint8_t>>(&buf[row1.x]);
+    auto b1 = unaligned_load<V2<uint8_t>>(&buf[row1.y]);
+    auto c1 = unaligned_load<V2<uint8_t>>(&buf[row1.z]);
+    auto d1 = unaligned_load<V2<uint8_t>>(&buf[row1.w]);
+    auto ab1 = __builtin_shufflevector(a1, b1, 0, 1, 2, 3);
+    auto cd1 = __builtin_shufflevector(c1, d1, 0, 1, 2, 3);
+    auto abcd1 = __builtin_convertvector(__builtin_shufflevector(ab1, cd1, 0, 1, 2, 3, 4, 5, 6, 7), V8<int16_t>);
+
+    abcd0 += ((abcd1 - abcd0) * fracy.xxyyzzww) >> 7;
+
+    auto abcdl = __builtin_shufflevector(abcd0, abcd0, 0, 2, 4, 6);
+    auto abcdh = __builtin_shufflevector(abcd0, abcd0, 1, 3, 5, 7);
+    abcdl += ((abcdh - abcdl) * fracx) >> 7;
+
+    Float r = __builtin_convertvector(U16(abcdl), Float);
+    return vec4(r * (1.0f / 255.0f), 0.0f, 0.0f, 1.0f);
 #endif
 }
 
@@ -2682,11 +2747,6 @@ template <typename T>
 SI T mix(T x, T y, bvec2_scalar a) {
         return T{a.x ? y.x : x.x,
                  a.y ? y.y : x.y};
-}
-
-template <typename T, typename U, typename R = typename T::vector_type>
-SI R mix(T x, T y, U a) {
-        return (y - x) * a + x;
 }
 
 float dot(vec3_scalar a, vec3_scalar b) {
