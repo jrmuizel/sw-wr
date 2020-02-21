@@ -2380,11 +2380,7 @@ vec4 textureLinearRGBA8(S sampler, vec2 P, I32 zoffset = 0) {
     //_mm_prefetch(&sampler->buf[_mm_cvtsi128_si32(row0)], _MM_HINT_T0);
 
     if (!_mm_movemask_epi8(_mm_cmpeq_epi8(_mm_or_si128(frac.x, frac.y), _mm_setzero_si128()))) {
-        return pixel_to_vec4(sampler->swizzle_bgra,
-                             sampler->buf[_mm_cvtsi128_si32(_mm_shuffle_epi32(row0, _MM_SHUFFLE(0, 0, 0, 0)))],
-                             sampler->buf[_mm_cvtsi128_si32(_mm_shuffle_epi32(row0, _MM_SHUFFLE(1, 1, 1, 1)))],
-                             sampler->buf[_mm_cvtsi128_si32(_mm_shuffle_epi32(row0, _MM_SHUFFLE(2, 2, 2, 2)))],
-                             sampler->buf[_mm_cvtsi128_si32(_mm_shuffle_epi32(row0, _MM_SHUFFLE(3, 3, 3, 3)))]);
+        return fetchOffsetsRGBA8(sampler, row0);
     }
 
     __m128i yinside = _mm_andnot_si128(_mm_cmplt_epi32(i.y, _mm_setzero_si128()),
