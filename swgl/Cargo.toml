@@ -8,7 +8,7 @@ description = "Software OpenGL implementation for WebRender."
 
 [build-dependencies]
 cc = "1.0.46"
-glsl-to-cxx = { git = "https://github.com/jrmuizel/glsl-to-cxx" }
+glsl-to-cxx = { path = "../glsl-to-cxx" }
 
 [dependencies]
 gleam = "0.6.17"

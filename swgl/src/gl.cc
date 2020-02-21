@@ -1332,9 +1332,9 @@ GLenum internal_format_for_data(GLenum format, GLenum ty) {
 
 static inline void copy_bgra8_to_rgba8(uint32_t *dest, uint32_t *src, int width) {
         for (; width >= 4; width -= 4, dest += 4, src += 4) {
-            U32 p = *(U32*)src;
+            U32 p = unaligned_load<U32>(src);
             U32 rb = p & 0x00FF00FF;
-            *(U32*)dest = (p & 0xFF00FF00) | (rb << 16) | (rb >> 16);
+            unaligned_store(dest, (p & 0xFF00FF00) | (rb << 16) | (rb >> 16));
         }
         for (; width > 0; width--, dest++, src++) {
             uint32_t p = *src;
