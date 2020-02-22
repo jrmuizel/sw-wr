@@ -2116,8 +2116,8 @@ float to_float(uint32_t x) {
         return x * (1.f/255.f);
 }
 
-vec4 pixel_to_vec4(bool bgra, int a, int b, int c, int d) {
-    I32 pixels = { a, b, c, d };
+vec4 pixel_to_vec4(bool bgra, uint32_t a, uint32_t b, uint32_t c, uint32_t d) {
+    U32 pixels = { a, b, c, d };
     if (bgra) {
         return vec4(
             cast((pixels >> 16) & 0xFF),
@@ -2378,7 +2378,7 @@ vec4 textureLinearRGBA8(S sampler, vec2 P, I32 zoffset = 0) {
     row0 = _mm_add_epi32(row0, _mm_min_epi16(_mm_max_epi16(i.x, _mm_setzero_si128()), _mm_set1_epi32(sampler->width - 1)));
     row0 = _mm_add_epi32(row0, zoffset);
 
-    if (!_mm_movemask_epi8(_mm_cmpeq_epi8(_mm_or_si128(frac.x, frac.y), _mm_setzero_si128()))) {
+    if (_mm_movemask_epi8(_mm_cmpeq_epi8(_mm_or_si128(frac.x, frac.y), _mm_setzero_si128())) == 0xFFFF) {
         return fetchOffsetsRGBA8(sampler, row0);
     }
 
