@@ -371,17 +371,18 @@ struct FragmentShaderImpl : ShaderImpl {
     DrawSpanRGBA8Func draw_span_RGBA8_func = nullptr;
     DrawSpanR8Func draw_span_R8_func = nullptr;
 
-    vec4 gl_FragCoord;
+    vec2 gl_FragCoordXY;
+    vec2_scalar gl_FragCoordZW;
     Bool isPixelDiscarded;
     vec4 gl_FragColor;
     vec4 gl_SecondaryFragColor;
 
     ALWAYS_INLINE void step_fragcoord() {
-        gl_FragCoord.x += 4;
+        gl_FragCoordXY.x += 4;
     }
 
     ALWAYS_INLINE void step_fragcoord(int chunks) {
-        gl_FragCoord.x += 4 * chunks;
+        gl_FragCoordXY.x += 4 * chunks;
     }
 
     void init_batch(ProgramImpl *prog) {
@@ -2396,6 +2397,10 @@ static inline PackedRGBA8 pack_span(uint32_t*, const V& v) {
     return pack(pack_pixels_RGBA8(v));
 }
 
+static inline PackedRGBA8 pack_span(uint32_t*) {
+    return pack(pack_pixels_RGBA8());
+}
+
 static inline WideRGBA8 blend_pixels_RGBA8(PackedRGBA8 pdst, WideRGBA8 src) {
     WideRGBA8 dst = unpack(pdst);
     // (x*y + x) >> 8, cheap approximation of (x*y) / 255
@@ -2506,6 +2511,10 @@ static inline WideR8 pack_pixels_R8() {
 template<typename C>
 static inline PackedR8 pack_span(uint8_t*, C c) {
     return pack(pack_pixels_R8(c));
+}
+
+static inline PackedR8 pack_span(uint8_t*) {
+    return pack(pack_pixels_R8());
 }
 
 static inline WideR8 blend_pixels_R8(WideR8 dst, WideR8 src) {
@@ -2671,8 +2680,8 @@ static inline void draw_quad_spans(int nump, Point p[4], uint16_t z, Interpolant
             if (span > 0) {
                 ctx->shaded_rows++;
                 ctx->shaded_pixels += span;
-                fragment_shader->gl_FragCoord.x = init_interp(startx + 0.5f, 1);
-                fragment_shader->gl_FragCoord.y = y;
+                fragment_shader->gl_FragCoordXY.x = init_interp(startx + 0.5f, 1);
+                fragment_shader->gl_FragCoordXY.y = y;
                 {
                     Interpolants step = (ro - lo) * (1.0f / (rx - lx));
                     Interpolants o = lo + step * (startx + 0.5f - lx);
@@ -2868,8 +2877,8 @@ void draw_quad(int nump, Texture& colortex, int layer, Texture& depthtex) {
 
         // SSE2 does not support unsigned comparison, so bias Z to be negative.
         uint16_t z = uint16_t(0xFFFF * screen.z.x) - 0x8000;
-        fragment_shader->gl_FragCoord.z = screen.z.x;
-        fragment_shader->gl_FragCoord.w = w.x;
+        fragment_shader->gl_FragCoordZW.x = screen.z.x;
+        fragment_shader->gl_FragCoordZW.y = w.x;
 
         fragment_shader->init_primitive(flat_outs);
 

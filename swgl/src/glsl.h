@@ -341,6 +341,9 @@ struct vec2_scalar {
         friend vec2_scalar operator+(vec2_scalar a, vec2_scalar b) {
                 return vec2_scalar(a.x+b.x, a.y+b.y);
         }
+        friend vec2_scalar operator+(vec2_scalar a, float b) {
+                return vec2_scalar(a.x+b, a.y+b);
+        }
 
         vec2_scalar operator-() {
                 return vec2_scalar(-x, -y);
@@ -804,6 +807,9 @@ vec2_scalar make_vec2(const ivec2_scalar& v) {
     return vec2_scalar{ float(v.x), float(v.y) };
 }
 
+ivec2_scalar make_ivec2(const vec2_scalar& v) {
+    return ivec2_scalar{ int32_t(v.x), int32_t(v.y) };
+}
 
 template<typename N> ivec2 make_ivec2(const N& n) {
     return ivec2(n);
