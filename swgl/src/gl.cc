@@ -357,7 +357,7 @@ struct FragmentShaderImpl : ShaderImpl {
     typedef void (*InitPrimitiveFunc)(FragmentShaderImpl*, const void* flats);
     typedef void (*InitSpanFunc)(FragmentShaderImpl*, const void* interps, const void* step, float step_width);
     typedef void (*RunFunc)(FragmentShaderImpl*);
-    typedef void (*SkipFunc)(FragmentShaderImpl*);
+    typedef void (*SkipFunc)(FragmentShaderImpl*, int chunks);
     typedef bool (*UseDiscardFunc)(FragmentShaderImpl*);
     typedef void (*DrawSpanRGBA8Func)(FragmentShaderImpl*, uint32_t* buf, int len);
     typedef void (*DrawSpanR8Func)(FragmentShaderImpl*, uint8_t* buf, int len);
@@ -401,8 +401,8 @@ struct FragmentShaderImpl : ShaderImpl {
         (*run_func)(this);
     }
 
-    ALWAYS_INLINE void skip() {
-        (*skip_func)(this);
+    ALWAYS_INLINE void skip(int chunks = 1) {
+        (*skip_func)(this, chunks);
     }
 
     ALWAYS_INLINE bool use_discard() {
@@ -2680,13 +2680,6 @@ static inline void draw_quad_spans(int nump, Point p[4], uint16_t z, Interpolant
             if (span > 0) {
                 ctx->shaded_rows++;
                 ctx->shaded_pixels += span;
-                fragment_shader->gl_FragCoordXY.x = init_interp(startx + 0.5f, 1);
-                fragment_shader->gl_FragCoordXY.y = y;
-                {
-                    Interpolants step = (ro - lo) * (1.0f / (rx - lx));
-                    Interpolants o = lo + step * (startx + 0.5f - lx);
-                    fragment_shader->init_span(&o, &step, 4.0f);
-                }
                 P* buf = fbuf + startx;
                 uint16_t* depth = fdepth + startx;
                 bool use_depth = depthtex.buf != nullptr;
@@ -2731,10 +2724,18 @@ static inline void draw_quad_spans(int nump, Point p[4], uint16_t z, Interpolant
                         }
                     }
                 }
+                fragment_shader->gl_FragCoordXY.x = init_interp(startx + 0.5f, 1);
+                fragment_shader->gl_FragCoordXY.y = y;
+                {
+                    Interpolants step = (ro - lo) * (1.0f / (rx - lx));
+                    Interpolants o = lo + step * (startx + 0.5f - lx);
+                    fragment_shader->init_span(&o, &step, 4.0f);
+                }
                 if (!fragment_shader->use_discard()) {
                     if (use_depth) {
                         if (fragment_shader->has_draw_span(buf)) {
                             int len = 0;
+                            int skip = 0;
                             for (; span >= 8; span -= 8, buf += 8, depth += 8) {
                                 ZMask8 zmask;
                                 switch (check_depth<2>(z, depth, zmask)) {
@@ -2743,16 +2744,22 @@ static inline void draw_quad_spans(int nump, Point p[4], uint16_t z, Interpolant
                                         fragment_shader->draw_span(buf - len, len);
                                         len = 0;
                                     }
-                                    fragment_shader->skip();
-                                    fragment_shader->skip();
+                                    skip += 2;
                                     break;
                                 case -1:
+                                    if (skip) {
+                                        fragment_shader->skip(skip);
+                                        skip = 0;
+                                    }
                                     len += 8;
                                     break;
                                 default:
                                     if (len) {
                                         fragment_shader->draw_span(buf - len, len);
                                         len = 0;
+                                    } else if (skip) {
+                                        fragment_shader->skip(skip);
+                                        skip = 0;
                                     }
                                     commit_output<false>(buf, unpack(lowHalf(zmask), buf));
                                     commit_output<false>(buf + 4, unpack(highHalf(zmask), buf));
@@ -2763,18 +2770,26 @@ static inline void draw_quad_spans(int nump, Point p[4], uint16_t z, Interpolant
                                 fragment_shader->draw_span(buf - len, len);
                             }
                         } else {
+                            int skip = 0;
                             for (; span >= 8; span -= 8, buf += 8, depth += 8) {
                                 ZMask8 zmask;
                                 switch (check_depth<2>(z, depth, zmask)) {
                                 case 0:
-                                    fragment_shader->skip();
-                                    fragment_shader->skip();
+                                    skip += 2;
                                     break;
                                 case -1:
+                                    if (skip) {
+                                        fragment_shader->skip(skip);
+                                        skip = 0;
+                                    }
                                     commit_output<false>(buf);
                                     commit_output<false>(buf + 4);
                                     break;
                                 default:
+                                    if (skip) {
+                                        fragment_shader->skip(skip);
+                                        skip = 0;
+                                    }
                                     commit_output<false>(buf, unpack(lowHalf(zmask), buf));
                                     commit_output<false>(buf + 4, unpack(highHalf(zmask), buf));
                                     break;
@@ -2834,7 +2849,7 @@ static inline void draw_quad_spans(int nump, Point p[4], uint16_t z, Interpolant
         }
 }
 
-void draw_quad(int nump, Texture& colortex, int layer, Texture& depthtex) {
+static void draw_quad(int nump, Texture& colortex, int layer, Texture& depthtex) {
         Flats flat_outs;
         Interpolants interp_outs[4] = { 0 };
         vertex_shader->run((char *)flat_outs, (char *)interp_outs, sizeof(Interpolants));
