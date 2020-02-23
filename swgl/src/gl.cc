@@ -590,6 +590,7 @@ Context *ctx = &default_ctx;
 ProgramImpl *program_impl = nullptr;
 VertexShaderImpl *vertex_shader = nullptr;
 FragmentShaderImpl *fragment_shader = nullptr;
+BlendKey blend_key = BLEND_KEY_NONE;
 
 static void prepare_texture(Texture& t);
 
@@ -795,7 +796,7 @@ void SetViewport(GLint x, GLint y, GLsizei width, GLsizei height) {
 
 void Enable(GLenum cap) {
     switch (cap) {
-    case GL_BLEND: ctx->blend = true; break;
+    case GL_BLEND: ctx->blend = true; blend_key = ctx->blend_key; break;
     case GL_DEPTH_TEST: ctx->depthtest = true; break;
     case GL_SCISSOR_TEST: ctx->scissortest = true; break;
     }
@@ -803,7 +804,7 @@ void Enable(GLenum cap) {
 
 void Disable(GLenum cap) {
     switch (cap) {
-    case GL_BLEND: ctx->blend = false; break;
+    case GL_BLEND: ctx->blend = false; blend_key = BLEND_KEY_NONE; break;
     case GL_DEPTH_TEST: ctx->depthtest = false; break;
     case GL_SCISSOR_TEST: ctx->scissortest = false; break;
     }
@@ -965,6 +966,10 @@ void BlendFunc(GLenum srgb, GLenum drgb, GLenum sa, GLenum da) {
         debugf("blendfunc: %x, %x, separate: %x, %x\n", srgb, drgb, sa, da);
         assert(false);
         break;
+    }
+
+    if (ctx->blend) {
+        blend_key = ctx->blend_key;
     }
 }
 
@@ -2336,39 +2341,54 @@ static inline uint32_t zmask_code(ZMask8 mask) {
 }
 #endif
 
-template<int FULL_SPANS, typename MASK>
-static inline int check_depth(uint16_t z, uint16_t* zbuf, MASK& outmask, int span = 0) {
-    MASK dest = unaligned_load<MASK>(zbuf);
-    MASK src = int16_t(z);
+template<int FUNC, bool MASK>
+static ALWAYS_INLINE int check_depth(uint16_t z, uint16_t* zbuf, ZMask8& outmask) {
+    ZMask8 dest = unaligned_load<ZMask8>(zbuf);
+    ZMask8 src = int16_t(z);
     // Invert the depth test to check which pixels failed and should be discarded.
-    MASK mask = ctx->depthfunc == GL_LEQUAL ?
+    ZMask8 mask = FUNC == GL_LEQUAL ?
         // GL_LEQUAL: Not(LessEqual) = Greater
-        MASK(src > dest) :
+        ZMask8(src > dest) :
         // GL_LESS: Not(Less) = GreaterEqual
-        MASK(src >= dest);
-    if (FULL_SPANS > 1) {
-        switch (zmask_code(mask)) {
-        case ZMASK_NONE_PASSED:
-            return 0;
-        case ZMASK_ALL_PASSED:
-            if (ctx->depthmask) {
-                unaligned_store(zbuf, src);
-            }
-            return -1;
+        ZMask8(src >= dest);
+    switch (zmask_code(mask)) {
+    case ZMASK_NONE_PASSED:
+        return 0;
+    case ZMASK_ALL_PASSED:
+        if (MASK) {
+            unaligned_store(zbuf, src);
         }
-    } else {
-        if (!FULL_SPANS) {
-            mask |= MASK(span) < MASK{1, 2, 3, 4};
+        return -1;
+    default:
+        if (MASK) {
+            unaligned_store(zbuf, (mask & dest) | (~mask & src));
         }
-        if (zmask_code(mask) == ZMASK_NONE_PASSED) {
-            return 0;
-        }
+        outmask = mask;
+        return 1;
+    }
+}
+
+template<bool FULL_SPANS>
+static ALWAYS_INLINE bool check_depth(uint16_t z, uint16_t* zbuf, ZMask4& outmask, int span = 0) {
+    ZMask4 dest = unaligned_load<ZMask4>(zbuf);
+    ZMask4 src = int16_t(z);
+    // Invert the depth test to check which pixels failed and should be discarded.
+    ZMask4 mask = ctx->depthfunc == GL_LEQUAL ?
+        // GL_LEQUAL: Not(LessEqual) = Greater
+        ZMask4(src > dest) :
+        // GL_LESS: Not(Less) = GreaterEqual
+        ZMask4(src >= dest);
+    if (!FULL_SPANS) {
+        mask |= ZMask4(span) < ZMask4{1, 2, 3, 4};
+    }
+    if (zmask_code(mask) == ZMASK_NONE_PASSED) {
+        return false;
     }
     if (ctx->depthmask) {
         unaligned_store(zbuf, (mask & dest) | (~mask & src));
     }
     outmask = mask;
-    return 1;
+    return true;
 }
 
 static inline WideRGBA8 pack_pixels_RGBA8(const vec4& v) {
@@ -2408,7 +2428,7 @@ static inline WideRGBA8 blend_pixels_RGBA8(PackedRGBA8 pdst, WideRGBA8 src) {
     #define ALPHAS(c) __builtin_shufflevector(c, c, 3, 3, 3, 3, 7, 7, 7, 7, 11, 11, 11, 11, 15, 15, 15, 15)
     const WideRGBA8 RGB_MASK = {0xFFFF, 0xFFFF, 0xFFFF, 0, 0xFFFF, 0xFFFF, 0xFFFF, 0, 0xFFFF, 0xFFFF, 0xFFFF, 0, 0xFFFF, 0xFFFF, 0xFFFF, 0};
     const WideRGBA8 ALPHA_MASK = {0, 0, 0, 0xFFFF, 0, 0, 0, 0xFFFF, 0, 0, 0, 0xFFFF, 0, 0, 0, 0xFFFF};
-    switch (ctx->blend_key) {
+    switch (blend_key) {
     case BLEND_KEY_NONE:
         return src;
     case BLEND_KEY(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE):
@@ -2450,7 +2470,7 @@ static inline void commit_output(uint32_t* buf, PackedRGBA8 mask) {
     fragment_shader->run();
     PackedRGBA8 dst = unaligned_load<PackedRGBA8>(buf);
     WideRGBA8 r = pack_pixels_RGBA8();
-    if (ctx->blend) r = blend_pixels_RGBA8(dst, r);
+    if (blend_key) r = blend_pixels_RGBA8(dst, r);
     if (DISCARD) mask |= bit_cast<PackedRGBA8>(fragment_shader->isPixelDiscarded);
     unaligned_store(buf, (mask & dst) | (~mask & pack(r)));
 }
@@ -2464,19 +2484,19 @@ template<>
 static inline void commit_output<false>(uint32_t* buf) {
     fragment_shader->run();
     WideRGBA8 r = pack_pixels_RGBA8();
-    if (ctx->blend) r = blend_pixels_RGBA8(unaligned_load<PackedRGBA8>(buf), r);
+    if (blend_key) r = blend_pixels_RGBA8(unaligned_load<PackedRGBA8>(buf), r);
     unaligned_store(buf, pack(r));
 }
 
 static inline void commit_span(uint32_t* buf, PackedRGBA8 r) {
-    if (ctx->blend) r = pack(blend_pixels_RGBA8(unaligned_load<PackedRGBA8>(buf), unpack(r)));
+    if (blend_key) r = pack(blend_pixels_RGBA8(unaligned_load<PackedRGBA8>(buf), unpack(r)));
     unaligned_store(buf, r);
 }
 
 template<bool DISCARD>
 static inline void commit_output(uint32_t* buf, uint16_t z, uint16_t* zbuf) {
     ZMask4 zmask;
-    if (check_depth<1>(z, zbuf, zmask)) {
+    if (check_depth<true>(z, zbuf, zmask)) {
         commit_output<DISCARD>(buf, unpack(zmask, buf));
     } else {
         fragment_shader->skip();
@@ -2486,7 +2506,7 @@ static inline void commit_output(uint32_t* buf, uint16_t z, uint16_t* zbuf) {
 template<bool DISCARD>
 static inline void commit_output(uint32_t* buf, uint16_t z, uint16_t* zbuf, int span) {
     ZMask4 zmask;
-    if (check_depth<0>(z, zbuf, zmask, span)) {
+    if (check_depth<false>(z, zbuf, zmask, span)) {
         commit_output<DISCARD>(buf, unpack(zmask, buf));
     }
 }
@@ -2519,7 +2539,7 @@ static inline PackedR8 pack_span(uint8_t*) {
 
 static inline WideR8 blend_pixels_R8(WideR8 dst, WideR8 src) {
     #define MULDIV255(x, y) ({ WideR8 b = x; (b*y + b) >> 8; })
-    switch (ctx->blend_key) {
+    switch (blend_key) {
     case BLEND_KEY_NONE:
         return src;
     case BLEND_KEY(GL_ZERO, GL_SRC_COLOR):
@@ -2540,7 +2560,7 @@ static inline void commit_output(uint8_t* buf, WideR8 mask) {
     fragment_shader->run();
     WideR8 dst = unpack(unaligned_load<PackedR8>(buf));
     WideR8 r = pack_pixels_R8();
-    if (ctx->blend) r = blend_pixels_R8(dst, r);
+    if (blend_key) r = blend_pixels_R8(dst, r);
     if (DISCARD) mask |= packR8(fragment_shader->isPixelDiscarded);
     unaligned_store(buf, pack((mask & dst) | (~mask & r)));
 }
@@ -2554,19 +2574,19 @@ template<>
 static inline void commit_output<false>(uint8_t* buf) {
     fragment_shader->run();
     WideR8 r = pack_pixels_R8();
-    if (ctx->blend) r = blend_pixels_R8(unpack(unaligned_load<PackedR8>(buf)), r);
+    if (blend_key) r = blend_pixels_R8(unpack(unaligned_load<PackedR8>(buf)), r);
     unaligned_store(buf, pack(r));
 }
 
 static inline void commit_span(uint8_t* buf, PackedR8 r) {
-    if (ctx->blend) r = pack(blend_pixels_R8(unpack(unaligned_load<PackedR8>(buf)), unpack(r)));
+    if (blend_key) r = pack(blend_pixels_R8(unpack(unaligned_load<PackedR8>(buf)), unpack(r)));
     unaligned_store(buf, r);
 }
 
 template<bool DISCARD>
 static inline void commit_output(uint8_t* buf, uint16_t z, uint16_t* zbuf) {
     ZMask4 zmask;
-    if (check_depth<1>(z, zbuf, zmask)) {
+    if (check_depth<true>(z, zbuf, zmask)) {
         commit_output<DISCARD>(buf, unpack(zmask, buf));
     } else {
         fragment_shader->skip();
@@ -2576,7 +2596,7 @@ static inline void commit_output(uint8_t* buf, uint16_t z, uint16_t* zbuf) {
 template<bool DISCARD>
 static inline void commit_output(uint8_t* buf, uint16_t z, uint16_t* zbuf, int span) {
     ZMask4 zmask;
-    if (check_depth<0>(z, zbuf, zmask, span)) {
+    if (check_depth<false>(z, zbuf, zmask, span)) {
         commit_output<DISCARD>(buf, unpack(zmask, buf));
     }
 }
@@ -2597,6 +2617,72 @@ static const size_t MAX_INTERPOLANTS = 16;
 typedef float Interpolants __attribute__((ext_vector_type(MAX_INTERPOLANTS)));
 
 #include "load_shader.h"
+
+template<int FUNC, bool MASK, typename P>
+static inline void draw_depth_span(uint16_t z, P* buf, uint16_t* depth, int span) {
+    int skip = 0;
+    if (fragment_shader->has_draw_span(buf)) {
+        int len = 0;
+        for (; span >= 8; span -= 8, buf += 8, depth += 8) {
+            ZMask8 zmask;
+            switch (check_depth<FUNC, MASK>(z, depth, zmask)) {
+            case 0:
+                if (len) {
+                    fragment_shader->draw_span(buf - len, len);
+                    len = 0;
+                }
+                skip += 2;
+                break;
+            case -1:
+                if (skip) {
+                    fragment_shader->skip(skip);
+                    skip = 0;
+                }
+                len += 8;
+                break;
+            default:
+                if (len) {
+                    fragment_shader->draw_span(buf - len, len);
+                    len = 0;
+                } else if (skip) {
+                    fragment_shader->skip(skip);
+                    skip = 0;
+                }
+                commit_output<false>(buf, unpack(lowHalf(zmask), buf));
+                commit_output<false>(buf + 4, unpack(highHalf(zmask), buf));
+                break;
+            }
+        }
+        if (len) {
+            fragment_shader->draw_span(buf - len, len);
+        }
+    } else {
+        for (; span >= 8; span -= 8, buf += 8, depth += 8) {
+            ZMask8 zmask;
+            switch (check_depth<FUNC, MASK>(z, depth, zmask)) {
+            case 0:
+                skip += 2;
+                break;
+            case -1:
+                if (skip) {
+                    fragment_shader->skip(skip);
+                    skip = 0;
+                }
+                commit_output<false>(buf);
+                commit_output<false>(buf + 4);
+                break;
+            default:
+                if (skip) {
+                    fragment_shader->skip(skip);
+                    skip = 0;
+                }
+                commit_output<false>(buf, unpack(lowHalf(zmask), buf));
+                commit_output<false>(buf + 4, unpack(highHalf(zmask), buf));
+                break;
+            }
+        }
+    }
+}
 
 template<typename P>
 static inline void draw_quad_spans(int nump, Point p[4], uint16_t z, Interpolants interp_outs[4], Texture& colortex, int layer, Texture& depthtex, float fx0, float fy0, float fx1, float fy1) {
@@ -2712,7 +2798,7 @@ static inline void draw_quad_spans(int nump, Point p[4], uint16_t z, Interpolant
                     if ((mask & (1 << (yi & 31))) == 0) {
                         mask |= 1 << (yi & 31);
                         colortex.delay_clear--;
-                        if (use_depth || ctx->blend || fragment_shader->use_discard()) {
+                        if (use_depth || blend_key || fragment_shader->use_discard()) {
                             clear_buffer<P>(colortex, colortex.clear_val, 0, colortex.width, yi, yi + 1);
                         } else {
                             if (startx > 0) {
@@ -2733,69 +2819,16 @@ static inline void draw_quad_spans(int nump, Point p[4], uint16_t z, Interpolant
                 }
                 if (!fragment_shader->use_discard()) {
                     if (use_depth) {
-                        if (fragment_shader->has_draw_span(buf)) {
-                            int len = 0;
-                            int skip = 0;
-                            for (; span >= 8; span -= 8, buf += 8, depth += 8) {
-                                ZMask8 zmask;
-                                switch (check_depth<2>(z, depth, zmask)) {
-                                case 0:
-                                    if (len) {
-                                        fragment_shader->draw_span(buf - len, len);
-                                        len = 0;
-                                    }
-                                    skip += 2;
-                                    break;
-                                case -1:
-                                    if (skip) {
-                                        fragment_shader->skip(skip);
-                                        skip = 0;
-                                    }
-                                    len += 8;
-                                    break;
-                                default:
-                                    if (len) {
-                                        fragment_shader->draw_span(buf - len, len);
-                                        len = 0;
-                                    } else if (skip) {
-                                        fragment_shader->skip(skip);
-                                        skip = 0;
-                                    }
-                                    commit_output<false>(buf, unpack(lowHalf(zmask), buf));
-                                    commit_output<false>(buf + 4, unpack(highHalf(zmask), buf));
-                                    break;
-                                }
-                            }
-                            if (len) {
-                                fragment_shader->draw_span(buf - len, len);
-                            }
+                        if (ctx->depthfunc == GL_LEQUAL) {
+                            if (ctx->depthmask) draw_depth_span<GL_LEQUAL, true>(z, buf, depth, span);
+                            else draw_depth_span<GL_LEQUAL, false>(z, buf, depth, span);
                         } else {
-                            int skip = 0;
-                            for (; span >= 8; span -= 8, buf += 8, depth += 8) {
-                                ZMask8 zmask;
-                                switch (check_depth<2>(z, depth, zmask)) {
-                                case 0:
-                                    skip += 2;
-                                    break;
-                                case -1:
-                                    if (skip) {
-                                        fragment_shader->skip(skip);
-                                        skip = 0;
-                                    }
-                                    commit_output<false>(buf);
-                                    commit_output<false>(buf + 4);
-                                    break;
-                                default:
-                                    if (skip) {
-                                        fragment_shader->skip(skip);
-                                        skip = 0;
-                                    }
-                                    commit_output<false>(buf, unpack(lowHalf(zmask), buf));
-                                    commit_output<false>(buf + 4, unpack(highHalf(zmask), buf));
-                                    break;
-                                }
-                            }
+                            if (ctx->depthmask) draw_depth_span<GL_LESS, true>(z, buf, depth, span);
+                            else draw_depth_span<GL_LESS, false>(z, buf, depth, span);
                         }
+                        buf += span & ~7;
+                        depth += span & ~7;
+                        span &= 7;
                         for (; span >= 4; span -= 4, buf += 4, depth += 4) {
                             commit_output<false>(buf, z, depth);
                         }
@@ -3018,6 +3051,7 @@ void MakeCurrent(void* ctx_ptr) {
     }
     ctx = (Context*)ctx_ptr;
     setup_program(ctx->current_program);
+    blend_key = ctx->blend ? ctx->blend_key : BLEND_KEY_NONE;
 }
 
 void* CreateContext() {
