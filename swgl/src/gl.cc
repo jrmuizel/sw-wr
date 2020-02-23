@@ -359,7 +359,8 @@ struct FragmentShaderImpl : ShaderImpl {
     typedef void (*RunFunc)(FragmentShaderImpl*);
     typedef void (*SkipFunc)(FragmentShaderImpl*);
     typedef bool (*UseDiscardFunc)(FragmentShaderImpl*);
-    typedef bool (*UseVaryingFunc)(FragmentShaderImpl*);
+    typedef void (*DrawSpanRGBA8Func)(FragmentShaderImpl*, uint32_t* buf, int len);
+    typedef void (*DrawSpanR8Func)(FragmentShaderImpl*, uint8_t* buf, int len);
 
     InitBatchFunc init_batch_func = nullptr;
     InitPrimitiveFunc init_primitive_func = nullptr;
@@ -367,7 +368,8 @@ struct FragmentShaderImpl : ShaderImpl {
     RunFunc run_func = nullptr;
     SkipFunc skip_func = nullptr;
     UseDiscardFunc use_discard_func = nullptr;
-    UseVaryingFunc use_varying_func = nullptr;
+    DrawSpanRGBA8Func draw_span_RGBA8_func = nullptr;
+    DrawSpanR8Func draw_span_R8_func = nullptr;
 
     vec4 gl_FragCoord;
     Bool isPixelDiscarded;
@@ -376,6 +378,10 @@ struct FragmentShaderImpl : ShaderImpl {
 
     ALWAYS_INLINE void step_fragcoord() {
         gl_FragCoord.x += 4;
+    }
+
+    ALWAYS_INLINE void step_fragcoord(int chunks) {
+        gl_FragCoord.x += 4 * chunks;
     }
 
     void init_batch(ProgramImpl *prog) {
@@ -402,8 +408,20 @@ struct FragmentShaderImpl : ShaderImpl {
         return (*use_discard_func)(this);
     }
 
-    ALWAYS_INLINE bool use_varying() {
-        return (*use_varying_func)(this);
+    ALWAYS_INLINE void draw_span(uint32_t* buf, int len) {
+        (*draw_span_RGBA8_func)(this, buf, len);
+    }
+
+    ALWAYS_INLINE bool has_draw_span(uint32_t*) {
+        return draw_span_RGBA8_func != nullptr;
+    }
+
+    ALWAYS_INLINE void draw_span(uint8_t* buf, int len) {
+        (*draw_span_R8_func)(this, buf, len);
+    }
+
+    ALWAYS_INLINE bool has_draw_span(uint8_t*) {
+        return draw_span_R8_func != nullptr;
     }
 };
 
@@ -2363,13 +2381,23 @@ static inline WideRGBA8 pack_pixels_RGBA8(const vec4& v) {
     return combine(lo, hi);
 }
 
-static inline PackedRGBA8 pack_pixels(uint32_t*) {
-    return pack(pack_pixels_RGBA8(fragment_shader->gl_FragColor));
+static inline WideRGBA8 pack_pixels_RGBA8(const vec4_scalar& v) {
+    I32 i = roundto(bit_cast<Float>(v), 255.49f);
+    HalfRGBA8 c = packRGBA8(i, i);
+    return combine(c, c);
 }
 
-static inline PackedRGBA8 blend_pixels_RGBA8(PackedRGBA8 pdst, WideRGBA8 src) {
+static inline WideRGBA8 pack_pixels_RGBA8() {
+    return pack_pixels_RGBA8(fragment_shader->gl_FragColor);
+}
+
+template<typename V>
+static inline PackedRGBA8 pack_span(uint32_t*, const V& v) {
+    return pack(pack_pixels_RGBA8(v));
+}
+
+static inline WideRGBA8 blend_pixels_RGBA8(PackedRGBA8 pdst, WideRGBA8 src) {
     WideRGBA8 dst = unpack(pdst);
-    PackedRGBA8 r;
     // (x*y + x) >> 8, cheap approximation of (x*y) / 255
     #define MULDIV255(x, y) ({ WideRGBA8 b = x; (b*y + b) >> 8; })
     #define ALPHAS(c) __builtin_shufflevector(c, c, 3, 3, 3, 3, 7, 7, 7, 7, 11, 11, 11, 11, 15, 15, 15, 15)
@@ -2377,70 +2405,49 @@ static inline PackedRGBA8 blend_pixels_RGBA8(PackedRGBA8 pdst, WideRGBA8 src) {
     const WideRGBA8 ALPHA_MASK = {0, 0, 0, 0xFFFF, 0, 0, 0, 0xFFFF, 0, 0, 0, 0xFFFF, 0, 0, 0, 0xFFFF};
     switch (ctx->blend_key) {
     case BLEND_KEY_NONE:
-        r = pack(src);
-        break;
+        return src;
     case BLEND_KEY(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE):
-        r = pack(dst + MULDIV255((src - dst) | ALPHA_MASK, ALPHAS(src)));
-        break;
+        return dst + MULDIV255((src - dst) | ALPHA_MASK, ALPHAS(src));
     case BLEND_KEY(GL_ONE, GL_ONE_MINUS_SRC_ALPHA):
-        r = pack(src + dst - MULDIV255(dst, ALPHAS(src)));
-        break;
+        return src + dst - MULDIV255(dst, ALPHAS(src));
     case BLEND_KEY(GL_ZERO, GL_ONE_MINUS_SRC_COLOR):
-        r = pack(dst - MULDIV255(dst, src));
-        break;
+        return dst - MULDIV255(dst, src);
     case BLEND_KEY(GL_ZERO, GL_ONE_MINUS_SRC_COLOR, GL_ZERO, GL_ONE):
-        r = pack(dst - (MULDIV255(dst, src) & RGB_MASK));
-        break;
+        return dst - (MULDIV255(dst, src) & RGB_MASK);
     case BLEND_KEY(GL_ZERO, GL_ONE_MINUS_SRC_ALPHA):
-        r = pack(dst - MULDIV255(dst, ALPHAS(src)));
-        break;
+        return dst - MULDIV255(dst, ALPHAS(src));
     case BLEND_KEY(GL_ZERO, GL_SRC_COLOR):
-        r = pack(MULDIV255(src, dst));
-        break;
+        return MULDIV255(src, dst);
     case BLEND_KEY(GL_ONE, GL_ONE):
-        r = pack(src + dst);
-        break;
+        return src + dst;
     case BLEND_KEY(GL_ONE, GL_ONE, GL_ONE, GL_ONE_MINUS_SRC_ALPHA):
-        r = pack(src + dst - (MULDIV255(dst, src) & ALPHA_MASK));
-        break;
+        return src + dst - (MULDIV255(dst, src) & ALPHA_MASK);
     case BLEND_KEY(GL_ONE, GL_ZERO):
-        r = pack(src);
-        break;
+        return src;
     case BLEND_KEY(GL_ONE_MINUS_DST_ALPHA, GL_ONE, GL_ZERO, GL_ONE):
-        r = pack(dst + ((src - MULDIV255(src, ALPHAS(src))) & RGB_MASK));
-        break;
+        return dst + ((src - MULDIV255(src, ALPHAS(src))) & RGB_MASK);
     case BLEND_KEY(GL_CONSTANT_COLOR, GL_ONE_MINUS_SRC_COLOR):
-        r = pack(dst + MULDIV255(combine(ctx->blendcolor, ctx->blendcolor) - dst, src));
-        break;
+        return dst + MULDIV255(combine(ctx->blendcolor, ctx->blendcolor) - dst, src);
     case BLEND_KEY(GL_ONE, GL_ONE_MINUS_SRC1_COLOR): {
         WideRGBA8 secondary = pack_pixels_RGBA8(fragment_shader->gl_SecondaryFragColor);
-        r = pack(src + dst - MULDIV255(dst, secondary));
-        break;
+        return src + dst - MULDIV255(dst, secondary);
     }
     default:
         UNREACHABLE;
-        break;
+        return src;
     }
     #undef MULDIV255
     #undef ALPHAS
-    return r;
-}
-
-static inline PackedRGBA8 blend_pixels_RGBA8(PackedRGBA8 dst) {
-    return blend_pixels_RGBA8(dst, pack_pixels_RGBA8(fragment_shader->gl_FragColor));
-}
-
-static inline PackedRGBA8 blend_pixels_RGBA8(PackedRGBA8 dst, PackedRGBA8 src) {
-    return blend_pixels_RGBA8(dst, unpack(src));
 }
 
 template<bool DISCARD>
 static inline void commit_output(uint32_t* buf, PackedRGBA8 mask) {
     fragment_shader->run();
     PackedRGBA8 dst = unaligned_load<PackedRGBA8>(buf);
-    PackedRGBA8 r = ctx->blend ? blend_pixels_RGBA8(dst) : pack_pixels(buf);
+    WideRGBA8 r = pack_pixels_RGBA8();
+    if (ctx->blend) r = blend_pixels_RGBA8(dst, r);
     if (DISCARD) mask |= bit_cast<PackedRGBA8>(fragment_shader->isPixelDiscarded);
-    unaligned_store(buf, (mask & dst) | (~mask & r));
+    unaligned_store(buf, (mask & dst) | (~mask & pack(r)));
 }
 
 template<bool DISCARD>
@@ -2451,7 +2458,13 @@ static inline void commit_output(uint32_t* buf) {
 template<>
 static inline void commit_output<false>(uint32_t* buf) {
     fragment_shader->run();
-    PackedRGBA8 r = ctx->blend ? blend_pixels_RGBA8(unaligned_load<PackedRGBA8>(buf)) : pack_pixels(buf);
+    WideRGBA8 r = pack_pixels_RGBA8();
+    if (ctx->blend) r = blend_pixels_RGBA8(unaligned_load<PackedRGBA8>(buf), r);
+    unaligned_store(buf, pack(r));
+}
+
+static inline void commit_span(uint32_t* buf, PackedRGBA8 r) {
+    if (ctx->blend) r = pack(blend_pixels_RGBA8(unaligned_load<PackedRGBA8>(buf), unpack(r)));
     unaligned_store(buf, r);
 }
 
@@ -2482,58 +2495,45 @@ static inline void commit_output(uint32_t* buf, int span) {
     commit_output<DISCARD>(buf, span_mask_RGBA8(span));
 }
 
-static inline void commit_solid(uint32_t* buf, PackedRGBA8 src, PackedRGBA8 mask) {
-    PackedRGBA8 dst = unaligned_load<PackedRGBA8>(buf);
-    PackedRGBA8 r = ctx->blend ? blend_pixels_RGBA8(dst, src) : src;
-    unaligned_store(buf, (mask & dst) | (~mask & r));
+static inline WideR8 pack_pixels_R8(Float c) {
+    return packR8(roundto(c, 255.49f));
 }
 
-static inline void commit_solid(uint32_t* buf, PackedRGBA8 src) {
-    PackedRGBA8 r = ctx->blend ? blend_pixels_RGBA8(unaligned_load<PackedRGBA8>(buf), src) : src;
-    unaligned_store(buf, r);
+static inline WideR8 pack_pixels_R8() {
+    return pack_pixels_R8(fragment_shader->gl_FragColor.x);
 }
 
-static inline void commit_solid(uint32_t* buf, PackedRGBA8 src, int span) {
-    commit_solid(buf, src, span_mask_RGBA8(span));
-}
-
-static inline WideR8 pack_pixels(uint8_t*) {
-    return packR8(roundto(fragment_shader->gl_FragColor.x, 255.49f));
+template<typename C>
+static inline PackedR8 pack_span(uint8_t*, C c) {
+    return pack(pack_pixels_R8(c));
 }
 
 static inline WideR8 blend_pixels_R8(WideR8 dst, WideR8 src) {
-    WideR8 r;
     #define MULDIV255(x, y) ({ WideR8 b = x; (b*y + b) >> 8; })
     switch (ctx->blend_key) {
     case BLEND_KEY_NONE:
-        r = src;
-        break;
+        return src;
     case BLEND_KEY(GL_ZERO, GL_SRC_COLOR):
-        r = MULDIV255(src, dst);
-        break;
+        return MULDIV255(src, dst);
     case BLEND_KEY(GL_ONE, GL_ONE):
-        r = src + dst;
-        break;
+        return src + dst;
     case BLEND_KEY(GL_ONE, GL_ZERO):
-        r = src;
-        break;
+        return src;
     default:
         UNREACHABLE;
-        break;
+        return src;
     }
     #undef MULDIV255
-    return r;
 }
 
 template<bool DISCARD>
 static inline void commit_output(uint8_t* buf, WideR8 mask) {
     fragment_shader->run();
     WideR8 dst = unpack(unaligned_load<PackedR8>(buf));
-    WideR8 r = pack_pixels(buf);
+    WideR8 r = pack_pixels_R8();
     if (ctx->blend) r = blend_pixels_R8(dst, r);
     if (DISCARD) mask |= packR8(fragment_shader->isPixelDiscarded);
-    r = (mask & dst) | (~mask & r);
-    unaligned_store(buf, pack(r));
+    unaligned_store(buf, pack((mask & dst) | (~mask & r)));
 }
 
 template<bool DISCARD>
@@ -2544,9 +2544,14 @@ static inline void commit_output(uint8_t* buf) {
 template<>
 static inline void commit_output<false>(uint8_t* buf) {
     fragment_shader->run();
-    WideR8 r = pack_pixels(buf);
+    WideR8 r = pack_pixels_R8();
     if (ctx->blend) r = blend_pixels_R8(unpack(unaligned_load<PackedR8>(buf)), r);
     unaligned_store(buf, pack(r));
+}
+
+static inline void commit_span(uint8_t* buf, PackedR8 r) {
+    if (ctx->blend) r = pack(blend_pixels_R8(unpack(unaligned_load<PackedR8>(buf)), unpack(r)));
+    unaligned_store(buf, r);
 }
 
 template<bool DISCARD>
@@ -2574,22 +2579,6 @@ static inline WideR8 span_mask_R8(int span) {
 template<bool DISCARD>
 static inline void commit_output(uint8_t* buf, int span) {
     commit_output<DISCARD>(buf, span_mask_R8(span));
-}
-
-static inline void commit_solid(uint8_t* buf, WideR8 src, WideR8 mask) {
-    WideR8 dst = unpack(unaligned_load<PackedR8>(buf));
-    WideR8 r = ctx->blend ? blend_pixels_R8(dst, src) : src;
-    r = (mask & dst) | (~mask & r);
-    unaligned_store(buf, pack(r));
-}
-
-static inline void commit_solid(uint8_t* buf, WideR8 src) {
-    WideR8 r = ctx->blend ? blend_pixels_R8(unpack(unaligned_load<PackedR8>(buf)), src) : src;
-    unaligned_store(buf, pack(r));
-}
-
-static inline void commit_solid(uint8_t* buf, WideR8 src, int span) {
-    commit_solid(buf, src, span_mask_R8(span));
 }
 
 static const size_t MAX_FLATS = 64;
@@ -2735,42 +2724,34 @@ static inline void draw_quad_spans(int nump, Point p[4], uint16_t z, Interpolant
                 }
                 if (!fragment_shader->use_discard()) {
                     if (use_depth) {
-                        if (!fragment_shader->use_varying()) {
-                            decltype(pack_pixels(buf)) src = 0;
+                        if (fragment_shader->has_draw_span(buf)) {
+                            int len = 0;
                             for (; span >= 8; span -= 8, buf += 8, depth += 8) {
                                 ZMask8 zmask;
                                 switch (check_depth<2>(z, depth, zmask)) {
                                 case 0:
-                                    continue;
+                                    if (len) {
+                                        fragment_shader->draw_span(buf - len, len);
+                                        len = 0;
+                                    }
+                                    fragment_shader->skip();
+                                    fragment_shader->skip();
+                                    break;
                                 case -1:
-                                    fragment_shader->run();
-                                    src = pack_pixels(buf);
-                                    commit_solid(buf, src);
-                                    commit_solid(buf + 4, src);
+                                    len += 8;
                                     break;
                                 default:
-                                    fragment_shader->run();
-                                    src = pack_pixels(buf);
-                                    commit_solid(buf, unpack(lowHalf(zmask), buf));
-                                    commit_solid(buf + 4, src, unpack(highHalf(zmask), buf));
+                                    if (len) {
+                                        fragment_shader->draw_span(buf - len, len);
+                                        len = 0;
+                                    }
+                                    commit_output<false>(buf, unpack(lowHalf(zmask), buf));
+                                    commit_output<false>(buf + 4, unpack(highHalf(zmask), buf));
                                     break;
                                 }
-                                break;
                             }
-                            for (; span >= 8; span -= 8, buf += 8, depth += 8) {
-                                ZMask8 zmask;
-                                switch (check_depth<2>(z, depth, zmask)) {
-                                case 0:
-                                    continue;
-                                case -1:
-                                    commit_solid(buf, src);
-                                    commit_solid(buf + 4, src);
-                                    break;
-                                default:
-                                    commit_solid(buf, src, unpack(lowHalf(zmask), buf));
-                                    commit_solid(buf + 4, src, unpack(highHalf(zmask), buf));
-                                    break;
-                                }
+                            if (len) {
+                                fragment_shader->draw_span(buf - len, len);
                             }
                         } else {
                             for (; span >= 8; span -= 8, buf += 8, depth += 8) {
@@ -2797,18 +2778,20 @@ static inline void draw_quad_spans(int nump, Point p[4], uint16_t z, Interpolant
                         if (span > 0) {
                             commit_output<false>(buf, z, depth, span);
                         }
-                    } else if (!fragment_shader->use_varying()) {
-                        fragment_shader->run();
-                        auto src = pack_pixels(buf);
-                        for (; span >= 4; span -= 4, buf += 4) {
-                            commit_solid(buf, src);
-                        }
-                        if (span > 0) {
-                            commit_solid(buf, src, span);
-                        }
                     } else {
-                        for (; span >= 4; span -= 4, buf += 4) {
-                            commit_output<false>(buf);
+                        if (span >= 4) {
+                            if (fragment_shader->has_draw_span(buf)) {
+                                int len = span & ~3;
+                                fragment_shader->draw_span(buf, len);
+                                buf += len;
+                                span &= 3;
+                            } else {
+                                do {
+                                    commit_output<false>(buf);
+                                    buf += 4;
+                                    span -= 4;
+                                } while (span >= 4);
+                            }
                         }
                         if (span > 0) {
                             commit_output<false>(buf, span);

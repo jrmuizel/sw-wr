@@ -617,6 +617,10 @@ Float ceil(Float v) {
 }
 
 
+SI int32_t roundto(float v, float scale) {
+    return int32_t(v * scale + 0.5f);
+}
+
 SI I32 roundto(Float v, Float scale) {
 #if USE_SSE2
     return _mm_cvtps_epi32(v * scale);

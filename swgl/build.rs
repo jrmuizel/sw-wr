@@ -81,8 +81,12 @@ fn translate_shader(shader: &str) {
         "glsl_to_cxx".to_string(),
         vs_name,
         fs_name,
-    ].into_iter();
-    let result = glsl_to_cxx::translate(&mut args);
+    ];
+    let frag_include = format!("{}/{}.frag.h", shader_dir, shader);
+    if std::path::Path::new(&frag_include).exists() {
+        args.push(frag_include);
+    }
+    let result = glsl_to_cxx::translate(&mut args.into_iter());
     std::fs::write(format!("{}/{}.h", out_dir, shader), result).unwrap();
 }
 
