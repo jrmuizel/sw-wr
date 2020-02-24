@@ -43,6 +43,13 @@ typedef int32_t GLsizei;
 typedef size_t GLsizeiptr;
 typedef intptr_t GLintptr;
 
+struct IntRect {
+    int x;
+    int y;
+    int width;
+    int height;
+};
+
 struct VertexAttrib {
         size_t size = 0; // in bytes
         GLenum type = 0;
@@ -70,6 +77,15 @@ struct VertexAttrib {
 #define GL_UNSIGNED_INT                   0x1405
 #define GL_FLOAT                          0x1406
 
+#define GL_RED                            0x1903
+#define GL_GREEN                          0x1904
+#define GL_BLUE                           0x1905
+#define GL_ALPHA                          0x1906
+#define GL_RGB                            0x1907
+#define GL_RGBA                           0x1908
+#define GL_RGBA_INTEGER                   0x8D99
+#define GL_BGRA                           0x80E1
+
 #define GL_DEPTH_COMPONENT                0x1902
 #define GL_DEPTH_COMPONENT16              0x81A5
 #define GL_DEPTH_COMPONENT24              0x81A6
@@ -83,8 +99,10 @@ int bytes_for_internal_format(GLenum internal_format) {
                         return 4*4;
                 case GL_RGBA8:
                 case GL_BGRA8:
+                case GL_RGBA:
                         return 4;
                 case GL_R8:
+                case GL_RED:
                         return 1;
                 case GL_DEPTH_COMPONENT:
                 case GL_DEPTH_COMPONENT16:
@@ -174,10 +192,6 @@ struct Renderbuffer {
 #define GL_TEXTURE_MAG_FILTER       0x2800
 #define GL_TEXTURE_MIN_FILTER       0x2801
 #define GL_CLAMP_TO_EDGE            0x812F
-#define GL_TEXTURE_SWIZZLE_R        0x8E42
-#define GL_TEXTURE_SWIZZLE_G        0x8E43
-#define GL_TEXTURE_SWIZZLE_B        0x8E44
-#define GL_TEXTURE_SWIZZLE_A        0x8E45
 
 glsl::TextureFilter gl_filter_to_texture_filter(int type) {
         switch (type) {
@@ -206,18 +220,15 @@ struct Texture {
     GLenum mag_filter = GL_LINEAR;
 
     enum FLAGS {
-        SWIZZLE_BGRA = 1 << 0,
         SHOULD_FREE  = 1 << 1,
     };
     int flags = SHOULD_FREE;
-    bool swizzle_bgra() const { return bool(flags & SWIZZLE_BGRA); }
     bool should_free() const { return bool(flags & SHOULD_FREE); }
 
     void set_flag(int flag, bool val) {
         if (val) { flags |= flag; }
         else { flags &= ~flag; }
     }
-    void set_swizzle_bgra(bool val) { set_flag(SWIZZLE_BGRA, val); }
     void set_should_free(bool val) { set_flag(SHOULD_FREE, val); }
 
     int delay_clear = 0;
@@ -432,13 +443,6 @@ Program::~Program() {
     delete frag_impl;
 }
 
-struct Viewport {
-	int x;
-	int y;
-	int width;
-	int height;
-};
-
 #define GL_BLEND                    0x0BE2
 #define GL_ZERO                     0
 #define GL_ONE                      1
@@ -497,13 +501,6 @@ enum BlendKey : uint8_t
 
 #define GL_SCISSOR_TEST             0x0C11
 
-struct Scissor {
-    int x;
-    int y;
-    int width;
-    int height;
-};
-
 #define GL_TEXTURE0                       0x84C0
 #define GL_TEXTURE1                       0x84C1
 #define GL_TEXTURE2                       0x84C2
@@ -556,7 +553,7 @@ struct Context {
     GLuint framebuffer_count = 1;
     GLuint program_count = 1;
 
-    Viewport viewport = { 0, 0, 0, 0 };
+    IntRect viewport = { 0, 0, 0, 0 };
 
     bool blend = false;
     GLenum blendfunc_srgb = GL_ONE;
@@ -572,7 +569,7 @@ struct Context {
     GLenum depthfunc = GL_LESS;
 
     bool scissortest = false;
-    Scissor scissor = { 0, 0, 0, 0 };
+    IntRect scissor = { 0, 0, 0, 0 };
 
     uint32_t clearcolor = 0;
     GLdouble cleardepth = 1;
@@ -604,7 +601,6 @@ S *lookup_sampler(S *s, int texture) {
             s->buf = nullptr;
             s->format = TextureFormat::RGBA8;
             s->filter = TextureFilter::NEAREST;
-            s->swizzle_bgra = false;
         } else {
             Texture &t = ctx->textures[tid];
             prepare_texture(t);
@@ -616,7 +612,6 @@ S *lookup_sampler(S *s, int texture) {
             s->buf = (uint32_t*)t.buf; //XXX: wrong
             s->format = gl_format_to_texture_format(t.internal_format);
             s->filter = gl_filter_to_texture_filter(t.mag_filter);
-            s->swizzle_bgra = t.swizzle_bgra();
         }
         return s;
 }
@@ -656,7 +651,6 @@ S *lookup_sampler_array(S *s, int texture) {
             s->buf = nullptr;
             s->format = TextureFormat::RGBA8;
             s->filter = TextureFilter::NEAREST;
-            s->swizzle_bgra = false;
         } else {
             Texture &t = ctx->textures[tid];
             prepare_texture(t);
@@ -670,7 +664,6 @@ S *lookup_sampler_array(S *s, int texture) {
             s->buf = (uint32_t*)t.buf; //XXX: wrong
             s->format = gl_format_to_texture_format(t.internal_format);
             s->filter = gl_filter_to_texture_filter(t.mag_filter);
-            s->swizzle_bgra = t.swizzle_bgra();
         }
         return s;
 }
@@ -838,7 +831,6 @@ static const char * const extensions[] = {
     "GL_ARB_explicit_attrib_location",
     "GL_ARB_instanced_arrays",
     "GL_ARB_texture_storage",
-    "GL_ARB_texture_swizzle",
     "GL_EXT_timer_query",
 };
 
@@ -974,7 +966,7 @@ void BlendFunc(GLenum srgb, GLenum drgb, GLenum sa, GLenum da) {
 }
 
 void BlendColor(GLfloat r, GLfloat g, GLfloat b, GLfloat a) {
-        I32 c = roundto((Float){r, g, b, a}, 255.49f);
+        I32 c = roundto((Float){b, g, r, a}, 255.49f);
         ctx->blendcolor = __builtin_convertvector(c, U16).rgbargba;
 }
 
@@ -1006,7 +998,7 @@ void SetScissor(GLint x, GLint y, GLsizei width, GLsizei height) {
 }
 
 void ClearColor(GLfloat r, GLfloat g, GLfloat b, GLfloat a) {
-    I32 c = roundto((Float){r, g, b, a}, 255.49f);
+    I32 c = roundto((Float){b, g, r, a}, 255.49f);
     ctx->clearcolor = bit_cast<uint32_t>(__builtin_convertvector(c, U8));
 }
 
@@ -1276,6 +1268,18 @@ void PixelStorei(GLenum name, GLint param) {
     }
 }
 
+static GLenum remap_internal_format(GLenum format) {
+    switch (format) {
+    case GL_DEPTH_COMPONENT:
+        return GL_DEPTH_COMPONENT16;
+    case GL_RGBA:
+        return GL_RGBA8;
+    case GL_RED:
+        return GL_R8;
+    default:
+        return format;
+    }
+}
 
 void TexStorage3D(
         GLenum target,
@@ -1287,7 +1291,7 @@ void TexStorage3D(
     ) {
     Texture &t = ctx->textures[active_texture(target)];
     t.levels = levels;
-    t.internal_format = internal_format;
+    t.internal_format = remap_internal_format(internal_format);
     t.width = width;
     t.height = height;
     t.depth = depth;
@@ -1305,7 +1309,7 @@ static void set_tex_storage(
         void* buf = nullptr
     ) {
     t.levels = levels;
-    t.internal_format = internal_format;
+    t.internal_format = remap_internal_format(internal_format);
     t.width = width;
     t.height = height;
     if (t.should_free() != should_free || buf != nullptr) {
@@ -1330,14 +1334,6 @@ void TexStorage2D(
     set_tex_storage(t, levels, internal_format, width, height);
 }
 
-#define GL_RED                            0x1903
-#define GL_GREEN                          0x1904
-#define GL_BLUE                           0x1905
-#define GL_ALPHA                          0x1906
-#define GL_RGB                            0x1907
-#define GL_RGBA                           0x1908
-#define GL_RGBA_INTEGER                   0x8D99
-#define GL_BGRA                           0x80E1
 GLenum internal_format_for_data(GLenum format, GLenum ty) {
     if (format == GL_RED && ty == GL_UNSIGNED_BYTE) {
         return GL_R8;
@@ -1390,7 +1386,7 @@ void TexSubImage2D(
         char *dest = t.buf + yoffset * dest_stride + xoffset * bpp;
         char *src = (char*)data;
         for (int y = 0; y < height; y++) {
-                if (format == GL_BGRA) {
+                if (t.internal_format == GL_RGBA8 && format != GL_BGRA) {
                     copy_bgra8_to_rgba8((uint32_t*)dest, (uint32_t*)src, width);
                 } else {
                     memcpy(dest, src, width * bpp);
@@ -1451,7 +1447,7 @@ void TexSubImage3D(
         for (int z = 0; z < depth; z++) {
                 char *dest = t.buf + ((zoffset + z) * t.height + yoffset) * dest_stride + xoffset * bpp;
                 for (int y = 0; y < height; y++) {
-                        if (format == GL_BGRA) {
+                        if (t.internal_format == GL_RGBA8 && format != GL_BGRA) {
                             copy_bgra8_to_rgba8((uint32_t*)dest, (uint32_t*)src, width);
                         } else {
                             memcpy(dest, src, width * bpp);
@@ -1494,27 +1490,6 @@ void TexParameteri(GLenum target, GLenum pname, GLint param) {
         case GL_TEXTURE_MAG_FILTER:
             assert(param == GL_NEAREST || param == GL_LINEAR);
             t.mag_filter = param;
-            break;
-        case GL_TEXTURE_SWIZZLE_R:
-            if (t.internal_format == GL_RGBA8) {
-                assert(param == GL_BLUE || param == GL_RED);
-                t.set_swizzle_bgra(param == GL_BLUE);
-            } else {
-                assert(param == GL_RED);
-            }
-            break;
-        case GL_TEXTURE_SWIZZLE_G:
-            assert(param == GL_GREEN);
-            break;
-        case GL_TEXTURE_SWIZZLE_B:
-            if (t.internal_format == GL_RGBA8) {
-                assert(param == GL_BLUE || param == GL_RED);
-            } else {
-                assert(param == GL_BLUE);
-            }
-            break;
-        case GL_TEXTURE_SWIZZLE_A:
-            assert(param == GL_ALPHA);
             break;
         default:
             break;
@@ -1871,21 +1846,26 @@ static void force_clear(Texture& t) {
         return;
     }
     int num_masks = (t.height + 31) / 32;
+    const uint32_t* rows = t.cleared_rows;
     for (int i = 0; i < num_masks; i++) {
-        uint32_t mask = t.cleared_rows[i];
+        uint32_t mask = rows[i];
         if (mask != ~0U) {
-            int start = 0;
-            for (int end = 0; mask; end++) {
-                if (mask & 1) {
-                    if (start < end) {
-                        clear_buffer<T>(t, t.clear_val, 0, t.width, start + i*32, end + i*32);
-                    }
-                    start = end + 1;
+            int start = i*32;
+            while (mask) {
+                int count = __builtin_ctz(mask);
+                if (count) {
+                    printf("clearing %d at %d\n", count, start);
+                    clear_buffer<T>(t, t.clear_val, 0, t.width, start, start + count);
+                    start += count;
+                    mask >>= count;
                 }
-                mask >>= 1;
+                count = __builtin_ctz(mask + 1);
+                start += count;
+                mask >>= count;
             }
-            if (start < 32) {
-                clear_buffer<T>(t, t.clear_val, 0, t.width, start + i*32, 32 + i*32);
+            if (start < (i+1)*32) {
+                printf("clearing 32 at %d\n", start);
+                clear_buffer<T>(t, t.clear_val, 0, t.width, start, (i+1)*32);
             }
         }
     }
@@ -2004,7 +1984,7 @@ void Clear(GLbitfield mask) {
                 t.enable_delayed_clear(color);
             }
         } else if (t.internal_format == GL_R8) {
-            uint8_t color = uint8_t(ctx->clearcolor & 0xFF);
+            uint8_t color = uint8_t((ctx->clearcolor >> 16) & 0xFF);
             if (clear_requires_scissor(t)) {
                 force_clear<uint8_t>(t);
                 clear_buffer<uint8_t>(t, color, fb.layer);
@@ -2050,7 +2030,7 @@ void ReadPixels(GLint x, GLint y, GLsizei width, GLsizei height, GLenum format, 
     int src_stride = aligned_stride(bpp * t.width);
     char *src = t.buf + (t.height * fb->layer + y) * src_stride + x * bpp;
     for (; height > 0; height--) {
-        if (format == GL_BGRA) {
+        if (t.internal_format == GL_RGBA8 && format != GL_BGRA) {
             copy_bgra8_to_rgba8((uint32_t*)dest, (uint32_t*)src, width);
         } else {
             memcpy(dest, src, width * bpp);
@@ -2194,11 +2174,6 @@ void BlitFramebuffer(
 #define GL_QUADS                          0x0007
 
 } // extern "C"
-
-struct Point {
-        float x;
-        float y;
-};
 
 using PackedRGBA8 = V16<uint8_t>;
 using WideRGBA8 = V16<uint16_t>;
@@ -2393,7 +2368,7 @@ static ALWAYS_INLINE bool check_depth(uint16_t z, uint16_t* zbuf, ZMask4& outmas
 
 static inline WideRGBA8 pack_pixels_RGBA8(const vec4& v) {
     ivec4 i = roundto(v, 255.49f);
-    HalfRGBA8 xz = packRGBA8(i.x, i.z);
+    HalfRGBA8 xz = packRGBA8(i.z, i.x);
     HalfRGBA8 yw = packRGBA8(i.y, i.w);
     HalfRGBA8 xy = zipLow(xz, yw);
     HalfRGBA8 zw = zipHigh(xz, yw);
@@ -2403,7 +2378,7 @@ static inline WideRGBA8 pack_pixels_RGBA8(const vec4& v) {
 }
 
 static inline WideRGBA8 pack_pixels_RGBA8(const vec4_scalar& v) {
-    I32 i = roundto(bit_cast<Float>(v), 255.49f);
+    I32 i = roundto(bit_cast<Float>(v).zyxw, 255.49f);
     HalfRGBA8 c = packRGBA8(i, i);
     return combine(c, c);
 }
@@ -2684,6 +2659,8 @@ static inline void draw_depth_span(uint16_t z, P* buf, uint16_t* depth, int span
     }
 }
 
+typedef vec2_scalar Point;
+
 template<typename P>
 static inline void draw_quad_spans(int nump, Point p[4], uint16_t z, Interpolants interp_outs[4], Texture& colortex, int layer, Texture& depthtex, float fx0, float fy0, float fx1, float fy1) {
         Point l0, r0, l1, r1;
@@ -2898,13 +2875,11 @@ static void draw_quad(int nump, Texture& colortex, int layer, Texture& depthtex)
         //        debugf("%f %f\n", p[k].x, p[k].y);
         }
 
-        auto top_left = p[0];
-        auto bot_right = p[0];
-        for (int i = 1; i < nump; i++) {
-            top_left.x = std::min(top_left.x, p[i].x);
-            top_left.y = std::min(top_left.y, p[i].y);
-            bot_right.x = std::max(bot_right.x, p[i].x);
-            bot_right.y = std::max(bot_right.y, p[i].y);
+        auto top_left = min(min(p[0], p[1]), p[2]);
+        auto bot_right = max(max(p[0], p[1]), p[2]);
+        if (nump > 3) {
+            top_left = min(top_left, p[3]);
+            bot_right = max(bot_right, p[3]);
         }
         //debugf("bbox: %f %f %f %f\n", top_left.x, top_left.y, bot_right.x, bot_right.y);
 
