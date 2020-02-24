@@ -33,12 +33,7 @@ fn process_imports(shader_dir: &str, shader: &str, output: &mut String) {
     }
 }
 
-fn translate_shader(shader: &str) {
-    let shader_dir = match std::env::var("MOZ_SRC") {
-        Ok(dir) => dir + "/gfx/wr/webrender/res",
-        Err(_) => std::env::var("CARGO_MANIFEST_DIR").unwrap() + "/../webrender/res",
-    };
-
+fn translate_shader(shader: &str, shader_dir: &str) {
     let mut imported = String::new();
     write!(imported, "#define SWGL 1\n");
     write!(imported, "#define GL_ES 1\n");
@@ -54,7 +49,7 @@ fn translate_shader(shader: &str) {
         shader
     };
 
-    process_imports(&shader_dir, basename, &mut imported);
+    process_imports(shader_dir, basename, &mut imported);
 
     let out_dir = std::env::var("OUT_DIR").unwrap();
     let imp_name = format!("{}/{}.i", out_dir, shader);
@@ -137,8 +132,13 @@ const WR_SHADERS: &'static [&'static str] = &[
 ];
 
 fn main() {
+    let shader_dir = match std::env::var("MOZ_SRC") {
+        Ok(dir) => dir + "/gfx/wr/webrender/res",
+        Err(_) => std::env::var("CARGO_MANIFEST_DIR").unwrap() + "/../webrender/res",
+    };
+
     for shader in WR_SHADERS {
-        translate_shader(shader);
+        translate_shader(shader, &shader_dir);
     }
 
     write_load_shader(WR_SHADERS);
@@ -148,6 +148,7 @@ fn main() {
         .file("src/gl.cc")
         .flag("-UMOZILLA_CONFIG_H")
         .flag("-std=c++14")
+        .include(shader_dir)
         .include("src")
         .include(std::env::var("OUT_DIR").unwrap())
         .compile("gl_cc");
