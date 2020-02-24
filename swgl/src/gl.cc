@@ -2682,6 +2682,9 @@ static inline void draw_depth_span(uint16_t z, P* buf, uint16_t* depth, int span
             }
         }
     }
+    if (skip) {
+        fragment_shader->skip(skip);
+    }
 }
 
 typedef vec2_scalar Point;
