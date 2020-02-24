@@ -2589,6 +2589,16 @@ typedef float Flats[MAX_FLATS];
 static const size_t MAX_INTERPOLANTS = 16;
 typedef float Interpolants __attribute__((ext_vector_type(MAX_INTERPOLANTS)));
 
+template<typename S, typename P>
+static ALWAYS_INLINE void dispatch_draw_span(S* shader, P* buf, int len) {
+    int drawn = shader->draw_span(buf, len);
+    if (drawn) shader->step_interp_inputs(drawn >> 2);
+    for (buf += drawn; drawn < len; drawn += 4, buf += 4) {
+        S::run(shader);
+        commit_span(buf, pack_span(buf));
+    }
+}
+
 #include "load_shader.h"
 
 template<int FUNC, bool MASK, typename P>
