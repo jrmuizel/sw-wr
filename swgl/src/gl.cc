@@ -2781,13 +2781,10 @@ static inline void draw_quad_spans(int nump, Point p[4], uint16_t z, Interpolant
                         case GL_LEQUAL: if (int16_t(z) <= int16_t(depthtex.clear_val)) { use_depth = false; } else { span = 0; } break;
                         }
                         if (ctx->depthmask && !use_depth) {
-                            if (startx > 0) {
-                                clear_buffer<uint16_t>(depthtex, depthtex.clear_val, 0, startx, yi, yi+1);
+                            if (startx > 0 || endx < depthtex.width) {
+                                clear_buffer<uint16_t>(depthtex, depthtex.clear_val, 0, depthtex.width, yi, yi+1, 0, startx, endx);
                             }
                             clear_buffer<uint16_t>(depthtex, z, startx, endx, yi, yi + 1);
-                            if (endx < depthtex.width) {
-                                clear_buffer<uint16_t>(depthtex, depthtex.clear_val, endx, depthtex.width, yi, yi+1);
-                            }
                         } else {
                             clear_buffer<uint16_t>(depthtex, depthtex.clear_val, 0, depthtex.width, yi, yi+1);
                         }
@@ -2801,13 +2798,8 @@ static inline void draw_quad_spans(int nump, Point p[4], uint16_t z, Interpolant
                         colortex.delay_clear--;
                         if (use_depth || blend_key || fragment_shader->use_discard()) {
                             clear_buffer<P>(colortex, colortex.clear_val, 0, colortex.width, yi, yi + 1);
-                        } else {
-                            if (startx > 0) {
-                                clear_buffer<P>(colortex, colortex.clear_val, 0, startx, yi, yi+1);
-                            }
-                            if (endx < colortex.width) {
-                                clear_buffer<P>(colortex, colortex.clear_val, endx, colortex.width, yi, yi+1);
-                            }
+                        } else if (startx > 0 || endx < colortex.width) {
+                            clear_buffer<P>(colortex, colortex.clear_val, 0, colortex.width, yi, yi+1, 0, startx, endx);
                         }
                     }
                 }
