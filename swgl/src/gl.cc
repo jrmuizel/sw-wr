@@ -1808,7 +1808,7 @@ static inline void memset32(void* dst, uint32_t val, size_t n) {
 template<typename T>
 static void clear_buffer(Texture& t, T value, int x0, int x1, int y0, int y1, int layer = 0, int skip_start = 0, int skip_end = 0) {
     skip_start = std::max(skip_start, x0);
-    skip_end = std::max(skip_end, x0);
+    skip_end = std::max(skip_end, skip_start);
     int stride = aligned_stride(sizeof(T) * t.width);
     if (x1 - x0 == t.width && y1 - y0 > 1 && skip_start >= skip_end) {
         x1 += (stride / sizeof(T)) * (y1 - y0 - 1);
