@@ -2721,18 +2721,20 @@ static inline void draw_quad_spans(int nump, Point p[4], uint16_t z, Interpolant
         }
 
         float lx = l0.x;
-        float lm = (l1.x - l0.x) / (l1.y - l0.y);
+        float lk = 1.0f / (l1.y - l0.y);
+        float lm = (l1.x - l0.x) * lk;
         float rx = r0.x;
-        float rm = (r1.x - r0.x) / (r1.y - r0.y);
+        float rk = 1.0f / (r1.y - r0.y);
+        float rm = (r1.x - r0.x) * rk;
         assert(l0.y == r0.y);
         float y = floor(std::max(l0.y, fy0) + 0.5f) + 0.5f;
         lx += (y - l0.y) * lm;
         rx += (y - r0.y) * rm;
         Interpolants lo = interp_outs[l0i];
-        Interpolants lom = (interp_outs[l1i] - lo) * (1.0f / (l1.y - l0.y));
+        Interpolants lom = (interp_outs[l1i] - lo) * lk;
         lo = lo + lom * (y - l0.y);
         Interpolants ro = interp_outs[r0i];
-        Interpolants rom = (interp_outs[r1i] - ro) * (1.0f / (r1.y - r0.y));
+        Interpolants rom = (interp_outs[r1i] - ro) * rk;
         ro = ro + rom * (y - r0.y);
         P *fbuf = (P*)colortex.buf + (layer * colortex.height + int(y)) * aligned_stride(sizeof(P) * colortex.width) / sizeof(P);
         uint16_t *fdepth = (uint16_t*)depthtex.buf + int(y) * aligned_stride(sizeof(uint16_t) * depthtex.width) / sizeof(uint16_t);
@@ -2743,10 +2745,11 @@ static inline void draw_quad_spans(int nump, Point p[4], uint16_t z, Interpolant
                 l1i = NEXT_POINT(l1i);
                 l1 = p[l1i];
                 if (l1.y <= l0.y) break;
-                lm = (l1.x - l0.x) / (l1.y - l0.y);
+                lk = 1.0f / (l1.y - l0.y);
+                lm = (l1.x - l0.x) * lk;
                 lx = l0.x + (y - l0.y) * lm;
                 lo = interp_outs[l0i];
-                lom = (interp_outs[l1i] - lo) * (1.0f / (l1.y - l0.y));
+                lom = (interp_outs[l1i] - lo) * lk;
                 lo += lom * (y - l0.y);
             }
             if (y > r1.y) {
@@ -2755,10 +2758,11 @@ static inline void draw_quad_spans(int nump, Point p[4], uint16_t z, Interpolant
                 r1i = PREV_POINT(r1i);
                 r1 = p[r1i];
                 if (r1.y <= r0.y) break;
-                rm = (r1.x - r0.x) / (r1.y - r0.y);
+                rk = 1.0f / (r1.y - r0.y);
+                rm = (r1.x - r0.x) * rk;
                 rx = r0.x + (y - r0.y) * rm;
                 ro = interp_outs[r0i];
-                rom = (interp_outs[r1i] - ro) * (1.0f / (r1.y - r0.y));
+                rom = (interp_outs[r1i] - ro) * rk;
                 ro += rom * (y - r0.y);
             }
             int startx = int(std::max(std::min(lx, rx), fx0) + 0.5f);
