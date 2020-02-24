@@ -417,11 +417,9 @@ impl Gl for Context {
     fn shader_source(&self, shader: GLuint, strings: &[&[u8]]) {
         //panic!();
         debug!("shader_source {}", shader);
-        let mut out = String::new();
-        for s in strings {
-            out.push_str(str::from_utf8(s).unwrap());
+        //for s in strings {
         //    debug!("{}", str::from_utf8(s).unwrap());
-        }
+        //}
         //panic!();
         for s in strings {
             let u = str::from_utf8(s).unwrap();
@@ -429,9 +427,6 @@ impl Gl for Context {
             if let Some(start) = u.find(prefix) {
                 if let Some(end) = u[start..].find('\n') {
                     debug!("shader name: {}", u[start + prefix.len() .. start + end].trim());
-                    let suffix = if u.find("#define WR_FRAGMENT_SHADER").is_some() { ".frag" } else { ".vert" };
-                    std::fs::write("used/".to_string() + &u[start + prefix.len() .. start + end].trim().replace(" ", "") + suffix,
-                                   out.replace("#version 150", "#version 300 es"));
                     unsafe {
                         let c_string = CString::new(u[start + prefix.len() .. start + end].trim().replace(" ", "")).unwrap();
                         ShaderSourceByName(shader, c_string.as_ptr());
