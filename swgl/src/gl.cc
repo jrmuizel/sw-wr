@@ -589,7 +589,7 @@ VertexShaderImpl *vertex_shader = nullptr;
 FragmentShaderImpl *fragment_shader = nullptr;
 BlendKey blend_key = BLEND_KEY_NONE;
 
-static void prepare_texture(Texture& t);
+static void prepare_texture(Texture& t, const IntRect* skip = nullptr);
 
 template<typename S>
 S *lookup_sampler(S *s, int texture) {
@@ -1374,7 +1374,8 @@ void TexSubImage2D(
         GLenum ty,
         void *data) {
         Texture &t = ctx->textures[active_texture(target)];
-        prepare_texture(t);
+        IntRect skip = { xoffset, yoffset, width, height };
+        prepare_texture(t, &skip);
         assert(xoffset + width <= t.width);
         assert(yoffset + height <= t.height);
         assert(ctx->unpack_row_length == 0 || ctx->unpack_row_length >= width);
@@ -1805,21 +1806,28 @@ static inline void memset32(void* dst, uint32_t val, size_t n) {
 }
 
 template<typename T>
-static void clear_buffer(Texture& t, T value, int x0, int x1, int y0, int y1, int layer = 0) {
+static void clear_buffer(Texture& t, T value, int x0, int x1, int y0, int y1, int layer = 0, int skip_start = 0, int skip_end = 0) {
+    skip_start = std::max(skip_start, x0);
+    skip_end = std::max(skip_end, x0);
     int stride = aligned_stride(sizeof(T) * t.width);
-    if (x1 - x0 == t.width && y1 - y0 > 1) {
+    if (x1 - x0 == t.width && y1 - y0 > 1 && skip_start >= skip_end) {
         x1 += (stride / sizeof(T)) * (y1 - y0 - 1);
         y1 = y0 + 1;
     }
     char* buf = t.buf + stride * (t.height * layer + y0) + x0 * sizeof(T);
     uint32_t chunk = sizeof(T) == 1 ? uint32_t(value) * 0x01010101U : (sizeof(T) == 2 ? uint32_t(value) | (uint32_t(value) << 16) : value);
     for (int y = y0; y < y1; y++) {
-        memset32(buf, chunk, (x1 - x0) / (4 / sizeof(T)));
-        if (sizeof (T) < 4) {
-            T* cur = (T*)buf + ((x1 - x0) & ~(4 / sizeof(T) - 1));
-            T* end = (T*)buf + (x1 - x0);
-            for (; cur < end; cur++) {
-                *cur = value;
+        if (x0 < skip_start) {
+            memset32(buf, chunk, (skip_start - x0) / (4 / sizeof(T)));
+            if (sizeof (T) < 4) {
+                std::fill((T*)buf + ((skip_start - x0) & ~(4 / sizeof(T) - 1)), (T*)buf + (skip_start - x0), value);
+            }
+        }
+        if (skip_end < x1) {
+            T* skip_buf = (T*)buf + (skip_end - x0);
+            memset32(skip_buf, chunk, (x1 - skip_end) / (4 / sizeof(T)));
+            if (sizeof (T) < 4) {
+                std::fill(skip_buf + ((x1 - skip_end) & ~(4 / sizeof(T) - 1)), skip_buf + (x1 - skip_end), value);
             }
         }
         buf += stride;
@@ -1841,20 +1849,36 @@ static inline void clear_buffer(Texture& t, T value, int layer = 0) {
 }
 
 template<typename T>
-static void force_clear(Texture& t) {
+static void force_clear(Texture& t, const IntRect* skip = nullptr) {
     if (!t.delay_clear) {
         return;
     }
-    int num_masks = (t.height + 31) / 32;
-    const uint32_t* rows = t.cleared_rows;
-    for (int i = 0; i < num_masks; i++) {
+    int y0 = 0;
+    int y1 = t.height;
+    int skip_start = 0;
+    int skip_end = 0;
+    if (skip) {
+        y0 = std::min(std::max(skip->y, 0), t.height);
+        y1 = std::min(std::max(skip->y + skip->height, y0), t.height);
+        skip_start = std::min(std::max(skip->x, 0), t.width);
+        skip_end = std::min(std::max(skip->x + skip->width, y0), t.width);
+        if (skip_start <= 0 && skip_end >= t.width && y0 <= 0 && y1 >= t.height) {
+            t.disable_delayed_clear();
+            return;
+        }
+    }
+    int num_masks = (y1 + 31) / 32;
+    uint32_t* rows = t.cleared_rows;
+    for (int i = y0 / 32; i < num_masks; i++) {
         uint32_t mask = rows[i];
         if (mask != ~0U) {
+            rows[i] = ~0U;
             int start = i*32;
             while (mask) {
                 int count = __builtin_ctz(mask);
-                if (count) {
-                    clear_buffer<T>(t, t.clear_val, 0, t.width, start, start + count);
+                if (count > 0) {
+                    clear_buffer<T>(t, t.clear_val, 0, t.width, start, start + count, 0, skip_start, skip_end);
+                    t.delay_clear -= count;
                     start += count;
                     mask >>= count;
                 }
@@ -1862,39 +1886,31 @@ static void force_clear(Texture& t) {
                 start += count;
                 mask >>= count;
             }
-            if (start < (i+1)*32) {
-                clear_buffer<T>(t, t.clear_val, 0, t.width, start, (i+1)*32);
+            int count = (i+1)*32 - start;
+            if (count > 0) {
+                clear_buffer<T>(t, t.clear_val, 0, t.width, start, start + count, 0, skip_start, skip_end);
+                t.delay_clear -= count;
             }
         }
     }
-    t.disable_delayed_clear();
+    if (t.delay_clear <= 0) t.disable_delayed_clear();
 }
 
-static void prepare_texture(Texture& t) {
+static void prepare_texture(Texture& t, const IntRect* skip) {
     if (t.delay_clear) {
         switch (t.internal_format) {
         case GL_RGBA8:
-            force_clear<uint32_t>(t);
+            force_clear<uint32_t>(t, skip);
             break;
         case GL_R8:
-            force_clear<uint8_t>(t);
+            force_clear<uint8_t>(t, skip);
             break;
         case GL_DEPTH_COMPONENT16:
-            force_clear<uint16_t>(t);
+            force_clear<uint16_t>(t, skip);
             break;
         default:
             assert(false);
             break;
-        }
-    }
-}
-
-static inline void prepare_texture(Texture& t, int x, int y, int w, int h) {
-    if (t.delay_clear) {
-        if (x > 0 || y > 0 || w < t.width || h < t.height) {
-            prepare_texture(t);
-        } else {
-            t.disable_delayed_clear();
         }
     }
 }
@@ -1973,7 +1989,7 @@ void Clear(GLbitfield mask) {
         if (t.internal_format == GL_RGBA8) {
             uint32_t color = ctx->clearcolor;
             if (clear_requires_scissor(t)) {
-                force_clear<uint32_t>(t);
+                force_clear<uint32_t>(t, &ctx->scissor);
                 clear_buffer<uint32_t>(t, color, fb.layer);
             } else if (t.depth > 1) {
                 t.disable_delayed_clear();
@@ -1984,7 +2000,7 @@ void Clear(GLbitfield mask) {
         } else if (t.internal_format == GL_R8) {
             uint8_t color = uint8_t((ctx->clearcolor >> 16) & 0xFF);
             if (clear_requires_scissor(t)) {
-                force_clear<uint8_t>(t);
+                force_clear<uint8_t>(t, &ctx->scissor);
                 clear_buffer<uint8_t>(t, color, fb.layer);
             } else if (t.depth > 1) {
                 t.disable_delayed_clear();
@@ -2001,7 +2017,7 @@ void Clear(GLbitfield mask) {
         assert(t.internal_format == GL_DEPTH_COMPONENT16);
         uint16_t depth = uint16_t(0xFFFF * ctx->cleardepth) - 0x8000;
         if (clear_requires_scissor(t)) {
-            force_clear<uint16_t>(t);
+            force_clear<uint16_t>(t, &ctx->scissor);
             clear_buffer<uint16_t>(t, depth);
         } else {
             t.enable_delayed_clear(depth);
@@ -2067,7 +2083,8 @@ void CopyImageSubData(
     if (!srctex.buf) return;
     prepare_texture(srctex);
     Texture &dsttex = ctx->textures[dstName];
-    prepare_texture(dsttex, dstX, dstY, srcWidth, std::abs(srcHeight));
+    IntRect skip = { dstX, dstY, srcWidth, std::abs(srcHeight) };
+    prepare_texture(dsttex, &skip);
     assert(srctex.internal_format == dsttex.internal_format);
     assert(srcX + srcWidth <= srctex.width);
     assert(srcY + srcHeight <= srctex.height);
@@ -3082,7 +3099,8 @@ void Composite(
     if (dstY + srcHeight > dsttex.height) {
         srcHeight = dsttex.height - dstY;
     }
-    prepare_texture(dsttex, dstX, dstY, srcWidth, srcHeight);
+    IntRect skip = { dstX, dstY, srcWidth, srcHeight };
+    prepare_texture(dsttex, &skip);
     char *dest = dsttex.buf + (flip ? dsttex.height - 1 - dstY : dstY) * dest_stride + dstX * bpp;
     char *src = srctex.buf + srcY * src_stride + srcX * bpp;
     if (flip) {
