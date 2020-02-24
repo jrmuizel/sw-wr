@@ -2674,24 +2674,23 @@ static inline void draw_quad_spans(int nump, Point p[4], uint16_t z, Interpolant
         Point l0, r0, l1, r1;
         int l0i, r0i, l1i, r1i;
         {
-            int top = 0;
-            for (int k = 1; k < nump; k++) {
-                if (p[k].y < p[top].y) {
-                    top = k;
-                }
-            }
-            int next = (top+1)%nump;
-            int prev = (top+nump-1)%nump;
+            int top = nump > 3 && p[3].y < p[2].y ?
+                (p[0].y < p[1].y ? (p[0].y < p[3].y ? 0 : 3) : (p[1].y < p[3].y ? 1 : 3)) :
+                (p[0].y < p[1].y ? (p[0].y < p[2].y ? 0 : 2) : (p[1].y < p[2].y ? 1 : 2));
+            #define NEXT_POINT(idx) ({ int cur = (idx) + 1; cur < nump ? cur : 0; })
+            #define PREV_POINT(idx) ({ int cur = (idx) - 1; cur >= 0 ? cur : nump-1; })
+            int next = NEXT_POINT(top);
+            int prev = PREV_POINT(top);
             if (p[top].y == p[next].y) {
                 l0i = next;
-                l1i = (next+1)%nump;
+                l1i = NEXT_POINT(next);
                 r0i = top;
                 r1i = prev;
             } else if (p[top].y == p[prev].y) {
                 l0i = top;
                 l1i = next;
                 r0i = prev;
-                r1i = (prev+nump-1)%nump;
+                r1i = PREV_POINT(prev);
             } else {
                 l0i = r0i = top;
                 l1i = next;
@@ -2724,7 +2723,7 @@ static inline void draw_quad_spans(int nump, Point p[4], uint16_t z, Interpolant
             if (y > l1.y) {
                 l0i = l1i;
                 l0 = l1;
-                l1i = (l1i+1)%nump;
+                l1i = NEXT_POINT(l1i);
                 l1 = p[l1i];
                 if (l1.y <= l0.y) break;
                 lm = (l1.x - l0.x) / (l1.y - l0.y);
@@ -2736,7 +2735,7 @@ static inline void draw_quad_spans(int nump, Point p[4], uint16_t z, Interpolant
             if (y > r1.y) {
                 r0i = r1i;
                 r0 = r1;
-                r1i = (r1i+nump-1)%nump;
+                r1i = PREV_POINT(r1i);
                 r1 = p[r1i];
                 if (r1.y <= r0.y) break;
                 rm = (r1.x - r0.x) / (r1.y - r0.y);
@@ -2873,15 +2872,8 @@ static void draw_quad(int nump, Texture& colortex, int layer, Texture& depthtex)
         vertex_shader->run((char *)flat_outs, (char *)interp_outs, sizeof(Interpolants));
         Float w = 1.0f / vertex_shader->gl_Position.w;
         vec3 clip = vertex_shader->gl_Position.sel(X, Y, Z) * w;
-        Point p[4];
         vec3 screen = (clip + 1)*vec3(ctx->viewport.width/2, ctx->viewport.height/2, 0.5f) + vec3(ctx->viewport.x, ctx->viewport.y, 0);
-        for (int k = 0; k < 4; k++)
-        {
-        //        vec4 pos = vertex_shader->gl_Position;
-        //        debugf("%f %f %f %f\n", pos.x[k], pos.y[k], pos.z[k], pos.y[k]);
-                p[k] = Point { screen.x[k], screen.y[k] };
-        //        debugf("%f %f\n", p[k].x, p[k].y);
-        }
+        Point p[4] = { { screen.x.x, screen.y.x }, { screen.x.y, screen.y.y }, { screen.x.z, screen.y.z }, { screen.x.w, screen.y.w } };
 
         auto top_left = min(min(p[0], p[1]), p[2]);
         auto bot_right = max(max(p[0], p[1]), p[2]);
