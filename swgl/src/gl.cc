@@ -1854,7 +1854,6 @@ static void force_clear(Texture& t) {
             while (mask) {
                 int count = __builtin_ctz(mask);
                 if (count) {
-                    printf("clearing %d at %d\n", count, start);
                     clear_buffer<T>(t, t.clear_val, 0, t.width, start, start + count);
                     start += count;
                     mask >>= count;
@@ -1864,7 +1863,6 @@ static void force_clear(Texture& t) {
                 mask >>= count;
             }
             if (start < (i+1)*32) {
-                printf("clearing 32 at %d\n", start);
                 clear_buffer<T>(t, t.clear_val, 0, t.width, start, (i+1)*32);
             }
         }
