@@ -2623,7 +2623,7 @@ static inline void draw_depth_span(uint16_t z, P* buf, uint16_t* depth, int span
     int skip = 0;
     if (fragment_shader->has_draw_span(buf)) {
         int len = 0;
-        for (; span >= 8; span -= 8, buf += 8, depth += 8) {
+        do {
             ZMask8 zmask;
             switch (check_depth<FUNC, MASK>(z, depth, zmask)) {
             case 0:
@@ -2652,12 +2652,15 @@ static inline void draw_depth_span(uint16_t z, P* buf, uint16_t* depth, int span
                 commit_output<false>(buf + 4, unpack(highHalf(zmask), buf));
                 break;
             }
-        }
+            buf += 8;
+            depth += 8;
+            span -= 8;
+        } while (span >= 8);
         if (len) {
             fragment_shader->draw_span(buf - len, len);
         }
     } else {
-        for (; span >= 8; span -= 8, buf += 8, depth += 8) {
+        do {
             ZMask8 zmask;
             switch (check_depth<FUNC, MASK>(z, depth, zmask)) {
             case 0:
@@ -2680,7 +2683,10 @@ static inline void draw_depth_span(uint16_t z, P* buf, uint16_t* depth, int span
                 commit_output<false>(buf + 4, unpack(highHalf(zmask), buf));
                 break;
             }
-        }
+            buf += 8;
+            depth += 8;
+            span -= 8;
+        } while (span >= 8);
     }
     if (skip) {
         fragment_shader->skip(skip);
@@ -2819,16 +2825,18 @@ static inline void draw_quad_spans(int nump, Point p[4], uint16_t z, Interpolant
                 }
                 if (!fragment_shader->use_discard()) {
                     if (use_depth) {
-                        if (ctx->depthfunc == GL_LEQUAL) {
-                            if (ctx->depthmask) draw_depth_span<GL_LEQUAL, true>(z, buf, depth, span);
-                            else draw_depth_span<GL_LEQUAL, false>(z, buf, depth, span);
-                        } else {
-                            if (ctx->depthmask) draw_depth_span<GL_LESS, true>(z, buf, depth, span);
-                            else draw_depth_span<GL_LESS, false>(z, buf, depth, span);
+                        if (span >= 8) {
+                            if (ctx->depthfunc == GL_LEQUAL) {
+                                if (ctx->depthmask) draw_depth_span<GL_LEQUAL, true>(z, buf, depth, span);
+                                else draw_depth_span<GL_LEQUAL, false>(z, buf, depth, span);
+                            } else {
+                                if (ctx->depthmask) draw_depth_span<GL_LESS, true>(z, buf, depth, span);
+                                else draw_depth_span<GL_LESS, false>(z, buf, depth, span);
+                            }
+                            buf += span & ~7;
+                            depth += span & ~7;
+                            span &= 7;
                         }
-                        buf += span & ~7;
-                        depth += span & ~7;
-                        span &= 7;
                         for (; span >= 4; span -= 4, buf += 4, depth += 4) {
                             commit_output<false>(buf, z, depth);
                         }
