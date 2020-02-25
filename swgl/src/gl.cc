@@ -2483,6 +2483,17 @@ static inline void commit_span(uint32_t* buf, PackedRGBA8 r) {
     unaligned_store(buf, r);
 }
 
+static inline void commit_solid_span(uint32_t* buf, PackedRGBA8 r, int len) {
+    if (blend_key) {
+        auto src = unpack(r);
+        for (uint32_t* end = &buf[len]; buf < end; buf += 4) {
+            unaligned_store(buf, pack(blend_pixels_RGBA8(unaligned_load<PackedRGBA8>(buf), src)));
+        }
+    } else {
+        memset32(buf, bit_cast<U32>(r).x, len);
+    }
+}
+
 template<bool DISCARD>
 static inline void commit_output(uint32_t* buf, uint16_t z, uint16_t* zbuf) {
     ZMask4 zmask;
@@ -2571,6 +2582,17 @@ static inline void commit_output<false>(uint8_t* buf) {
 static inline void commit_span(uint8_t* buf, PackedR8 r) {
     if (blend_key) r = pack(blend_pixels_R8(unpack(unaligned_load<PackedR8>(buf)), unpack(r)));
     unaligned_store(buf, r);
+}
+
+static inline void commit_solid_span(uint8_t* buf, PackedR8 r, int len) {
+    if (blend_key) {
+        auto src = unpack(r);
+        for (uint8_t* end = &buf[len]; buf < end; buf += 4) {
+            unaligned_store(buf, pack(blend_pixels_R8(unpack(unaligned_load<PackedR8>(buf)), src)));
+        }
+    } else {
+        memset32(buf, bit_cast<uint32_t>(r), len / 4);
+    }
 }
 
 template<bool DISCARD>
