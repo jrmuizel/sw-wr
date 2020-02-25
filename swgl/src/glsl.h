@@ -106,6 +106,16 @@ float force_scalar(Float f) { return f[0]; }
 
 int32_t force_scalar(I32 i) { return i[0]; }
 
+#if USE_SSE2
+bool test_all(Bool cond) { return _mm_movemask_ps(cond) == 0xF; }
+bool test_any(Bool cond) { return _mm_movemask_ps(cond) != 0; }
+bool test_none(Bool cond) { return _mm_movemask_ps(cond) == 0; }
+#else
+bool test_all(Bool cond) { return bit_cast<uint32_t>(__builtin_convertvector(cond, U8)) == 0xFFFFFFFFU; }
+bool test_any(Bool cond) { return bit_cast<uint32_t>(__builtin_convertvector(cond, U8)) != 0; }
+bool test_none(Bool cond) { return bit_cast<uint32_t>(__builtin_convertvector(cond, U8)) == 0; }
+#endif
+
 struct vec4;
 struct ivec2;
 

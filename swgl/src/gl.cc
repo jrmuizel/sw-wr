@@ -2494,6 +2494,17 @@ static inline void commit_solid_span(uint32_t* buf, PackedRGBA8 r, int len) {
     }
 }
 
+static inline void commit_texture_span(uint32_t* buf, uint32_t* src, int len) {
+    if (blend_key) {
+        for (uint32_t* end = &buf[len]; buf < end; buf += 4, src += 4) {
+            PackedRGBA8 r = unaligned_load<PackedRGBA8>(src);
+            unaligned_store(buf, pack(blend_pixels_RGBA8(unaligned_load<PackedRGBA8>(buf), unpack(r))));
+        }
+    } else {
+        memcpy(buf, src, len * sizeof(uint32_t));
+    }
+}
+
 template<bool DISCARD>
 static inline void commit_output(uint32_t* buf, uint16_t z, uint16_t* zbuf) {
     ZMask4 zmask;
@@ -2638,6 +2649,7 @@ static ALWAYS_INLINE void dispatch_draw_span(S* shader, P* buf, int len) {
     }
 }
 
+#include "texture.h"
 #include "load_shader.h"
 
 template<int FUNC, bool MASK, typename P>
