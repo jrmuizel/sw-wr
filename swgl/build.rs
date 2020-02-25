@@ -1,6 +1,7 @@
 extern crate cc;
 extern crate glsl_to_cxx;
 
+use std::collections::HashSet;
 use std::fmt::Write;
 
 fn write_load_shader(shaders: &[&str]) {
@@ -16,13 +17,16 @@ fn write_load_shader(shaders: &[&str]) {
     std::fs::write(std::env::var("OUT_DIR").unwrap() + "/load_shader.h", load_shader).unwrap();
 }
 
-fn process_imports(shader_dir: &str, shader: &str, output: &mut String) {
+fn process_imports(shader_dir: &str, shader: &str, included: &mut HashSet<String>, output: &mut String) {
+    if !included.insert(shader.into()) {
+        return;
+    }
     let source = std::fs::read_to_string(format!("{}/{}.glsl", shader_dir, shader)).unwrap();
     for line in source.lines() {
         if line.starts_with("#include ") {
             let imports = line["#include ".len() ..].split(',');
             for import in imports {
-                process_imports(shader_dir, import, output);
+                process_imports(shader_dir, import, included, output);
             }
         } else if line.starts_with("#version ") || line.starts_with("#extension ") {
             // ignore
@@ -49,7 +53,7 @@ fn translate_shader(shader: &str, shader_dir: &str) {
         shader
     };
 
-    process_imports(shader_dir, basename, &mut imported);
+    process_imports(shader_dir, basename, &mut HashSet::new(), &mut imported);
 
     let out_dir = std::env::var("OUT_DIR").unwrap();
     let imp_name = format!("{}/{}.i", out_dir, shader);
