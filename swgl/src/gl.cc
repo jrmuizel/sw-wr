@@ -256,10 +256,10 @@ struct Texture {
         }
     }
 
-    void allocate() {
-        if (!buf && should_free()) {
+    void allocate(bool force = false) {
+        if ((!buf || force) && should_free()) {
             size_t size = aligned_stride(bytes_for_internal_format(internal_format) * width) * height * std::max(depth, 1) * levels;
-            buf = (char*)malloc(size + sizeof(Float));
+            buf = (char*)realloc(buf, size + sizeof(Float));
         }
     }
 
@@ -1290,13 +1290,19 @@ void TexStorage3D(
         GLsizei depth
     ) {
     Texture &t = ctx->textures[active_texture(target)];
-    t.levels = levels;
-    t.internal_format = remap_internal_format(internal_format);
-    t.width = width;
-    t.height = height;
-    t.depth = depth;
+    internal_format = remap_internal_format(internal_format);
+    bool changed = false;
+    if (t.width != width || t.height != height || t.depth != depth ||
+        t.levels != levels || t.internal_format != internal_format) {
+        changed = true;
+        t.levels = levels;
+        t.internal_format = internal_format;
+        t.width = width;
+        t.height = height;
+        t.depth = depth;
+    }
     t.disable_delayed_clear();
-    t.allocate();
+    t.allocate(changed);
 }
 
 static void set_tex_storage(
@@ -1308,10 +1314,16 @@ static void set_tex_storage(
         bool should_free = true,
         void* buf = nullptr
     ) {
-    t.levels = levels;
-    t.internal_format = remap_internal_format(internal_format);
-    t.width = width;
-    t.height = height;
+    internal_format = remap_internal_format(internal_format);
+    bool changed = false;
+    if (t.width != width || t.height != height ||
+        t.levels != levels || t.internal_format != internal_format) {
+        changed = true;
+        t.levels = levels;
+        t.internal_format = internal_format;
+        t.width = width;
+        t.height = height;
+    }
     if (t.should_free() != should_free || buf != nullptr) {
         if (t.should_free()) {
             t.cleanup();
@@ -1320,7 +1332,7 @@ static void set_tex_storage(
         t.buf = (char*)buf;
     }
     t.disable_delayed_clear();
-    t.allocate();
+    t.allocate(changed);
 }
 
 void TexStorage2D(
