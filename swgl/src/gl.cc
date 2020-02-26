@@ -2381,11 +2381,21 @@ static ALWAYS_INLINE bool check_depth4(uint16_t z, uint16_t* zbuf, ZMask4& outma
     return true;
 }
 
+static inline ZMask4 packZMask4(Bool a) {
+#if USE_SSE2
+    return bit_cast<ZMask4>(_mm_packs_epi32(a, a));
+#elif USE_NEON
+    return vqmovun_s32(a);
+#else
+    return __builtin_convertvector(a, ZMask4);
+#endif
+}
+
 static ALWAYS_INLINE void discard_depth(uint16_t z, uint16_t* zbuf, ZMask4 mask) {
     if (ctx->depthmask) {
         ZMask4 dest = unaligned_load<ZMask4>(zbuf);
         ZMask4 src = int16_t(z);
-        mask |= __builtin_convertvector(fragment_shader->isPixelDiscarded, ZMask4);
+        mask |= packZMask4(fragment_shader->isPixelDiscarded);
         unaligned_store(zbuf, (mask & dest) | (~mask & src));
     }
 }
