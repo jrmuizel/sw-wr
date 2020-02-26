@@ -2332,7 +2332,7 @@ static inline uint32_t zmask_code(ZMask8 mask) {
 #endif
 
 template<int FUNC, bool MASK>
-static ALWAYS_INLINE int check_depth(uint16_t z, uint16_t* zbuf, ZMask8& outmask) {
+static ALWAYS_INLINE int check_depth8(uint16_t z, uint16_t* zbuf, ZMask8& outmask) {
     ZMask8 dest = unaligned_load<ZMask8>(zbuf);
     ZMask8 src = int16_t(z);
     // Invert the depth test to check which pixels failed and should be discarded.
@@ -2358,8 +2358,8 @@ static ALWAYS_INLINE int check_depth(uint16_t z, uint16_t* zbuf, ZMask8& outmask
     }
 }
 
-template<bool FULL_SPANS>
-static ALWAYS_INLINE bool check_depth(uint16_t z, uint16_t* zbuf, ZMask4& outmask, int span = 0) {
+template<bool FULL_SPANS, bool DISCARD>
+static ALWAYS_INLINE bool check_depth4(uint16_t z, uint16_t* zbuf, ZMask4& outmask, int span = 0) {
     ZMask4 dest = unaligned_load<ZMask4>(zbuf);
     ZMask4 src = int16_t(z);
     // Invert the depth test to check which pixels failed and should be discarded.
@@ -2374,11 +2374,20 @@ static ALWAYS_INLINE bool check_depth(uint16_t z, uint16_t* zbuf, ZMask4& outmas
     if (zmask_code(mask) == ZMASK_NONE_PASSED) {
         return false;
     }
-    if (ctx->depthmask) {
+    if (!DISCARD && ctx->depthmask) {
         unaligned_store(zbuf, (mask & dest) | (~mask & src));
     }
     outmask = mask;
     return true;
+}
+
+static ALWAYS_INLINE void discard_depth(uint16_t z, uint16_t* zbuf, ZMask4 mask) {
+    if (ctx->depthmask) {
+        ZMask4 dest = unaligned_load<ZMask4>(zbuf);
+        ZMask4 src = int16_t(z);
+        mask |= __builtin_convertvector(fragment_shader->isPixelDiscarded, ZMask4);
+        unaligned_store(zbuf, (mask & dest) | (~mask & src));
+    }
 }
 
 static inline WideRGBA8 pack_pixels_RGBA8(const vec4& v) {
@@ -2508,8 +2517,11 @@ static inline void commit_texture_span(uint32_t* buf, uint32_t* src, int len) {
 template<bool DISCARD>
 static inline void commit_output(uint32_t* buf, uint16_t z, uint16_t* zbuf) {
     ZMask4 zmask;
-    if (check_depth<true>(z, zbuf, zmask)) {
+    if (check_depth4<true, DISCARD>(z, zbuf, zmask)) {
         commit_output<DISCARD>(buf, unpack(zmask, buf));
+        if (DISCARD) {
+            discard_depth(z, zbuf, zmask);
+        }
     } else {
         fragment_shader->skip();
     }
@@ -2518,8 +2530,11 @@ static inline void commit_output(uint32_t* buf, uint16_t z, uint16_t* zbuf) {
 template<bool DISCARD>
 static inline void commit_output(uint32_t* buf, uint16_t z, uint16_t* zbuf, int span) {
     ZMask4 zmask;
-    if (check_depth<false>(z, zbuf, zmask, span)) {
+    if (check_depth4<false, DISCARD>(z, zbuf, zmask, span)) {
         commit_output<DISCARD>(buf, unpack(zmask, buf));
+        if (DISCARD) {
+            discard_depth(z, zbuf, zmask);
+        }
     }
 }
 
@@ -2609,8 +2624,11 @@ static inline void commit_solid_span(uint8_t* buf, PackedR8 r, int len) {
 template<bool DISCARD>
 static inline void commit_output(uint8_t* buf, uint16_t z, uint16_t* zbuf) {
     ZMask4 zmask;
-    if (check_depth<true>(z, zbuf, zmask)) {
+    if (check_depth4<true, DISCARD>(z, zbuf, zmask)) {
         commit_output<DISCARD>(buf, unpack(zmask, buf));
+        if (DISCARD) {
+            discard_depth(z, zbuf, zmask);
+        }
     } else {
         fragment_shader->skip();
     }
@@ -2619,8 +2637,11 @@ static inline void commit_output(uint8_t* buf, uint16_t z, uint16_t* zbuf) {
 template<bool DISCARD>
 static inline void commit_output(uint8_t* buf, uint16_t z, uint16_t* zbuf, int span) {
     ZMask4 zmask;
-    if (check_depth<false>(z, zbuf, zmask, span)) {
+    if (check_depth4<false, DISCARD>(z, zbuf, zmask, span)) {
         commit_output<DISCARD>(buf, unpack(zmask, buf));
+        if (DISCARD) {
+            discard_depth(z, zbuf, zmask);
+        }
     }
 }
 
@@ -2659,7 +2680,7 @@ static inline void draw_depth_span(uint16_t z, P* buf, uint16_t* depth, int span
         int len = 0;
         do {
             ZMask8 zmask;
-            switch (check_depth<FUNC, MASK>(z, depth, zmask)) {
+            switch (check_depth8<FUNC, MASK>(z, depth, zmask)) {
             case 0:
                 if (len) {
                     fragment_shader->draw_span(buf - len, len);
@@ -2696,7 +2717,7 @@ static inline void draw_depth_span(uint16_t z, P* buf, uint16_t* depth, int span
     } else {
         do {
             ZMask8 zmask;
-            switch (check_depth<FUNC, MASK>(z, depth, zmask)) {
+            switch (check_depth8<FUNC, MASK>(z, depth, zmask)) {
             case 0:
                 skip += 2;
                 break;
@@ -2817,6 +2838,7 @@ static inline void draw_quad_spans(int nump, Point p[4], uint16_t z, Interpolant
                 P* buf = fbuf + startx;
                 uint16_t* depth = fdepth + startx;
                 bool use_depth = depthtex.buf != nullptr;
+                bool use_discard = fragment_shader->use_discard();
                 if (depthtex.delay_clear) {
                     int yi = int(y);
                     uint32_t& mask = depthtex.cleared_rows[yi / 32];
@@ -2825,14 +2847,18 @@ static inline void draw_quad_spans(int nump, Point p[4], uint16_t z, Interpolant
                         case GL_LESS: if (int16_t(z) < int16_t(depthtex.clear_val)) break; else goto next_span;
                         case GL_LEQUAL: if (int16_t(z) <= int16_t(depthtex.clear_val)) break; else goto next_span;
                         }
-                        use_depth = false;
+                        use_depth = use_discard;
                         if (ctx->depthmask) {
                             mask |= 1 << (yi & 31);
                             depthtex.delay_clear--;
-                            if (startx > 0 || endx < depthtex.width) {
-                                clear_buffer<uint16_t>(depthtex, depthtex.clear_val, 0, depthtex.width, yi, yi+1, 0, startx, endx);
+                            if (use_discard) {
+                                clear_buffer<uint16_t>(depthtex, depthtex.clear_val, 0, depthtex.width, yi, yi+1);
+                            } else {
+                                if (startx > 0 || endx < depthtex.width) {
+                                    clear_buffer<uint16_t>(depthtex, depthtex.clear_val, 0, depthtex.width, yi, yi+1, 0, startx, endx);
+                                }
+                                clear_buffer<uint16_t>(depthtex, z, startx, endx, yi, yi+1);
                             }
-                            clear_buffer<uint16_t>(depthtex, z, startx, endx, yi, yi + 1);
                         }
                     }
                 }
@@ -2842,8 +2868,8 @@ static inline void draw_quad_spans(int nump, Point p[4], uint16_t z, Interpolant
                     if ((mask & (1 << (yi & 31))) == 0) {
                         mask |= 1 << (yi & 31);
                         colortex.delay_clear--;
-                        if (use_depth || blend_key || fragment_shader->use_discard()) {
-                            clear_buffer<P>(colortex, colortex.clear_val, 0, colortex.width, yi, yi + 1);
+                        if (use_depth || blend_key || use_discard) {
+                            clear_buffer<P>(colortex, colortex.clear_val, 0, colortex.width, yi, yi+1);
                         } else if (startx > 0 || endx < colortex.width) {
                             clear_buffer<P>(colortex, colortex.clear_val, 0, colortex.width, yi, yi+1, 0, startx, endx);
                         }
@@ -2856,7 +2882,7 @@ static inline void draw_quad_spans(int nump, Point p[4], uint16_t z, Interpolant
                     Interpolants o = lo + step * (startx + 0.5f - lx);
                     fragment_shader->init_span(&o, &step, 4.0f);
                 }
-                if (!fragment_shader->use_discard()) {
+                if (!use_discard) {
                     if (use_depth) {
                         if (span >= 8) {
                             if (ctx->depthfunc == GL_LEQUAL) {
