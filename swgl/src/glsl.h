@@ -646,13 +646,14 @@ Float round(Float v) { return floor(v + 0.5f); }
 
 Float fract(Float v) { return v - floor(v); }
 
-Float fwidth(Float p) {
-        Float a = abs(p.yyyy - p.xxxx);
-        return a + a;
-}
-
+// X derivatives can be approximated by dFdx(x) = x[1] - x[0].
+// Y derivatives are not easily available since we operate in terms of X spans only.
+// To work around, assume dFdy(p.x) = dFdx(p.y), which only holds for uniform scaling,
+// and thus abs(dFdx(p.x)) + abs(dFdy(p.x)) = abs(dFdx(p.x)) + abs(dFdx(p.y)) which
+// mirrors abs(dFdx(p.y)) + abs(dFdy(p.y)) = abs(dFdx(p.y)) + abs(dFdx(p.x)).
 vec2 fwidth(vec2 p) {
-        return vec2(fwidth(p.x), fwidth(p.y));
+        Float d = abs(__builtin_shufflevector(p.x, p.y, 1, 1, 5, 5) - __builtin_shufflevector(p.x, p.y, 0, 0, 4, 4));
+        return vec2(d.xyxy + d.zwzw);
 }
 
 // See http://www.machinedlearnings.com/2011/06/fast-approximate-logarithm-exponential.html.
