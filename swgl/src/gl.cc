@@ -2857,7 +2857,6 @@ static inline void draw_quad_spans(int nump, Point p[4], uint16_t z, Interpolant
                         case GL_LESS: if (int16_t(z) < int16_t(depthtex.clear_val)) break; else goto next_span;
                         case GL_LEQUAL: if (int16_t(z) <= int16_t(depthtex.clear_val)) break; else goto next_span;
                         }
-                        use_depth = use_discard;
                         if (ctx->depthmask) {
                             mask |= 1 << (yi & 31);
                             depthtex.delay_clear--;
@@ -2868,7 +2867,10 @@ static inline void draw_quad_spans(int nump, Point p[4], uint16_t z, Interpolant
                                     clear_buffer<uint16_t>(depthtex, depthtex.clear_val, 0, depthtex.width, yi, yi+1, 0, startx, endx);
                                 }
                                 clear_buffer<uint16_t>(depthtex, z, startx, endx, yi, yi+1);
+                                use_depth = false;
                             }
+                        } else {
+                            use_depth = false;
                         }
                     }
                 }
