@@ -2879,9 +2879,9 @@ static inline void draw_quad_spans(int nump, Point p[4], uint16_t z, Interpolant
                         mask |= 1 << (yi & 31);
                         colortex.delay_clear--;
                         if (use_depth || blend_key || use_discard) {
-                            clear_buffer<P>(colortex, colortex.clear_val, 0, colortex.width, yi, yi+1);
+                            clear_buffer<P>(colortex, colortex.clear_val, 0, colortex.width, yi, yi+1, layer);
                         } else if (startx > 0 || endx < colortex.width) {
-                            clear_buffer<P>(colortex, colortex.clear_val, 0, colortex.width, yi, yi+1, 0, startx, endx);
+                            clear_buffer<P>(colortex, colortex.clear_val, 0, colortex.width, yi, yi+1, layer, startx, endx);
                         }
                     }
                 }
