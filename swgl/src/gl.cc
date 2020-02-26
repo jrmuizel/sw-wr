@@ -216,6 +216,7 @@ struct Texture {
     int height = 0;
     int depth = 0;
     char *buf = nullptr;
+    size_t buf_size = 0;
     GLenum min_filter = GL_NEAREST;
     GLenum mag_filter = GL_LINEAR;
 
@@ -256,10 +257,13 @@ struct Texture {
         }
     }
 
-    void allocate(bool force = false) {
+    void allocate(bool force = false, int min_width = 0, int min_height = 0) {
         if ((!buf || force) && should_free()) {
-            size_t size = aligned_stride(bytes_for_internal_format(internal_format) * width) * height * std::max(depth, 1) * levels;
-            buf = (char*)realloc(buf, size + sizeof(Float));
+            size_t size = size_t(aligned_stride(bytes_for_internal_format(internal_format) * std::max(width, min_width))) * std::max(height, min_height) * std::max(depth, 1) * levels;
+            if (!buf || size > buf_size) {
+                buf = (char*)realloc(buf, size + sizeof(Float));
+                buf_size = size;
+            }
         }
     }
 
@@ -267,6 +271,7 @@ struct Texture {
         if (buf && should_free()) {
             free(buf);
             buf = nullptr;
+            buf_size = 0;
         }
         disable_delayed_clear();
     }
@@ -1312,7 +1317,9 @@ static void set_tex_storage(
         GLsizei width,
         GLsizei height,
         bool should_free = true,
-        void* buf = nullptr
+        void* buf = nullptr,
+        GLsizei min_width = 0,
+        GLsizei min_height = 0
     ) {
     internal_format = remap_internal_format(internal_format);
     bool changed = false;
@@ -1330,9 +1337,10 @@ static void set_tex_storage(
         }
         t.set_should_free(should_free);
         t.buf = (char*)buf;
+        t.buf_size = 0;
     }
     t.disable_delayed_clear();
-    t.allocate(changed);
+    t.allocate(changed, min_width, min_height);
 }
 
 void TexStorage2D(
@@ -1966,9 +1974,9 @@ void* GetColorBuffer(GLuint fbo, int32_t* width, int32_t* height) {
     return colortex.buf;
 }
 
-void SetTextureBuffer(GLuint texid, GLenum internal_format, GLsizei width, GLsizei height, void* buf) {
+void SetTextureBuffer(GLuint texid, GLenum internal_format, GLsizei width, GLsizei height, void* buf, GLsizei min_width, GLsizei min_height) {
     Texture &t = ctx->textures[texid];
-    set_tex_storage(t, 1, internal_format, width, height, !buf, buf);
+    set_tex_storage(t, 1, internal_format, width, height, !buf, buf, min_width, min_height);
 }
 
 #define GL_FRAMEBUFFER_COMPLETE                      0x8CD5

@@ -241,7 +241,7 @@ extern "C" {
     fn GetError() -> GLenum;
     fn InitDefaultFramebuffer(width: i32, height: i32);
     fn GetColorBuffer(fbo: GLuint, width: *mut i32, height: *mut i32) -> *mut c_void;
-    fn SetTextureBuffer(tex: GLuint, internal_format: GLenum, width: GLsizei, height: GLsizei, buf: *mut c_void);
+    fn SetTextureBuffer(tex: GLuint, internal_format: GLenum, width: GLsizei, height: GLsizei, buf: *mut c_void, min_width: GLsizei, min_height: GLsizei);
     fn DeleteTexture(n: GLuint);
     fn DeleteRenderbuffer(n: GLuint);
     fn DeleteFramebuffer(n: GLuint);
@@ -297,9 +297,9 @@ impl Context {
         }
     }
 
-    pub fn set_texture_buffer(&self, tex: GLuint, internal_format: GLenum, width: GLsizei, height: GLsizei, buf: *mut c_void) {
+    pub fn set_texture_buffer(&self, tex: GLuint, internal_format: GLenum, width: GLsizei, height: GLsizei, buf: *mut c_void, min_width: GLsizei, min_height: GLsizei) {
         unsafe {
-            SetTextureBuffer(tex, internal_format, width, height, buf);
+            SetTextureBuffer(tex, internal_format, width, height, buf, min_width, min_height);
         }
     }
 
