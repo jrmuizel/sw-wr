@@ -575,6 +575,10 @@ impl Gl for Context {
         result
     }
 
+    fn gen_vertex_arrays_apple(&self, n: GLsizei) -> Vec<GLuint> {
+        self.gen_vertex_arrays(n)
+    }
+
     fn gen_queries(&self, n: GLsizei) -> Vec<GLuint> {
         let mut result = vec![0 as GLuint; n as usize];
         unsafe {
@@ -636,6 +640,10 @@ impl Gl for Context {
                 DeleteVertexArray(*v);
             }
         }
+    }
+
+    fn delete_vertex_arrays_apple(&self, vertex_arrays: &[GLuint]) {
+        self.delete_vertex_arrays(vertex_arrays)
     }
 
     fn delete_buffers(&self, buffers: &[GLuint]) {
@@ -790,6 +798,10 @@ impl Gl for Context {
         unsafe {
                 BindVertexArray(vao);
         }
+    }
+
+    fn bind_vertex_array_apple(&self, vao: GLuint) {
+        self.bind_vertex_array(vao)
     }
 
     fn bind_renderbuffer(&self, target: GLenum, renderbuffer: GLuint) {
@@ -1976,6 +1988,10 @@ impl Gl for Context {
         panic!("not supported")
     }
 
+    fn egl_image_target_renderbuffer_storage_oes(&self, target: GLenum, image: GLeglImageOES) {
+        panic!("not supported")
+    }
+
     fn generate_mipmap(&self, target: GLenum) {
         panic!();
     }
@@ -2086,5 +2102,23 @@ impl Gl for Context {
     // GL_KHR_blend_equation_advanced
     fn blend_barrier_khr(&self) {
         panic!();
+    }
+
+    // GL_CHROMIUM_copy_texture
+    fn copy_texture_chromium(&self,
+        _source_id: GLuint, _source_level: GLint,
+        _dest_target: GLenum, _dest_id: GLuint, _dest_level: GLint,
+        _internal_format: GLint, _dest_type: GLenum,
+        _unpack_flip_y: GLboolean, _unpack_premultiply_alpha: GLboolean, _unpack_unmultiply_alpha: GLboolean)
+    {
+        unimplemented!("This extension is GLES only");
+    }
+    fn copy_sub_texture_chromium(&self,
+        _source_id: GLuint, _source_level: GLint,
+        _dest_target: GLenum, _dest_id: GLuint, _dest_level: GLint,
+        _x_offset: GLint, _y_offset: GLint, _x: GLint, _y: GLint, _width: GLsizei, _height: GLsizei,
+        _unpack_flip_y: GLboolean, _unpack_premultiply_alpha: GLboolean, _unpack_unmultiply_alpha: GLboolean)
+    {
+        unimplemented!("This extension is GLES only");
     }
 }
