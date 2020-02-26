@@ -1956,7 +1956,7 @@ void* GetColorBuffer(GLuint fbo, int32_t* width, int32_t* height) {
 
 void SetTextureBuffer(GLuint texid, GLenum internal_format, GLsizei width, GLsizei height, void* buf) {
     Texture &t = ctx->textures[texid];
-    set_tex_storage(t, 1, internal_format, width, height, false, buf);
+    set_tex_storage(t, 1, internal_format, width, height, !buf, buf);
 }
 
 #define GL_FRAMEBUFFER_COMPLETE                      0x8CD5
