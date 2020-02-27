@@ -133,6 +133,7 @@ const WR_SHADERS: &'static [&'static str] = &[
     "ps_split_composite",
     "ps_text_runDUAL_SOURCE_BLENDING",
     "ps_text_runGLYPH_TRANSFORM",
+    "ps_text_runDUAL_SOURCE_BLENDING.GLYPH_TRANSFORM",
     "ps_text_run",
 ];
 
