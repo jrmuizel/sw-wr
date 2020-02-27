@@ -1393,6 +1393,7 @@ void TexSubImage2D(
         GLenum format,
         GLenum ty,
         void *data) {
+        if (!data) return;
         Texture &t = ctx->textures[active_texture(target)];
         IntRect skip = { xoffset, yoffset, width, height };
         prepare_texture(t, &skip);
@@ -1447,6 +1448,7 @@ void TexSubImage3D(
         GLenum format,
         GLenum ty,
         void *data) {
+        if (!data) return;
         Texture &t = ctx->textures[active_texture(target)];
         prepare_texture(t);
         assert(ctx->unpack_row_length == 0 || ctx->unpack_row_length >= width);
@@ -1698,7 +1700,9 @@ void BufferData(GLenum target,
     if (b.allocate(size)) {
         ctx->validate_vertex_array = true;
     }
-    memcpy(b.buf, data, size);
+    if (data) {
+        memcpy(b.buf, data, size);
+    }
 }
 
 void BufferSubData(GLenum target,
@@ -1708,7 +1712,9 @@ void BufferSubData(GLenum target,
 {
     Buffer &b = ctx->buffers[ctx->current_buffer[target]];
     assert(offset + size <= b.size);
-    memcpy(&b.buf[offset], data, size);
+    if (data) {
+        memcpy(&b.buf[offset], data, size);
+    }
 }
 
 void Uniform1i(GLint location, GLint V0) {
