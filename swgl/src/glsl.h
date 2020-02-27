@@ -25,8 +25,8 @@
 
 #define UNREACHABLE __builtin_unreachable()
 
-#ifdef MOZ_IMPLICIT
-#define IMPLICIT MOZ_IMPLICIT
+#ifdef MOZILLA_CLIENT
+#define IMPLICIT __attribute__((annotate("moz_implicit")))
 #else
 #define IMPLICIT
 #endif
