@@ -60,7 +60,7 @@ fn translate_shader(shader: &str, shader_dir: &str) {
     std::fs::write(&imp_name, imported).unwrap();
 
     let mut build = cc::Build::new();
-    if build.try_get_compiler().map_or(false, |c| c.is_like_msvc()) {
+    if build.get_compiler().is_like_msvc() {
         build.flag("/EP");
     } else {
         build.flag("-xc").flag("-P");
