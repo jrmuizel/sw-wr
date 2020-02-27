@@ -25,6 +25,12 @@
 
 #define UNREACHABLE __builtin_unreachable()
 
+#ifdef MOZ_IMPLICIT
+#define IMPLICIT MOZ_IMPLICIT
+#else
+#define IMPLICIT
+#endif
+
 namespace glsl {
 
 template <typename T> using V2 = T __attribute__((ext_vector_type(2)));
