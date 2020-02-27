@@ -434,12 +434,12 @@ impl Gl for Context {
         //panic!();
         for s in strings {
             let u = str::from_utf8(s).unwrap();
-            const prefix: &'static str = "// shader: ";
-            if let Some(start) = u.find(prefix) {
+            const PREFIX: &'static str = "// shader: ";
+            if let Some(start) = u.find(PREFIX) {
                 if let Some(end) = u[start..].find('\n') {
-                    debug!("shader name: {}", u[start + prefix.len() .. start + end].trim());
+                    debug!("shader name: {}", u[start + PREFIX.len() .. start + end].trim());
                     unsafe {
-                        let c_string = CString::new(u[start + prefix.len() .. start + end].trim().replace(" ", "")).unwrap();
+                        let c_string = CString::new(u[start + PREFIX.len() .. start + end].trim().replace(" ", "")).unwrap();
                         ShaderSourceByName(shader, c_string.as_ptr());
                         return;
                     }
@@ -1873,8 +1873,6 @@ impl Gl for Context {
     fn compile_shader(&self, shader: GLuint) {
         debug!("compile_shader {}", shader);
         //panic!();
-        unsafe {
-        }
     }
 
     fn create_program(&self) -> GLuint {
@@ -1910,8 +1908,6 @@ impl Gl for Context {
     fn detach_shader(&self, program: GLuint, shader: GLuint) {
         debug!("detach_shader {} {}", program, shader);
         //panic!();
-        unsafe {
-        }
     }
 
     fn link_program(&self, program: GLuint) {
@@ -1950,8 +1946,6 @@ impl Gl for Context {
     }
 
     fn flush(&self) {
-        unsafe {
-        }
     }
 
     fn finish(&self) {
