@@ -2,6 +2,8 @@
 #ifdef __MACH__
 #include <mach/mach.h>
 #include <mach/mach_time.h>
+#elif defined(_WIN32)
+#include <chrono>
 #else
 #include <time.h>
 #endif
@@ -1183,6 +1185,10 @@ GLint GetUniformLocation(GLuint program, char* name) {
 static uint64_t get_time_value() {
 #ifdef  __MACH__
         return mach_absolute_time();
+#elif defined(_WIN32)
+        auto now = std::chrono::steady_clock::now();
+        std::chrono::duration<uint64_t, std::nano> ns = now.time_since_epoch();
+        return ns.count();
 #else
         return ({ struct timespec tp; clock_gettime(CLOCK_MONOTONIC, &tp); tp.tv_sec * 1000000000ULL + tp.tv_nsec; });
 #endif
