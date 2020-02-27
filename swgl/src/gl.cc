@@ -2358,7 +2358,8 @@ static inline PackedR8 pack(WideR8 p) {
     __m128i m = __builtin_shufflevector(p, p, 0, 1, 2, 3, -1, -1, -1, -1);
     return bit_cast<PackedR8>(_mm_packus_epi16(m, m));
 #elif USE_NEON
-    return vqmovn_u16(p);
+    auto m = __builtin_shufflevector(p, p, 0, 1, 2, 3, -1, -1, -1, -1);
+    return bit_cast<PackedR8>(vqmovn_u16(m));
 #else
     return __builtin_convertvector(p, PackedR8);
 #endif
