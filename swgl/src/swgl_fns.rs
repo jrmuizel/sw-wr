@@ -616,17 +616,17 @@ impl Gl for Context {
 
     fn get_query_object_iv(&self, id: GLuint, pname: GLenum) -> i32 {
         panic!();
-        0
+        //0
     }
 
     fn get_query_object_uiv(&self, id: GLuint, pname: GLenum) -> u32 {
         panic!();
-        0
+        //0
     }
 
     fn get_query_object_i64v(&self, id: GLuint, pname: GLenum) -> i64 {
         panic!();
-        0
+        //0
     }
 
     fn get_query_object_ui64v(&self, id: GLuint, pname: GLenum) -> u64 {
@@ -754,23 +754,23 @@ impl Gl for Context {
     // https://www.khronos.org/registry/OpenGL-Refpages/es2.0/xhtml/glGetUniform.xml
     unsafe fn get_uniform_iv(&self, program: GLuint, location: GLint, result: &mut [GLint]) {
         panic!();
-        assert!(!result.is_empty());
+        //assert!(!result.is_empty());
     }
 
     // https://www.khronos.org/registry/OpenGL-Refpages/es2.0/xhtml/glGetUniform.xml
     unsafe fn get_uniform_fv(&self, program: GLuint, location: GLint, result: &mut [GLfloat]) {
         panic!();
-        assert!(!result.is_empty());
+        //assert!(!result.is_empty());
     }
 
     fn get_uniform_block_index(&self, program: GLuint, name: &str) -> GLuint {
         panic!();
-        0
+        //0
     }
 
     fn get_uniform_indices(&self, program: GLuint, names: &[&str]) -> Vec<GLuint> {
         panic!();
-        Vec::new()
+        //Vec::new()
     }
 
     fn bind_buffer_base(&self, target: GLenum, index: GLuint, buffer: GLuint) {
@@ -840,8 +840,7 @@ impl Gl for Context {
 
     fn draw_buffers(&self, bufs: &[GLenum]) {
         panic!();
-        unsafe {
-        }
+        //unsafe {}
     }
 
     // FIXME: Does not verify buffer size -- unsafe!
@@ -1197,19 +1196,19 @@ impl Gl for Context {
     #[inline]
     unsafe fn get_integer_64v(&self, name: GLenum, result: &mut [GLint64]) {
         panic!();
-        assert!(!result.is_empty());
+        //assert!(!result.is_empty());
     }
 
     #[inline]
     unsafe fn get_integer_iv(&self, name: GLenum, index: GLuint, result: &mut [GLint]) {
         panic!();
-        assert!(!result.is_empty());
+        //assert!(!result.is_empty());
     }
 
     #[inline]
     unsafe fn get_integer_64iv(&self, name: GLenum, index: GLuint, result: &mut [GLint64]) {
         panic!();
-        assert!(!result.is_empty());
+        //assert!(!result.is_empty());
     }
 
     #[inline]
@@ -1223,7 +1222,7 @@ impl Gl for Context {
     #[inline]
     unsafe fn get_float_v(&self, name: GLenum, result: &mut [GLfloat]) {
         panic!();
-        assert!(!result.is_empty());
+        //assert!(!result.is_empty());
     }
 
     fn get_framebuffer_attachment_parameter_iv(
@@ -1233,22 +1232,22 @@ impl Gl for Context {
         pname: GLenum,
     ) -> GLint {
         panic!();
-        0
+        //0
     }
 
     fn get_renderbuffer_parameter_iv(&self, target: GLenum, pname: GLenum) -> GLint {
         panic!();
-        0
+        //0
     }
 
     fn get_tex_parameter_iv(&self, target: GLenum, pname: GLenum) -> GLint {
         panic!();
-        0
+        //0
     }
 
     fn get_tex_parameter_fv(&self, target: GLenum, pname: GLenum) -> GLfloat {
         panic!();
-        0.0
+        //0.0
     }
 
     fn tex_parameter_i(&self, target: GLenum, pname: GLenum, param: GLint) {
@@ -1531,27 +1530,27 @@ impl Gl for Context {
 
     fn is_enabled(&self, cap: GLenum) -> GLboolean {
         panic!();
-        0
+        //0
     }
 
     fn is_shader(&self, shader: GLuint) -> GLboolean {
         panic!();
-        0
+        //0
     }
 
     fn is_texture(&self, texture: GLenum) -> GLboolean {
         panic!();
-        0
+        //0
     }
 
     fn is_framebuffer(&self, framebuffer: GLenum) -> GLboolean {
         panic!();
-        0
+        //0
     }
 
     fn is_renderbuffer(&self, renderbuffer: GLenum) -> GLboolean {
         panic!();
-        0
+        //0
     }
 
     fn check_frame_buffer_status(&self, target: GLenum) -> GLenum {
@@ -1656,7 +1655,6 @@ impl Gl for Context {
     }
 
     fn uniform_4fv(&self, location: GLint, values: &[f32]) {
-        panic!();
         unsafe {
                 Uniform4fv(location, (values.len() / 4) as GLsizei, values.as_ptr());
         }
@@ -1697,12 +1695,12 @@ impl Gl for Context {
 
     fn get_active_attrib(&self, program: GLuint, index: GLuint) -> (i32, u32, String) {
         panic!();
-        (0, 0, String::new())
+        //(0, 0, String::new())
     }
 
     fn get_active_uniform(&self, program: GLuint, index: GLuint) -> (i32, u32, String) {
         panic!();
-        (0, 0, String::new())
+        //(0, 0, String::new())
     }
 
     fn get_active_uniforms_iv(
@@ -1712,12 +1710,12 @@ impl Gl for Context {
         pname: GLenum,
     ) -> Vec<GLint> {
         panic!();
-        Vec::new()
+        //Vec::new()
     }
 
     fn get_active_uniform_block_i(&self, program: GLuint, index: GLuint, pname: GLenum) -> GLint {
         panic!();
-        0
+        //0
     }
 
     fn get_active_uniform_block_iv(
@@ -1727,12 +1725,12 @@ impl Gl for Context {
         pname: GLenum,
     ) -> Vec<GLint> {
         panic!();
-        Vec::new()
+        //Vec::new()
     }
 
     fn get_active_uniform_block_name(&self, program: GLuint, index: GLuint) -> String {
         panic!();
-        String::new()
+        //String::new()
     }
 
     fn get_attrib_location(&self, program: GLuint, name: &str) -> c_int {
@@ -1744,7 +1742,7 @@ impl Gl for Context {
 
     fn get_frag_data_location(&self, program: GLuint, name: &str) -> c_int {
         panic!();
-        0
+        //0
     }
 
     fn get_uniform_location(&self, program: GLuint, name: &str) -> c_int {
@@ -1758,7 +1756,7 @@ impl Gl for Context {
 
     fn get_program_info_log(&self, program: GLuint) -> String {
         panic!();
-        String::new()
+        //String::new()
     }
 
     #[inline]
@@ -1774,7 +1772,7 @@ impl Gl for Context {
 
     fn get_program_binary(&self, program: GLuint) -> (Vec<u8>, GLenum) {
         panic!();
-        (Vec::new(), NONE)
+        //(Vec::new(), NONE)
     }
 
     fn program_binary(&self, program: GLuint, format: GLenum, binary: &[u8]) {
@@ -1788,23 +1786,23 @@ impl Gl for Context {
     #[inline]
     unsafe fn get_vertex_attrib_iv(&self, index: GLuint, pname: GLenum, result: &mut [GLint]) {
         panic!();
-        assert!(!result.is_empty());
+        //assert!(!result.is_empty());
     }
 
     #[inline]
     unsafe fn get_vertex_attrib_fv(&self, index: GLuint, pname: GLenum, result: &mut [GLfloat]) {
         panic!();
-        assert!(!result.is_empty());
+        //assert!(!result.is_empty());
     }
 
     fn get_vertex_attrib_pointer_v(&self, index: GLuint, pname: GLenum) -> GLsizeiptr {
         panic!();
-        0
+        //0
     }
 
     fn get_buffer_parameter_iv(&self, target: GLuint, pname: GLenum) -> GLint {
         panic!();
-        0
+        //0
     }
 
     fn get_shader_info_log(&self, shader: GLuint) -> String {
@@ -1853,7 +1851,6 @@ impl Gl for Context {
         _shader_type: GLuint,
         precision_type: GLuint,
     ) -> (GLint, GLint, GLint) {
-        panic!();
         // gl.GetShaderPrecisionFormat is not available until OpenGL 4.1.
         // Fallback to OpenGL standard precissions that most desktop hardware support.
         match precision_type {
@@ -2035,7 +2032,7 @@ impl Gl for Context {
 
     fn fence_sync(&self, condition: GLenum, flags: GLbitfield) -> GLsync {
         panic!();
-        ptr::null()
+        //ptr::null()
     }
 
     fn client_wait_sync(&self, sync: GLsync, flags: GLbitfield, timeout: GLuint64) {
@@ -2056,7 +2053,7 @@ impl Gl for Context {
 
     fn gen_fences_apple(&self, n: GLsizei) -> Vec<GLuint> {
         panic!();
-        Vec::new()
+        //Vec::new()
     }
 
     fn delete_fences_apple(&self, fences: &[GLuint]) {
@@ -2077,7 +2074,7 @@ impl Gl for Context {
 
     fn test_object_apple(&self, object: GLenum, name: GLuint) -> GLboolean {
         panic!();
-        0
+        //0
     }
 
     fn finish_object_apple(&self, object: GLenum, name: GLuint) {
@@ -2097,7 +2094,7 @@ impl Gl for Context {
 
     fn get_frag_data_index(&self, program: GLuint, name: &str) -> GLint {
         panic!();
-        -1
+        //-1
     }
 
     // GL_KHR_debug
@@ -2106,7 +2103,6 @@ impl Gl for Context {
     }
 
     fn provoking_vertex_angle(&self, _mode: GLenum) {
-        panic!();
         unimplemented!("This extension is GLES only");
     }
 
