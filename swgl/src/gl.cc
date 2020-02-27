@@ -1740,6 +1740,29 @@ void BufferSubData(GLenum target,
     }
 }
 
+void* MapBuffer(GLenum target, GLbitfield access) {
+    Buffer& b = ctx->buffers[ctx->current_buffer[target]];
+    return b.buf;
+}
+
+void* MapBufferRange(
+        GLenum target,
+        GLintptr offset,
+        GLsizeiptr length,
+        GLbitfield access
+) {
+    Buffer& b = ctx->buffers[ctx->current_buffer[target]];
+    if (b.buf && offset >= 0 && length > 0 && offset + length <= b.size) {
+        return b.buf + offset;
+    }
+    return nullptr;
+}
+
+GLboolean UnmapBuffer(GLenum target) {
+    Buffer& b = ctx->buffers[ctx->current_buffer[target]];
+    return b.buf != nullptr;
+}
+
 void Uniform1i(GLint location, GLint V0) {
     debugf("tex: %d\n", ctx->texture_count);
     if (!program_impl->set_sampler(location, V0)) {

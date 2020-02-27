@@ -45,6 +45,14 @@ extern "C" {
         offset: GLintptr,
         size: GLsizeiptr,
         data: *const GLvoid);
+    fn MapBuffer(target: GLenum, access: GLbitfield) -> *mut c_void;
+    fn MapBufferRange(
+        target: GLenum,
+        offset: GLintptr,
+        length: GLsizeiptr,
+        access: GLbitfield,
+    ) -> *mut c_void;
+    fn UnmapBuffer(target: GLenum) -> GLboolean;
     fn TexStorage2D(
         target: GLenum,
         levels: GLint,
@@ -396,8 +404,9 @@ impl Gl for Context {
     fn map_buffer(&self,
                   target: GLenum,
                   access: GLbitfield) -> *mut c_void {
-        panic!();
-        ptr::null_mut()
+        unsafe {
+            MapBuffer(target, access)
+        }
     }
 
     fn map_buffer_range(&self,
@@ -405,13 +414,15 @@ impl Gl for Context {
                         offset: GLintptr,
                         length: GLsizeiptr,
                         access: GLbitfield) -> *mut c_void {
-        panic!();
-        ptr::null_mut()
+        unsafe {
+            MapBufferRange(target, offset, length, access)
+        }
     }
 
     fn unmap_buffer(&self, target: GLenum) -> GLboolean {
-        panic!();
-        0
+        unsafe {
+            UnmapBuffer(target)
+        }
     }
 
     fn shader_source(&self, shader: GLuint, strings: &[&[u8]]) {
