@@ -7,13 +7,13 @@ use std::fmt::Write;
 fn write_load_shader(shaders: &[&str]) {
     let mut load_shader = String::new();
     for s in shaders {
-        write!(load_shader, "#include \"{}.h\"\n", s);
+        let _ = write!(load_shader, "#include \"{}.h\"\n", s);
     }
-    write!(load_shader, "ProgramImpl* load_shader(const std::string &name) {{\n");
+    load_shader.push_str("ProgramImpl* load_shader(const std::string &name) {\n");
     for s in shaders {
-        write!(load_shader, "  if (name == \"{}\") {{ return new {}_program; }}\n", s, s.replace(".", "_"));
+        let _ = write!(load_shader, "  if (name == \"{}\") {{ return new {}_program; }}\n", s, s.replace(".", "_"));
     }
-    write!(load_shader, "  return nullptr;\n}}\n");
+    load_shader.push_str("  return nullptr;\n}\n");
     std::fs::write(std::env::var("OUT_DIR").unwrap() + "/load_shader.h", load_shader).unwrap();
 }
 
@@ -39,14 +39,14 @@ fn process_imports(shader_dir: &str, shader: &str, included: &mut HashSet<String
 
 fn translate_shader(shader: &str, shader_dir: &str) {
     let mut imported = String::new();
-    write!(imported, "#define SWGL 1\n");
-    write!(imported, "#define GL_ES 1\n");
-    write!(imported, "#define WR_MAX_VERTEX_TEXTURE_WIDTH 1024U\n");
+    imported.push_str("#define SWGL 1\n");
+    imported.push_str("#define GL_ES 1\n");
+    imported.push_str("#define WR_MAX_VERTEX_TEXTURE_WIDTH 1024U\n");
     let basename = if let Some(feature_start) = shader.find(char::is_uppercase) {
         let feature_end = shader.rfind(char::is_uppercase).unwrap();
         let features = shader[feature_start..feature_end+1].split('.');
         for feature in features {
-            write!(imported, "#define WR_FEATURE_{}\n", feature);
+            let _ = write!(imported, "#define WR_FEATURE_{}\n", feature);
         }
         &shader[0..feature_start]
     } else {
