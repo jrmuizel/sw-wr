@@ -59,15 +59,17 @@ fn translate_shader(shader: &str, shader_dir: &str) {
     let imp_name = format!("{}/{}.i", out_dir, shader);
     std::fs::write(&imp_name, imported).unwrap();
 
-    let vs = cc::Build::new()
-        .flag("-xc")
-        .flag("-P")
+    let mut build = cc::Build::new();
+    if build.try_get_compiler().map_or(false, |c| c.is_like_msvc()) {
+        build.flag("/EP");
+    } else {
+        build.flag("-xc").flag("-P");
+    }
+    let vs = build.clone()
         .file(&imp_name)
         .define("WR_VERTEX_SHADER", Some(""))
         .expand();
-    let fs = cc::Build::new()
-        .flag("-xc")
-        .flag("-P")
+    let fs = build.clone()
         .file(&imp_name)
         .define("WR_FRAGMENT_SHADER", Some(""))
         .expand();
