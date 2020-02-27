@@ -587,12 +587,12 @@ struct Context {
     int shaded_rows = 0;
     int shaded_pixels = 0;
 };
-Context default_ctx;
-Context *ctx = &default_ctx;
-ProgramImpl *program_impl = nullptr;
-VertexShaderImpl *vertex_shader = nullptr;
-FragmentShaderImpl *fragment_shader = nullptr;
-BlendKey blend_key = BLEND_KEY_NONE;
+static Context default_ctx;
+static Context *ctx = &default_ctx;
+static ProgramImpl *program_impl = nullptr;
+static VertexShaderImpl *vertex_shader = nullptr;
+static FragmentShaderImpl *fragment_shader = nullptr;
+static BlendKey blend_key = BLEND_KEY_NONE;
 
 static void prepare_texture(Texture& t, const IntRect* skip = nullptr);
 
