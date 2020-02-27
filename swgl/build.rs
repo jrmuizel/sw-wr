@@ -115,6 +115,7 @@ const WR_SHADERS: &'static [&'static str] = &[
     "brush_yuv_imageYUV_NV12.ALPHA_PASS",
     "brush_yuv_imageYUV_NV12",
     "brush_yuv_imageYUV_PLANAR",
+    "composite",
     "cs_blurALPHA_TARGET",
     "cs_blurCOLOR_TARGET",
     "cs_border_segment",
