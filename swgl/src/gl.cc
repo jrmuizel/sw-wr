@@ -1383,6 +1383,32 @@ static inline void copy_bgra8_to_rgba8(uint32_t *dest, uint32_t *src, int width)
         }
 }
 
+static Buffer* get_pixel_pack_buffer() {
+    auto i = ctx->current_buffer.find(GL_PIXEL_PACK_BUFFER);
+    GLuint id = i != ctx->current_buffer.end() ? i->second : 0;
+    return id ? &ctx->buffers[id] : nullptr;
+}
+
+static void* get_pixel_pack_buffer_data(void* data) {
+    if (Buffer* b = get_pixel_pack_buffer()) {
+        return b->buf ? b->buf + (size_t)data : nullptr;
+    }
+    return data;
+}
+
+static Buffer* get_pixel_unpack_buffer() {
+    auto i = ctx->current_buffer.find(GL_PIXEL_UNPACK_BUFFER);
+    GLuint id = i != ctx->current_buffer.end() ? i->second : 0;
+    return id ? &ctx->buffers[id] : nullptr;
+}
+
+static void* get_pixel_unpack_buffer_data(void* data) {
+    if (Buffer* b = get_pixel_unpack_buffer()) {
+        return b->buf ? b->buf + (size_t)data : nullptr;
+    }
+    return data;
+}
+
 void TexSubImage2D(
         GLenum target,
         GLint level,
@@ -1393,6 +1419,7 @@ void TexSubImage2D(
         GLenum format,
         GLenum ty,
         void *data) {
+        data = get_pixel_unpack_buffer_data(data);
         if (!data) return;
         Texture &t = ctx->textures[active_texture(target)];
         IntRect skip = { xoffset, yoffset, width, height };
@@ -1431,9 +1458,7 @@ void TexImage2D(
         assert(level == 0);
         assert(border == 0);
         TexStorage2D(target, 1, internal_format, width, height);
-        if (data) {
-            TexSubImage2D(target, 0, 0, 0, width, height, format, ty, data);
-        }
+        TexSubImage2D(target, 0, 0, 0, width, height, format, ty, data);
 }
 
 void TexSubImage3D(
@@ -1448,12 +1473,12 @@ void TexSubImage3D(
         GLenum format,
         GLenum ty,
         void *data) {
+        data = get_pixel_unpack_buffer_data(data);
         if (!data) return;
         Texture &t = ctx->textures[active_texture(target)];
         prepare_texture(t);
         assert(ctx->unpack_row_length == 0 || ctx->unpack_row_length >= width);
         GLsizei row_length = ctx->unpack_row_length != 0 ? ctx->unpack_row_length : width;
-
         if (format == GL_BGRA) {
             assert(ty == GL_UNSIGNED_BYTE);
             assert(t.internal_format == GL_RGBA8);
@@ -1496,9 +1521,7 @@ void TexImage3D(
         assert(level == 0);
         assert(border == 0);
         TexStorage3D(target, 1, internal_format, width, height, depth);
-        if (data) {
-            TexSubImage3D(target, 0, 0, 0, 0, width, height, depth, format, ty, data);
-        }
+        TexSubImage3D(target, 0, 0, 0, 0, width, height, depth, format, ty, data);
 }
 
 void TexParameteri(GLenum target, GLenum pname, GLint param) {
@@ -2052,6 +2075,8 @@ void Clear(GLbitfield mask) {
 }
 
 void ReadPixels(GLint x, GLint y, GLsizei width, GLsizei height, GLenum format, GLenum type, void *data) {
+    data = get_pixel_pack_buffer_data(data);
+    if (!data) return;
     Framebuffer *fb = get_framebuffer(GL_READ_FRAMEBUFFER);
     if (!fb) return;
     assert(format == GL_RED || format == GL_RGBA || format == GL_RGBA_INTEGER || format == GL_BGRA);
