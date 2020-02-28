@@ -56,7 +56,7 @@ fn translate_shader(shader: &str, shader_dir: &str) {
     process_imports(shader_dir, basename, &mut HashSet::new(), &mut imported);
 
     let out_dir = std::env::var("OUT_DIR").unwrap();
-    let imp_name = format!("{}/{}.i", out_dir, shader);
+    let imp_name = format!("{}/{}.c", out_dir, shader);
     std::fs::write(&imp_name, imported).unwrap();
 
     let mut build = cc::Build::new();
@@ -65,13 +65,12 @@ fn translate_shader(shader: &str, shader_dir: &str) {
     } else {
         build.flag("-xc").flag("-P");
     }
+    build.file(&imp_name);
     let vs = build.clone()
-        .file(&imp_name)
-        .define("WR_VERTEX_SHADER", Some(""))
+        .define("WR_VERTEX_SHADER", Some("1"))
         .expand();
     let fs = build.clone()
-        .file(&imp_name)
-        .define("WR_FRAGMENT_SHADER", Some(""))
+        .define("WR_FRAGMENT_SHADER", Some("1"))
         .expand();
     let vs_name = format!("{}/{}.vert", out_dir, shader);
     let fs_name = format!("{}/{}.frag", out_dir, shader);
