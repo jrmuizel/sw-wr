@@ -693,12 +693,12 @@ static inline S load_attrib_scalar(const char *src, size_t size, GLenum type, bo
     S scalar = {0};
     if (type == GL_UNSIGNED_SHORT) {
         if (normalized) {
-            for (int i = 0; i < size/sizeof(uint16_t); i++) {
+            for (size_t i = 0; i < size/sizeof(uint16_t); i++) {
                 typename ElementType<S>::ty x = reinterpret_cast<const uint16_t*>(src)[i];
                 put_nth_component(scalar, i, x * (1.0f / 0xFFFF));
             }
         } else {
-            for (int i = 0; i < size/sizeof(uint16_t); i++) {
+            for (size_t i = 0; i < size/sizeof(uint16_t); i++) {
                 typename ElementType<S>::ty x = reinterpret_cast<const uint16_t*>(src)[i];
                 put_nth_component(scalar, i, x);
             }
@@ -714,7 +714,7 @@ template<typename T>
 void load_attrib(T& attrib, VertexAttrib &va, unsigned short *indices, int start, int instance, int count) {
     typedef decltype(force_scalar(attrib)) scalar_type;
     if (!va.enabled) {
-        attrib = T(0);
+        attrib = T(scalar_type{0});
     } else if (va.divisor == 1) {
         char* src = (char*)va.buf + va.stride * instance + va.offset;
         assert(src + va.size <= va.buf + va.buf_size);
@@ -974,7 +974,7 @@ void BlendFunc(GLenum srgb, GLenum drgb, GLenum sa, GLenum da) {
 
 void BlendColor(GLfloat r, GLfloat g, GLfloat b, GLfloat a) {
         I32 c = roundto((Float){b, g, r, a}, 255.49f);
-        ctx->blendcolor = __builtin_convertvector(c, U16).rgbargba;
+        ctx->blendcolor = CONVERT(c, U16).xyzwxyzw;
 }
 
 void BlendEquation(GLenum mode) {
@@ -1006,7 +1006,7 @@ void SetScissor(GLint x, GLint y, GLsizei width, GLsizei height) {
 
 void ClearColor(GLfloat r, GLfloat g, GLfloat b, GLfloat a) {
     I32 c = roundto((Float){b, g, r, a}, 255.49f);
-    ctx->clearcolor = bit_cast<uint32_t>(__builtin_convertvector(c, U8));
+    ctx->clearcolor = bit_cast<uint32_t>(CONVERT(c, U8));
 }
 
 void ClearDepth(GLdouble depth) {
@@ -2275,19 +2275,7 @@ using WideRGBA8 = V16<uint16_t>;
 using HalfRGBA8 = V8<uint16_t>;
 
 static inline WideRGBA8 unpack(PackedRGBA8 p) {
-    return __builtin_convertvector(p, WideRGBA8);
-}
-
-static inline HalfRGBA8 lowHalf(WideRGBA8 p) {
-    return __builtin_shufflevector(p, p, 0, 1, 2, 3, 4, 5, 6, 7);
-}
-
-static inline HalfRGBA8 highHalf(WideRGBA8 p) {
-    return __builtin_shufflevector(p, p, 8, 9, 10, 11, 12, 13, 14, 15);
-}
-
-static inline WideRGBA8 combine(HalfRGBA8 a, HalfRGBA8 b) {
-    return __builtin_shufflevector(a, b, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15);
+    return CONVERT(p, WideRGBA8);
 }
 
 static inline PackedRGBA8 pack(WideRGBA8 p) {
@@ -2296,7 +2284,7 @@ static inline PackedRGBA8 pack(WideRGBA8 p) {
 #elif USE_NEON
     return vcombine_u8(vqmovn_u16(lowHalf(p)), vqmovn_u16(highHalf(p)));
 #else
-    return __builtin_convertvector(p, PackedRGBA8);
+    return CONVERT(p, PackedRGBA8);
 #endif
 }
 
@@ -2306,39 +2294,7 @@ static inline HalfRGBA8 packRGBA8(I32 a, I32 b) {
 #elif USE_NEON
     return vcombine_u16(vqmovun_s32(a), vqmovun_s32(b));
 #else
-    return __builtin_convertvector(__builtin_shufflevector(a, b, 0, 1, 2, 3, 4, 5, 6, 7), HalfRGBA8);
-#endif
-}
-
-static inline HalfRGBA8 zipLow(HalfRGBA8 a, HalfRGBA8 b) {
-#if USE_SSE2
-    return _mm_unpacklo_epi16(a, b);
-#else
-    return __builtin_shufflevector(a, b, 0, 8, 1, 9, 2, 10, 3, 11);
-#endif
-}
-
-static inline HalfRGBA8 zipHigh(HalfRGBA8 a, HalfRGBA8 b) {
-#if USE_SSE2
-    return _mm_unpackhi_epi16(a, b);
-#else
-    return __builtin_shufflevector(a, b, 4, 12, 5, 13, 6, 14, 7, 15);
-#endif
-}
-
-static inline HalfRGBA8 zipLow32(HalfRGBA8 a, HalfRGBA8 b) {
-#if USE_SSE2
-    return _mm_unpacklo_epi32(a, b);
-#else
-    return __builtin_shufflevector(a, b, 0, 1, 8, 9, 2, 3, 10, 11);
-#endif
-}
-
-static inline HalfRGBA8 zipHigh32(HalfRGBA8 a, HalfRGBA8 b) {
-#if USE_SSE2
-    return _mm_unpackhi_epi32(a, b);
-#else
-    return __builtin_shufflevector(a, b, 4, 5, 12, 13, 6, 7, 14, 15);
+    return CONVERT(combine(a, b), HalfRGBA8);
 #endif
 }
 
@@ -2346,7 +2302,7 @@ using PackedR8 = V4<uint8_t>;
 using WideR8 = V4<uint16_t>;
 
 static inline WideR8 unpack(PackedR8 p) {
-    return __builtin_convertvector(p, WideR8);
+    return CONVERT(p, WideR8);
 }
 
 static inline WideR8 packR8(I32 a) {
@@ -2355,32 +2311,24 @@ static inline WideR8 packR8(I32 a) {
 #elif USE_NEON
     return vqmovun_s32(a);
 #else
-    return __builtin_convertvector(a, WideR8);
+    return CONVERT(a, WideR8);
 #endif
 }
 
 static inline PackedR8 pack(WideR8 p) {
 #if USE_SSE2
-    __m128i m = __builtin_shufflevector(p, p, 0, 1, 2, 3, -1, -1, -1, -1);
+    __m128i m = SHUFFLE(p, p, 0, 1, 2, 3, -1, -1, -1, -1);
     return bit_cast<PackedR8>(_mm_packus_epi16(m, m));
 #elif USE_NEON
-    auto m = __builtin_shufflevector(p, p, 0, 1, 2, 3, -1, -1, -1, -1);
+    auto m = SHUFFLE(p, p, 0, 1, 2, 3, -1, -1, -1, -1);
     return bit_cast<PackedR8>(vqmovn_u16(m));
 #else
-    return __builtin_convertvector(p, PackedR8);
+    return CONVERT(p, PackedR8);
 #endif
 }
 
 using ZMask4 = V4<int16_t>;
 using ZMask8 = V8<int16_t>;
-
-static inline ZMask4 lowHalf(ZMask8 mask) {
-    return __builtin_shufflevector(mask, mask, 0, 1, 2, 3);
-}
-
-static inline ZMask4 highHalf(ZMask8 mask) {
-    return __builtin_shufflevector(mask, mask, 4, 5, 6, 7);
-}
 
 static inline PackedRGBA8 unpack(ZMask4 mask, uint32_t*) {
     return bit_cast<PackedRGBA8>(mask.xxyyzzww);
@@ -2405,7 +2353,7 @@ using ZMask8Code = V8<uint8_t>;
 #define ZMASK_NONE_PASSED 0xFFFFFFFFU
 #define ZMASK_ALL_PASSED  0
 static inline uint32_t zmask_code(ZMask4 mask) {
-    return bit_cast<uint32_t>(__builtin_convertvector(mask, ZMask4Code));
+    return bit_cast<uint32_t>(CONVERT(mask, ZMask4Code));
 }
 static inline uint32_t zmask_code(ZMask8 mask) {
     return zmask_code(ZMask4((U16(lowHalf(mask)) >> 12) | (U16(highHalf(mask)) << 4)));
@@ -2468,7 +2416,7 @@ static inline ZMask4 packZMask4(Bool a) {
 #elif USE_NEON
     return vqmovun_s32(a);
 #else
-    return __builtin_convertvector(a, ZMask4);
+    return CONVERT(a, ZMask4);
 #endif
 }
 
@@ -2487,8 +2435,8 @@ static inline WideRGBA8 pack_pixels_RGBA8(const vec4& v) {
     HalfRGBA8 yw = packRGBA8(i.y, i.w);
     HalfRGBA8 xy = zipLow(xz, yw);
     HalfRGBA8 zw = zipHigh(xz, yw);
-    HalfRGBA8 lo = zipLow32(xy, zw);
-    HalfRGBA8 hi = zipHigh32(xy, zw);
+    HalfRGBA8 lo = SHUFFLE(xy, zw, 0, 1, 8, 9, 2, 3, 10, 11);
+    HalfRGBA8 hi = SHUFFLE(xy, zw, 4, 5, 12, 13, 6, 7, 14, 15);
     return combine(lo, hi);
 }
 
@@ -2515,7 +2463,7 @@ static inline WideRGBA8 blend_pixels_RGBA8(PackedRGBA8 pdst, WideRGBA8 src) {
     WideRGBA8 dst = unpack(pdst);
     // (x*y + x) >> 8, cheap approximation of (x*y) / 255
     #define MULDIV255(x, y) ({ WideRGBA8 b = x; (b*y + b) >> 8; })
-    #define ALPHAS(c) __builtin_shufflevector(c, c, 3, 3, 3, 3, 7, 7, 7, 7, 11, 11, 11, 11, 15, 15, 15, 15)
+    #define ALPHAS(c) SHUFFLE(c, c, 3, 3, 3, 3, 7, 7, 7, 7, 11, 11, 11, 11, 15, 15, 15, 15)
     const WideRGBA8 RGB_MASK = {0xFFFF, 0xFFFF, 0xFFFF, 0, 0xFFFF, 0xFFFF, 0xFFFF, 0, 0xFFFF, 0xFFFF, 0xFFFF, 0, 0xFFFF, 0xFFFF, 0xFFFF, 0};
     const WideRGBA8 ALPHA_MASK = {0, 0, 0, 0xFFFF, 0, 0, 0, 0xFFFF, 0, 0, 0, 0xFFFF, 0, 0, 0, 0xFFFF};
     switch (blend_key) {
@@ -2571,7 +2519,7 @@ static inline void commit_output(uint32_t* buf) {
 }
 
 template<>
-static inline void commit_output<false>(uint32_t* buf) {
+inline void commit_output<false>(uint32_t* buf) {
     fragment_shader->run();
     WideRGBA8 r = pack_pixels_RGBA8();
     if (blend_key) r = blend_pixels_RGBA8(unaligned_load<PackedRGBA8>(buf), r);
@@ -2689,7 +2637,7 @@ static inline void commit_output(uint8_t* buf) {
 }
 
 template<>
-static inline void commit_output<false>(uint8_t* buf) {
+inline void commit_output<false>(uint8_t* buf) {
     fragment_shader->run();
     WideR8 r = pack_pixels_R8();
     if (blend_key) r = blend_pixels_R8(unpack(unaligned_load<PackedR8>(buf)), r);
@@ -2749,7 +2697,7 @@ static const size_t MAX_FLATS = 64;
 typedef float Flats[MAX_FLATS];
 
 static const size_t MAX_INTERPOLANTS = 16;
-typedef float Interpolants __attribute__((ext_vector_type(MAX_INTERPOLANTS)));
+typedef VectorType<float, MAX_INTERPOLANTS> Interpolants;
 
 template<typename S, typename P>
 static ALWAYS_INLINE void dispatch_draw_span(S* shader, P* buf, int len) {
@@ -3274,7 +3222,7 @@ void Composite(
         }
     } else {
         #define MULDIV255(x, y) ({ WideRGBA8 b = x; (b*y + b) >> 8; })
-        #define ALPHAS(c) __builtin_shufflevector(c, c, 3, 3, 3, 3, 7, 7, 7, 7, 11, 11, 11, 11, 15, 15, 15, 15)
+        #define ALPHAS(c) SHUFFLE(c, c, 3, 3, 3, 3, 7, 7, 7, 7, 11, 11, 11, 11, 15, 15, 15, 15)
         for (int y = 0; y < srcHeight; y++) {
             char *end = src + srcWidth * bpp;
             while (src + 4 * bpp <= end) {

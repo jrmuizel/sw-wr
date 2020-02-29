@@ -4,14 +4,15 @@
 #include <math.h>
 #include <array>
 
-#ifdef __SSE2__
+#ifdef __clang__
+  #ifdef __SSE2__
     #include <xmmintrin.h>
     #define USE_SSE2 1
-#endif
-
-#ifdef __ARM_NEON
+  #endif
+  #ifdef __ARM_NEON
     #include <arm_neon.h>
     #define USE_NEON 1
+  #endif
 #endif
 
 // Some of this is copied from Skia and is governed by a BSD-style license
@@ -31,20 +32,9 @@
 #define IMPLICIT
 #endif
 
-namespace glsl {
+#include "vector_type.h"
 
-template <typename T> using V2 = T __attribute__((ext_vector_type(2)));
-template <typename T> using V4 = T __attribute__((ext_vector_type(4)));
-using Float = V4<float>;
-using I32 = V4<int32_t>;
-using I16 = V4<int16_t>;
-using U64 = V4<uint64_t>;
-using U32 = V4<uint32_t>;
-using U16 = V4<uint16_t>;
-using U8  = V4<uint8_t>;
-using Bool = V4<int>;
-template <typename T> using V8 = T __attribute__((ext_vector_type(8)));
-template <typename T> using V16 = T __attribute__((ext_vector_type(16)));
+namespace glsl {
 
 float make_float(float n) {
     return n;
@@ -63,7 +53,7 @@ float make_float(bool n) {
 }
 
 template<typename T> Float make_float(T v) {
-        return __builtin_convertvector(v, Float);
+        return CONVERT(v, Float);
 }
 
 int32_t make_int(uint32_t n) {
@@ -83,7 +73,7 @@ int32_t make_int(bool n) {
 }
 
 template<typename T> I32 make_int(T v) {
-    return __builtin_convertvector(v, I32);
+    return CONVERT(v, I32);
 }
 
 uint32_t make_uint(uint32_t n) {
@@ -103,7 +93,7 @@ uint32_t make_uint(bool n) {
 }
 
 template<typename T> U32 make_uint(T v) {
-    return __builtin_convertvector(v, U32);
+    return CONVERT(v, U32);
 }
 
 template<typename T> T force_scalar(T n) { return n; }
@@ -405,7 +395,7 @@ struct vec2 {
         typedef struct vec2 vector_type;
         typedef float element_type;
 
-        constexpr vec2() : vec2(0) {}
+        constexpr vec2() : vec2(Float(0.0f)) {}
         constexpr vec2(Float a): x(a), y(a) {}
         vec2(Float x, Float y): x(x), y(y) {}
         constexpr vec2(vec2_scalar s) : x(s.x), y(s.y) {}
@@ -467,6 +457,11 @@ struct vec2 {
                 y -= a.y;
                 return *this;
         }
+        vec2 operator-=(Float a) {
+                x -= a;
+                y -= a;
+                return *this;
+        }
 
         vec2 operator-() {
                 return vec2(-x, -y);
@@ -488,18 +483,35 @@ struct vec2 {
         friend vec2 operator*(vec2 a, vec2 b) {
                 return vec2(a.x*b.x, a.y*b.y);
         }
+        friend vec2 operator*(Float a, vec2 b) {
+                return vec2(a*b.x, a*b.y);
+        }
 
         friend vec2 operator/(vec2 a, vec2 b) {
                 return vec2(a.x/b.x, a.y/b.y);
+        }
+        friend vec2 operator/(vec2 a, Float b) {
+                return vec2(a.x/b, a.y/b);
         }
 
         friend vec2 operator-(vec2 a, vec2 b) {
                 return vec2(a.x-b.x, a.y-b.y);
         }
+        friend vec2 operator-(vec2 a, Float b) {
+                return vec2(a.x-b, a.y-b);
+        }
+        friend vec2 operator-(Float a, vec2 b) {
+                return vec2(a-b.x, a-b.y);
+        }
         friend vec2 operator+(vec2 a, vec2 b) {
                 return vec2(a.x+b.x, a.y+b.y);
         }
-
+        friend vec2 operator+(vec2 a, Float b) {
+                return vec2(a.x+b, a.y+b);
+        }
+        friend vec2 operator+(Float a, vec2 b) {
+                return vec2(a+b.x, a+b.y);
+        }
 };
 
 vec2_scalar force_scalar(const vec2& v) {
@@ -561,6 +573,9 @@ vec2 step(vec2 edge, vec2 x) {
 vec2 max(vec2 a, vec2 b) {
        return vec2(max(a.x, b.x), max(a.y, b.y));
 }
+vec2 max(vec2 a, Float b) {
+       return vec2(max(a.x, b), max(a.y, b));
+}
 
 SI vec2_scalar max(vec2_scalar a, vec2_scalar b) { return vec2_scalar{max(a.x, b.x), max(a.y, b.y)}; }
 
@@ -581,7 +596,7 @@ Float abs(Float v) {
 #if USE_NEON
     return vabsq_f32(v);
 #else
-    return Float(I32(v) & I32(0-v));
+    return Float(I32(v) & I32(0.0f-v));
 #endif
 }
 
@@ -603,9 +618,9 @@ SI Dst bit_cast(const Src& src) {
     return unaligned_load<Dst>(&src);
 }
 
-Float   cast  (U32 v) { return      __builtin_convertvector((I32)v,   Float); }
-Float   cast  (I32 v) { return      __builtin_convertvector((I32)v,   Float); }
-I32   cast  (Float v) { return      __builtin_convertvector(v,   I32); }
+Float cast(U32 v) { return CONVERT((I32)v, Float); }
+Float cast(I32 v) { return CONVERT((I32)v, Float); }
+I32 cast(Float v) { return CONVERT(v, I32); }
 
 Float floor(Float v) {
     Float roundtrip = cast(cast(v));
@@ -648,7 +663,7 @@ Float fract(Float v) { return v - floor(v); }
 // and thus abs(dFdx(p.x)) + abs(dFdy(p.x)) = abs(dFdx(p.x)) + abs(dFdx(p.y)) which
 // mirrors abs(dFdx(p.y)) + abs(dFdy(p.y)) = abs(dFdx(p.y)) + abs(dFdx(p.x)).
 vec2 fwidth(vec2 p) {
-        Float d = abs(__builtin_shufflevector(p.x, p.y, 1, 1, 5, 5) - __builtin_shufflevector(p.x, p.y, 0, 0, 4, 4));
+        Float d = abs(SHUFFLE(p.x, p.y, 1, 1, 5, 5) - SHUFFLE(p.x, p.y, 0, 0, 4, 4));
         return vec2(d.xyxy + d.zwzw);
 }
 
@@ -736,7 +751,7 @@ struct ivec2 {
         ivec2(int32_t x, int32_t y): x(x), y(y) {}
         ivec2(I32 x, I32 y): x(x), y(y) {}
         ivec2(vec2 a): x(cast(a.x)), y(cast(a.y)) {}
-        ivec2(U32 x, U32 y): x(__builtin_convertvector(x, I32)), y(__builtin_convertvector(y, I32)) {}
+        ivec2(U32 x, U32 y): x(CONVERT(x, I32)), y(CONVERT(y, I32)) {}
         constexpr ivec2(ivec2_scalar s) : x(s.x), y(s.y) {}
         constexpr ivec2(ivec2_scalar s0, ivec2_scalar s1, ivec2_scalar s2, ivec2_scalar s3)
                 : x(I32{s0.x, s1.x, s2.x, s3.x})
@@ -1193,7 +1208,7 @@ struct vec3 {
         typedef struct vec3 vector_type;
         typedef float element_type;
 
-        constexpr vec3() : vec3(0) {  }
+        constexpr vec3() : vec3(Float(0.0f)) {  }
         constexpr vec3(Float a): x(a), y(a), z(a) {}
         constexpr vec3(Float x, Float y, Float z): x(x), y(y), z(z)  {}
         vec3(vec2 a, Float z): x(a.x), y(a.y), z(z)  {}
@@ -1235,6 +1250,9 @@ struct vec3 {
         }
         friend vec3 operator*(vec3 a, vec3 b) {
                 return vec3(a.x*b.x, a.y*b.y, a.z*b.z);
+        }
+        friend vec3 operator*(Float a, vec3 b) {
+                return vec3(a*b.x, a*b.y, a*b.z);
         }
 
         friend vec3 operator/(vec3 a, Float b) {
@@ -1435,7 +1453,7 @@ struct vec4 {
         typedef struct vec4 vector_type;
         typedef float element_type;
 
-        constexpr vec4() : vec4(0) {}
+        constexpr vec4() : vec4(Float(0.0f)) {}
         constexpr vec4(Float a): x(a), y(a), z(a), w(a) {}
         vec4(Float x, Float y, Float z, Float w): x(x), y(y), z(z), w(w) {}
         vec4(vec3 xyz, Float w): x(xyz.x), y(xyz.y), z(xyz.z), w(w) {}
@@ -1835,7 +1853,7 @@ struct mat2 {
         }
         mat2() = default;
 
-        mat2(float a) {
+        mat2(Float a) {
                 data[0] = vec2(a);
                 data[1] = vec2(a);
         }
@@ -2435,40 +2453,40 @@ vec4 textureLinearRGBA8(S sampler, vec2 P, I32 zoffset = 0) {
 
     I32 row0 = clampCoord(i.x, sampler->width) + clampCoord(i.y, sampler->height)*sampler->stride + zoffset;
     I32 row1 = row0 + ((i.y > 0 && i.y < int32_t(sampler->height)-1) & I32(sampler->stride));
-    I16 fracx = __builtin_convertvector(frac.x & (i.x > 0 && i.x < int32_t(sampler->width)-1), I16);
-    I16 fracy = __builtin_convertvector(frac.y, I16);
+    I16 fracx = CONVERT(frac.x & (i.x > 0 && i.x < int32_t(sampler->width)-1), I16);
+    I16 fracy = CONVERT(frac.y, I16);
 
-    auto a0 = __builtin_convertvector(unaligned_load<V8<uint8_t>>(&sampler->buf[row0.x]), V8<int16_t>);
-    auto a1 = __builtin_convertvector(unaligned_load<V8<uint8_t>>(&sampler->buf[row1.x]), V8<int16_t>);
+    auto a0 = CONVERT(unaligned_load<V8<uint8_t>>(&sampler->buf[row0.x]), V8<int16_t>);
+    auto a1 = CONVERT(unaligned_load<V8<uint8_t>>(&sampler->buf[row1.x]), V8<int16_t>);
     a0 += ((a1 - a0) * fracy.x) >> 7;
 
-    auto b0 = __builtin_convertvector(unaligned_load<V8<uint8_t>>(&sampler->buf[row0.y]), V8<int16_t>);
-    auto b1 = __builtin_convertvector(unaligned_load<V8<uint8_t>>(&sampler->buf[row1.y]), V8<int16_t>);
+    auto b0 = CONVERT(unaligned_load<V8<uint8_t>>(&sampler->buf[row0.y]), V8<int16_t>);
+    auto b1 = CONVERT(unaligned_load<V8<uint8_t>>(&sampler->buf[row1.y]), V8<int16_t>);
     b0 += ((b1 - b0) * fracy.y) >> 7;
 
-    auto abl = __builtin_shufflevector(a0, b0, 0, 8, 1, 9, 2, 10, 3, 11);
-    auto abh = __builtin_shufflevector(a0, b0, 4, 12, 5, 13, 6, 14, 7, 15);
+    auto abl = SHUFFLE(a0, b0, 0, 8, 1, 9, 2, 10, 3, 11);
+    auto abh = SHUFFLE(a0, b0, 4, 12, 5, 13, 6, 14, 7, 15);
     abl += ((abh - abl) * fracx.xyxyxyxy) >> 7;
 
-    auto c0 = __builtin_convertvector(unaligned_load<V8<uint8_t>>(&sampler->buf[row0.z]), V8<int16_t>);
-    auto c1 = __builtin_convertvector(unaligned_load<V8<uint8_t>>(&sampler->buf[row1.z]), V8<int16_t>);
+    auto c0 = CONVERT(unaligned_load<V8<uint8_t>>(&sampler->buf[row0.z]), V8<int16_t>);
+    auto c1 = CONVERT(unaligned_load<V8<uint8_t>>(&sampler->buf[row1.z]), V8<int16_t>);
     c0 += ((c1 - c0) * fracy.z) >> 7;
 
-    auto d0 = __builtin_convertvector(unaligned_load<V8<uint8_t>>(&sampler->buf[row0.w]), V8<int16_t>);
-    auto d1 = __builtin_convertvector(unaligned_load<V8<uint8_t>>(&sampler->buf[row1.w]), V8<int16_t>);
+    auto d0 = CONVERT(unaligned_load<V8<uint8_t>>(&sampler->buf[row0.w]), V8<int16_t>);
+    auto d1 = CONVERT(unaligned_load<V8<uint8_t>>(&sampler->buf[row1.w]), V8<int16_t>);
     d0 += ((d1 - d0) * fracy.w) >> 7;
 
-    auto cdl = __builtin_shufflevector(c0, d0, 0, 8, 1, 9, 2, 10, 3, 11);
-    auto cdh = __builtin_shufflevector(c0, d0, 4, 12, 5, 13, 6, 14, 7, 15);
+    auto cdl = SHUFFLE(c0, d0, 0, 8, 1, 9, 2, 10, 3, 11);
+    auto cdh = SHUFFLE(c0, d0, 4, 12, 5, 13, 6, 14, 7, 15);
     cdl += ((cdh - cdl) * fracx.zwzwzwzw) >> 7;
 
-    auto rg = __builtin_convertvector(V8<uint16_t>(__builtin_shufflevector(abl, cdl, 0, 1, 8, 9, 2, 3, 10, 11)), V8<float>);
-    auto ba = __builtin_convertvector(V8<uint16_t>(__builtin_shufflevector(abl, cdl, 4, 5, 12, 13, 6, 7, 14, 15)), V8<float>);
+    auto rg = CONVERT(V8<uint16_t>(SHUFFLE(abl, cdl, 0, 1, 8, 9, 2, 3, 10, 11)), V8<float>);
+    auto ba = CONVERT(V8<uint16_t>(SHUFFLE(abl, cdl, 4, 5, 12, 13, 6, 7, 14, 15)), V8<float>);
 
-    auto r = __builtin_shufflevector(rg, rg, 0, 1, 2, 3);
-    auto g = __builtin_shufflevector(rg, rg, 4, 5, 6, 7);
-    auto b = __builtin_shufflevector(ba, ba, 0, 1, 2, 3);
-    auto a = __builtin_shufflevector(ba, ba, 4, 5, 6, 7);
+    auto r = lowHalf(rg);
+    auto g = highHalf(rg);
+    auto b = lowHalf(ba);
+    auto a = highHalf(ba);
     return vec4(b, g, r, a) * (1.0f / 255.0f);
 #endif
 }
@@ -2532,33 +2550,30 @@ vec4 textureLinearR8(S sampler, vec2 P, I32 zoffset = 0) {
 
     I32 row0 = clampCoord(i.x, sampler->width) + clampCoord(i.y, sampler->height)*sampler->stride + zoffset;
     I32 row1 = row0 + ((i.y > 0 && i.y < int32_t(sampler->height)-1) & I32(sampler->stride));
-    I16 fracx = __builtin_convertvector(frac.x & (i.x > 0 && i.x < int32_t(sampler->width)-1), I16);
-    I16 fracy = __builtin_convertvector(frac.y, I16);
+    I16 fracx = CONVERT(frac.x & (i.x > 0 && i.x < int32_t(sampler->width)-1), I16);
+    I16 fracy = CONVERT(frac.y, I16);
 
     uint8_t* buf = (uint8_t*)sampler->buf;
     auto a0 = unaligned_load<V2<uint8_t>>(&buf[row0.x]);
     auto b0 = unaligned_load<V2<uint8_t>>(&buf[row0.y]);
     auto c0 = unaligned_load<V2<uint8_t>>(&buf[row0.z]);
     auto d0 = unaligned_load<V2<uint8_t>>(&buf[row0.w]);
-    auto ab0 = __builtin_shufflevector(a0, b0, 0, 1, 2, 3);
-    auto cd0 = __builtin_shufflevector(c0, d0, 0, 1, 2, 3);
-    auto abcd0 = __builtin_convertvector(__builtin_shufflevector(ab0, cd0, 0, 1, 2, 3, 4, 5, 6, 7), V8<int16_t>);
+    auto abcd0 = CONVERT(combine(combine(a0, b0), combine(c0, d0)), V8<int16_t>);
 
     auto a1 = unaligned_load<V2<uint8_t>>(&buf[row1.x]);
     auto b1 = unaligned_load<V2<uint8_t>>(&buf[row1.y]);
     auto c1 = unaligned_load<V2<uint8_t>>(&buf[row1.z]);
     auto d1 = unaligned_load<V2<uint8_t>>(&buf[row1.w]);
-    auto ab1 = __builtin_shufflevector(a1, b1, 0, 1, 2, 3);
-    auto cd1 = __builtin_shufflevector(c1, d1, 0, 1, 2, 3);
-    auto abcd1 = __builtin_convertvector(__builtin_shufflevector(ab1, cd1, 0, 1, 2, 3, 4, 5, 6, 7), V8<int16_t>);
+    auto abcd1 = CONVERT(combine(combine(a1, b1), combine(c1, d1)), V8<int16_t>);
 
     abcd0 += ((abcd1 - abcd0) * fracy.xxyyzzww) >> 7;
 
-    auto abcdl = __builtin_shufflevector(abcd0, abcd0, 0, 2, 4, 6);
-    auto abcdh = __builtin_shufflevector(abcd0, abcd0, 1, 3, 5, 7);
+    abcd0 = SHUFFLE(abcd0, abcd0, 0, 2, 4, 6, 1, 3, 5, 7);
+    auto abcdl = lowHalf(abcd0);
+    auto abcdh = highHalf(abcd0);
     abcdl += ((abcdh - abcdl) * fracx) >> 7;
 
-    Float r = __builtin_convertvector(U16(abcdl), Float);
+    Float r = CONVERT(U16(abcdl), Float);
     return vec4(r * (1.0f / 255.0f), 0.0f, 0.0f, 1.0f);
 #endif
 }
@@ -3021,9 +3036,9 @@ bool test_all(Bool cond) { return _mm_movemask_ps(cond) == 0xF; }
 bool test_any(Bool cond) { return _mm_movemask_ps(cond) != 0; }
 bool test_none(Bool cond) { return _mm_movemask_ps(cond) == 0; }
 #else
-bool test_all(Bool cond) { return bit_cast<uint32_t>(__builtin_convertvector(cond, U8)) == 0xFFFFFFFFU; }
-bool test_any(Bool cond) { return bit_cast<uint32_t>(__builtin_convertvector(cond, U8)) != 0; }
-bool test_none(Bool cond) { return bit_cast<uint32_t>(__builtin_convertvector(cond, U8)) == 0; }
+bool test_all(Bool cond) { return bit_cast<uint32_t>(CONVERT(cond, U8)) == 0xFFFFFFFFU; }
+bool test_any(Bool cond) { return bit_cast<uint32_t>(CONVERT(cond, U8)) != 0; }
+bool test_none(Bool cond) { return bit_cast<uint32_t>(CONVERT(cond, U8)) == 0; }
 #endif
 
 // See lp_build_sample_soa_code(
