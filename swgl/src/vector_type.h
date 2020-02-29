@@ -44,7 +44,7 @@ template <> struct VectorMask<float> { typedef int type; };
 template <typename T, int N> struct VectorType {
     typedef T data_type __attribute__((vector_size(sizeof(T)*N)));
     typedef typename VectorMask<T>::type mask_index;
-    typedef mask_index mask_type __attribute__((vector_size(sizeof(T)*N)));
+    typedef mask_index mask_type __attribute__((vector_size(sizeof(mask_index)*N)));
     typedef T half_type __attribute__((vector_size(sizeof(T)*(N/2))));
     union {
         data_type data;
