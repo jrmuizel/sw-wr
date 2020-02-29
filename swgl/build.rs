@@ -40,7 +40,6 @@ fn process_imports(shader_dir: &str, shader: &str, included: &mut HashSet<String
 fn translate_shader(shader: &str, shader_dir: &str) {
     let mut imported = String::new();
     imported.push_str("#define SWGL 1\n");
-    imported.push_str("#define GL_ES 1\n");
     imported.push_str("#define WR_MAX_VERTEX_TEXTURE_WIDTH 1024U\n");
     let basename = if let Some(feature_start) = shader.find(char::is_uppercase) {
         let feature_end = shader.rfind(char::is_uppercase).unwrap();

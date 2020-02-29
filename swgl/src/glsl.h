@@ -2361,6 +2361,8 @@ SI ivec4_scalar* texelFetchPtr(isampler2D sampler, ivec2_scalar P, int min_x, in
         return (ivec4_scalar*)&sampler->buf[P.x*4 + P.y*sampler->stride];
 }
 
+#define texelFetchOffset(sampler, P, lod, offset) texelFetch(sampler, (P) + (offset), lod)
+
 template <typename T, typename U, typename A, typename R = typename T::vector_type>
 SI R mix(T x, U y, A a) {
         return (y - x) * a + x;
