@@ -19,7 +19,6 @@
 #define debugf(...) printf(__VA_ARGS__)
 #endif
 
-using namespace std;
 using namespace glsl;
 
 #define GL_ARRAY_BUFFER                   0x8892
@@ -532,25 +531,25 @@ struct Context {
 
     GLuint current_program = 0;
 
-    map<GLuint, Query> queries;
-    map<GLuint, Buffer> buffers;
-    map<GLuint, Texture> textures;
-    map<GLuint, VertexArray> vertex_arrays;
-    map<GLuint, Framebuffer> framebuffers;
-    map<GLuint, Renderbuffer> renderbuffers;
-    map<GLuint, Shader> shaders;
-    map<GLuint, Program> programs;
+    std::map<GLuint, Query> queries;
+    std::map<GLuint, Buffer> buffers;
+    std::map<GLuint, Texture> textures;
+    std::map<GLuint, VertexArray> vertex_arrays;
+    std::map<GLuint, Framebuffer> framebuffers;
+    std::map<GLuint, Renderbuffer> renderbuffers;
+    std::map<GLuint, Shader> shaders;
+    std::map<GLuint, Program> programs;
 
     GLuint query_count = 1;
-    map<GLenum, GLuint> current_query;
+    std::map<GLenum, GLuint> current_query;
 
     GLuint buffer_count = 1;
-    map<GLenum, GLuint> current_buffer;
+    std::map<GLenum, GLuint> current_buffer;
 
     GLuint texture_count = 1;
-    map<GLenum, GLuint> current_texture;
-    map<GLenum, GLuint> current_framebuffer;
-    map<GLenum, GLuint> current_renderbuffer;
+    std::map<GLenum, GLuint> current_texture;
+    std::map<GLenum, GLuint> current_framebuffer;
+    std::map<GLenum, GLuint> current_renderbuffer;
 
     GLuint vertex_array_count = 1;
     GLuint current_vertex_array;
@@ -1022,7 +1021,7 @@ void ActiveTexture(GLenum texture) {
 void GenQueries(GLsizei n, GLuint *result) {
         for (int i = 0; i < n; i++) {
                 Query q;
-                ctx->queries.insert(pair<GLuint, Query>(ctx->query_count, q));
+                ctx->queries.insert(std::pair<GLuint, Query>(ctx->query_count, q));
                 result[i] = ctx->query_count++;
         }
 }
@@ -1046,7 +1045,7 @@ void DeleteQuery(GLuint n) {
 void GenBuffers(int n, int *result) {
         for (int i = 0; i < n; i++) {
                 Buffer b;
-                ctx->buffers.insert(pair<GLuint, Buffer>(ctx->buffer_count, b));
+                ctx->buffers.insert(std::pair<GLuint, Buffer>(ctx->buffer_count, b));
                 result[i] = ctx->buffer_count++;
         }
 }
@@ -1070,7 +1069,7 @@ void DeleteBuffer(GLuint n) {
 void GenVertexArrays(int n, int *result) {
         for (int i = 0; i < n; i++) {
                 VertexArray v;
-                ctx->vertex_arrays.insert(pair<GLuint, VertexArray>(ctx->vertex_array_count, v));
+                ctx->vertex_arrays.insert(std::pair<GLuint, VertexArray>(ctx->vertex_array_count, v));
                 result[i] = ctx->vertex_array_count++;
         }
 }
@@ -1092,7 +1091,7 @@ void DeleteVertexArray(GLuint n) {
 GLuint CreateShader(GLenum type) {
         Shader s;
         s.type = type;
-        ctx->shaders.insert(pair<GLuint, Shader>(ctx->shader_count, s));
+        ctx->shaders.insert(std::pair<GLuint, Shader>(ctx->shader_count, s));
         return ctx->shader_count++;
 }
 
@@ -1126,7 +1125,7 @@ void DeleteShader(GLuint shader) {
 
 GLuint CreateProgram() {
         Program p;
-        ctx->programs.insert(pair<GLuint, Program>(ctx->program_count, p));
+        ctx->programs.insert(std::pair<GLuint, Program>(ctx->program_count, p));
         return ctx->program_count++;
 }
 
@@ -1551,7 +1550,7 @@ void TexParameteri(GLenum target, GLenum pname, GLint param) {
 void GenTextures(int n, int *result) {
         for (int i = 0; i < n; i++) {
                 Texture t;
-                ctx->textures.insert(pair<GLuint, Texture>(ctx->texture_count, t));
+                ctx->textures.insert(std::pair<GLuint, Texture>(ctx->texture_count, t));
                 result[i] = ctx->texture_count++;
         }
 }
@@ -1575,7 +1574,7 @@ void DeleteTexture(GLuint n) {
 void GenRenderbuffers(int n, int *result) {
         for (int i = 0; i < n; i++) {
                 Renderbuffer r;
-                ctx->renderbuffers.insert(pair<GLuint, Renderbuffer>(ctx->renderbuffer_count, r));
+                ctx->renderbuffers.insert(std::pair<GLuint, Renderbuffer>(ctx->renderbuffer_count, r));
                 result[i] = ctx->renderbuffer_count++;
         }
 }
@@ -1613,7 +1612,7 @@ void DeleteRenderbuffer(GLuint n) {
 void GenFramebuffers(int n, int *result) {
         for (int i = 0; i < n; i++) {
                 Framebuffer f;
-                ctx->framebuffers.insert(pair<GLuint, Framebuffer>(ctx->framebuffer_count, f));
+                ctx->framebuffers.insert(std::pair<GLuint, Framebuffer>(ctx->framebuffer_count, f));
                 result[i] = ctx->framebuffer_count++;
         }
 }
