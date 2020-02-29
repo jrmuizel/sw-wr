@@ -153,7 +153,6 @@ fn main() {
         .cpp(true)
         .file("src/gl.cc")
         .flag("-UMOZILLA_CONFIG_H")
-        .flag("-std=c++14")
         .include(shader_dir)
         .include("src")
         .include(std::env::var("OUT_DIR").unwrap())
