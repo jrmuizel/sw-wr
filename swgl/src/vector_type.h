@@ -228,6 +228,14 @@ template <typename T> SI VectorType<T, 16> zipHigh(VectorType<T, 16> a, VectorTy
     return SHUFFLE(a, b, 8, 9, 10, 11, 12, 13, 14, 15, 24, 25, 26, 27, 28, 29, 30, 31);
 }
 
+template <typename T> SI VectorType<T, 8> zip2Low(VectorType<T, 8> a, VectorType<T, 8> b) {
+    return SHUFFLE(a, b, 0, 1, 8, 9, 2, 3, 10, 11);
+}
+
+template <typename T> SI VectorType<T, 8> zip2High(VectorType<T, 8> a, VectorType<T, 8> b) {
+    return SHUFFLE(a, b, 4, 5, 12, 13, 6, 7, 14, 15);
+}
+
 template <typename T> using V2 = VectorType<T, 2>;
 template <typename T> using V4 = VectorType<T, 4>;
 using Float = V4<float>;

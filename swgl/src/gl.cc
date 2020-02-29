@@ -2435,8 +2435,8 @@ static inline WideRGBA8 pack_pixels_RGBA8(const vec4& v) {
     HalfRGBA8 yw = packRGBA8(i.y, i.w);
     HalfRGBA8 xy = zipLow(xz, yw);
     HalfRGBA8 zw = zipHigh(xz, yw);
-    HalfRGBA8 lo = SHUFFLE(xy, zw, 0, 1, 8, 9, 2, 3, 10, 11);
-    HalfRGBA8 hi = SHUFFLE(xy, zw, 4, 5, 12, 13, 6, 7, 14, 15);
+    HalfRGBA8 lo = zip2Low(xy, zw);
+    HalfRGBA8 hi = zip2High(xy, zw);
     return combine(lo, hi);
 }
 

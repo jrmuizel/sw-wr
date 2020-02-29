@@ -2466,8 +2466,8 @@ vec4 textureLinearRGBA8(S sampler, vec2 P, I32 zoffset = 0) {
     auto b1 = CONVERT(unaligned_load<V8<uint8_t>>(&sampler->buf[row1.y]), V8<int16_t>);
     b0 += ((b1 - b0) * fracy.y) >> 7;
 
-    auto abl = SHUFFLE(a0, b0, 0, 8, 1, 9, 2, 10, 3, 11);
-    auto abh = SHUFFLE(a0, b0, 4, 12, 5, 13, 6, 14, 7, 15);
+    auto abl = zipLow(a0, b0);
+    auto abh = zipHigh(a0, b0);
     abl += ((abh - abl) * fracx.xyxyxyxy) >> 7;
 
     auto c0 = CONVERT(unaligned_load<V8<uint8_t>>(&sampler->buf[row0.z]), V8<int16_t>);
@@ -2478,12 +2478,12 @@ vec4 textureLinearRGBA8(S sampler, vec2 P, I32 zoffset = 0) {
     auto d1 = CONVERT(unaligned_load<V8<uint8_t>>(&sampler->buf[row1.w]), V8<int16_t>);
     d0 += ((d1 - d0) * fracy.w) >> 7;
 
-    auto cdl = SHUFFLE(c0, d0, 0, 8, 1, 9, 2, 10, 3, 11);
-    auto cdh = SHUFFLE(c0, d0, 4, 12, 5, 13, 6, 14, 7, 15);
+    auto cdl = zipLow(c0, d0);
+    auto cdh = zipHigh(c0, d0);
     cdl += ((cdh - cdl) * fracx.zwzwzwzw) >> 7;
 
-    auto rg = CONVERT(V8<uint16_t>(SHUFFLE(abl, cdl, 0, 1, 8, 9, 2, 3, 10, 11)), V8<float>);
-    auto ba = CONVERT(V8<uint16_t>(SHUFFLE(abl, cdl, 4, 5, 12, 13, 6, 7, 14, 15)), V8<float>);
+    auto rg = CONVERT(V8<uint16_t>(zip2Low(abl, cdl), V8<float>);
+    auto ba = CONVERT(V8<uint16_t>(zip2High(abl, cdl), V8<float>);
 
     auto r = lowHalf(rg);
     auto g = highHalf(rg);
