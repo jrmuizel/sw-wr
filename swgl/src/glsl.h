@@ -2482,8 +2482,8 @@ vec4 textureLinearRGBA8(S sampler, vec2 P, I32 zoffset = 0) {
     auto cdh = zipHigh(c0, d0);
     cdl += ((cdh - cdl) * fracx.zwzwzwzw) >> 7;
 
-    auto rg = CONVERT(V8<uint16_t>(zip2Low(abl, cdl), V8<float>);
-    auto ba = CONVERT(V8<uint16_t>(zip2High(abl, cdl), V8<float>);
+    auto rg = CONVERT(V8<uint16_t>(zip2Low(abl, cdl)), V8<float>);
+    auto ba = CONVERT(V8<uint16_t>(zip2High(abl, cdl)), V8<float>);
 
     auto r = lowHalf(rg);
     auto g = highHalf(rg);

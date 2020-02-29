@@ -2,8 +2,6 @@
 #ifdef __MACH__
 #include <mach/mach.h>
 #include <mach/mach_time.h>
-#elif defined(_WIN32)
-#include <chrono>
 #else
 #include <time.h>
 #endif
@@ -11,6 +9,7 @@
 #include <map>
 #include <string>
 #include <algorithm>
+
 #include "glsl.h"
 
 #ifdef NDEBUG
@@ -1185,9 +1184,7 @@ static uint64_t get_time_value() {
 #ifdef  __MACH__
         return mach_absolute_time();
 #elif defined(_WIN32)
-        auto now = std::chrono::steady_clock::now();
-        std::chrono::duration<uint64_t, std::nano> ns = now.time_since_epoch();
-        return ns.count();
+        return uint64_t(clock()) * (1000000000ULL / CLOCKS_PER_SEC);
 #else
         return ({ struct timespec tp; clock_gettime(CLOCK_MONOTONIC, &tp); tp.tv_sec * 1000000000ULL + tp.tv_nsec; });
 #endif
@@ -3085,7 +3082,9 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
             v.validate();
         }
 
+#ifndef NDEBUG
         uint64_t start = get_time_value();
+#endif
 
         ctx->shaded_rows = 0;
         ctx->shaded_pixels = 0;
@@ -3137,8 +3136,10 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
             q.value += ctx->shaded_pixels;
         }
 
+#ifndef NDEBUG
         uint64_t end = get_time_value();
         debugf("draw(%d): %fms for %d pixels in %d rows (avg %f pixels/row, %f ns/pixel)\n", instancecount, double(end - start)/(1000.*1000.), ctx->shaded_pixels, ctx->shaded_rows, double(ctx->shaded_pixels)/ctx->shaded_rows, double(end - start)/std::max(ctx->shaded_pixels, 1));
+#endif
 }
 
 void Finish() {
