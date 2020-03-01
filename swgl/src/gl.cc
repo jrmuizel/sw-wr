@@ -132,6 +132,7 @@ int bytes_for_internal_format(GLenum internal_format) {
                 default:
                         debugf("internal format: %x\n", internal_format);
                         assert(0);
+                        return 0;
         }
 }
 
@@ -145,7 +146,7 @@ glsl::TextureFormat gl_format_to_texture_format(int type) {
                 case GL_RGBA32I: return glsl::TextureFormat::RGBA32I;
                 case GL_RGBA8: return glsl::TextureFormat::RGBA8;
                 case GL_R8: return glsl::TextureFormat::R8;
-                default: assert(0);
+                default: assert(0); return glsl::TextureFormat::RGBA8;
         }
 }
 
@@ -220,7 +221,7 @@ glsl::TextureFilter gl_filter_to_texture_filter(int type) {
                 case GL_LINEAR: return glsl::TextureFilter::LINEAR;
                 case GL_LINEAR_MIPMAP_LINEAR: return glsl::TextureFilter::LINEAR;
                 case GL_LINEAR_MIPMAP_NEAREST: return glsl::TextureFilter::LINEAR;
-                default: assert(0);
+                default: assert(0);  return glsl::TextureFilter::NEAREST;
         }
 }
 
@@ -698,7 +699,7 @@ int bytes_per_type(GLenum type) {
                 case GL_FLOAT: return 4;
                 case GL_UNSIGNED_SHORT: return 2;
                 case GL_UNSIGNED_BYTE: return 1;
-                default: assert(0);
+                default: assert(0); return 0;
         }
 }
 
@@ -923,6 +924,7 @@ const char *GetString(GLenum name) {
     default:
         debugf("unhandled glGetString parameter %x\n", name);
         assert(false);
+        return nullptr;
     }
 }
 
@@ -936,6 +938,7 @@ const char *GetStringi(GLenum name, GLuint index) {
     default:
         debugf("unhandled glGetStringi parameter %x\n", name);
         assert(false);
+        return nullptr;
     }
 }
 
@@ -2265,11 +2268,9 @@ void BlitFramebuffer(
     if (!srcfb) return;
     Framebuffer *dstfb = get_framebuffer(GL_DRAW_FRAMEBUFFER);
     if (!dstfb) return;
-    int srcWidth = srcX1 - srcX0;
-    int srcHeight = srcY1 - srcY0;
     int dstWidth = dstX1 - dstX0;
     int dstHeight = dstY1 - dstY0;
-    assert(srcWidth == dstWidth && srcHeight == abs(dstHeight));
+    assert(srcX1 - srcX0 == dstWidth && srcY1 - srcY0 == abs(dstHeight));
     CopyImageSubData(
         srcfb->color_attachment, GL_TEXTURE_2D_ARRAY, 0, srcX0, srcY0, srcfb->layer,
         dstfb->color_attachment, GL_TEXTURE_2D_ARRAY, 0, dstX0, dstY0, dstfb->layer,
