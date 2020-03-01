@@ -2,7 +2,6 @@
 #include <stdint.h>
 #include <assert.h>
 #include <math.h>
-#include <array>
 
 #ifdef __clang__
   #ifdef __SSE2__
@@ -560,15 +559,6 @@ SI vec2 if_then_else(I32 c, vec2 t, vec2 e) {
 
 SI vec2 if_then_else(int32_t c, vec2 t, vec2 e) {
     return c ? t : e;
-}
-
-template <size_t SIZE>
-std::array<vec2, SIZE> if_then_else(I32 c, std::array<vec2, SIZE> t, std::array<vec2, SIZE> e) {
-    std::array<vec2, SIZE> r;
-    for(size_t i = 0; i < SIZE; i++) {
-        r[i] = if_then_else(c, t[i], e[i]);
-    }
-    return r;
 }
 
 vec2 step(vec2 edge, vec2 x) {
@@ -2885,6 +2875,12 @@ ivec4_scalar get_nth(ivec4 a, int n) {
         return ivec4_scalar{a.x[n], a.y[n], a.z[n], a.w[n]};
 }
 
+mat3_scalar get_nth(mat3 a, int n) {
+        return make_mat3(get_nth(a[0], n),
+                         get_nth(a[1], n),
+                         get_nth(a[2], n));
+}
+
 void put_nth(Float &dst, int n, float src) {
         dst[n] = src;
 }
@@ -3024,20 +3020,23 @@ vec4 init_interp(vec4_scalar init, vec4_scalar step) {
     return vec4(init_interp(init.x, step.x), init_interp(init.y, step.y), init_interp(init.z, step.z), init_interp(init.w, step.w));
 }
 
+template <typename T, size_t N>
+struct Array {
+    T elements[N];
+    T& operator[](size_t i) { return elements[i]; }
+    const T& operator[](size_t i) const { return elements[i]; }
+    template<typename S> void convert(const Array<S, N>& s) {
+        for (size_t i = 0; i < N; ++i) elements[i] = T(s[i]);
+    }
+};
+
 template <size_t SIZE>
-std::array<int32_t, SIZE> get_nth(std::array<int32_t, SIZE> a, int n) {
-    return a;
-}
-
-mat3_scalar get_nth(mat3 a, int n) {
-        return make_mat3(get_nth(a[0], n),
-                         get_nth(a[1], n),
-                         get_nth(a[2], n));
-}
-
-template<typename D, typename S, size_t N>
-SI void convert_array(std::array<D, N>& d, std::array<S, N>& s) {
-    for (size_t i = 0; i < N; ++i) d[i] = D(s[i]);
+Array<vec2, SIZE> if_then_else(I32 c, Array<vec2, SIZE> t, Array<vec2, SIZE> e) {
+    Array<vec2, SIZE> r;
+    for(size_t i = 0; i < SIZE; i++) {
+        r[i] = if_then_else(c, t[i], e[i]);
+    }
+    return r;
 }
 
 #if USE_SSE2
