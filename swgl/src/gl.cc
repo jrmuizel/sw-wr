@@ -1,6 +1,10 @@
 #include <stdlib.h>
+#include <stdint.h>
 #include <string.h>
 #include <assert.h>
+#include <stdio.h>
+#include <math.h>
+
 #ifdef __MACH__
 #include <mach/mach.h>
 #include <mach/mach_time.h>
@@ -14,8 +18,21 @@
 #ifdef NDEBUG
 #define debugf(...)
 #else
-#include <stdio.h>
 #define debugf(...) printf(__VA_ARGS__)
+#endif
+
+#ifdef _WIN32
+    #define ALWAYS_INLINE __forceinline
+#else
+    #define ALWAYS_INLINE __attribute__((always_inline)) inline
+#endif
+
+#define UNREACHABLE __builtin_unreachable()
+
+#ifdef MOZILLA_CLIENT
+#define IMPLICIT __attribute__((annotate("moz_implicit")))
+#else
+#define IMPLICIT
 #endif
 
 #include "glsl.h"

@@ -1,3 +1,14 @@
+#ifdef __clang__
+  #ifdef __SSE2__
+    #include <xmmintrin.h>
+    #define USE_SSE2 1
+  #endif
+  #ifdef __ARM_NEON
+    #include <arm_neon.h>
+    #define USE_NEON 1
+  #endif
+#endif
+
 namespace glsl {
 
 #ifdef __clang__

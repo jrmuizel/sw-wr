@@ -1,35 +1,6 @@
-#include <string.h>
-#include <stdint.h>
-#include <assert.h>
-#include <math.h>
-
-#ifdef __clang__
-  #ifdef __SSE2__
-    #include <xmmintrin.h>
-    #define USE_SSE2 1
-  #endif
-  #ifdef __ARM_NEON
-    #include <arm_neon.h>
-    #define USE_NEON 1
-  #endif
-#endif
-
 // Some of this is copied from Skia and is governed by a BSD-style license
 // Every function in this file should be marked static and inline using SI.
-#ifdef _WIN32
-    #define ALWAYS_INLINE __forceinline
-#else
-    #define ALWAYS_INLINE __attribute__((always_inline)) inline
-#endif
 #define SI ALWAYS_INLINE static
-
-#define UNREACHABLE __builtin_unreachable()
-
-#ifdef MOZILLA_CLIENT
-#define IMPLICIT __attribute__((annotate("moz_implicit")))
-#else
-#define IMPLICIT
-#endif
 
 #include "vector_type.h"
 
