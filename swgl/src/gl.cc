@@ -790,7 +790,7 @@ void setup_program(GLuint program) {
     fragment_shader = p.frag_impl;
 }
 
-extern ProgramImpl* load_shader(const std::string &name);
+extern ProgramImpl* load_shader(const char* name);
 
 extern "C" {
 
@@ -1169,7 +1169,7 @@ void LinkProgram(GLuint program) {
     Program &p = ctx->programs[program];
     assert(p.vs_name == p.fs_name);
 
-    p.impl = load_shader(p.vs_name);
+    p.impl = load_shader(p.vs_name.c_str());
     if (!p.impl) {
         debugf("unknown program %s\n", p.vs_name.c_str());
     }

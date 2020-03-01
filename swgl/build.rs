@@ -9,9 +9,9 @@ fn write_load_shader(shaders: &[&str]) {
     for s in shaders {
         let _ = write!(load_shader, "#include \"{}.h\"\n", s);
     }
-    load_shader.push_str("ProgramImpl* load_shader(const std::string& name) {\n");
+    load_shader.push_str("ProgramImpl* load_shader(const char* name) {\n");
     for s in shaders {
-        let _ = write!(load_shader, "  if (name == \"{}\") {{ return new {}_program; }}\n", s, s.replace(".", "_"));
+        let _ = write!(load_shader, "  if (!strcmp(name, \"{}\")) {{ return new {}_program; }}\n", s, s.replace(".", "_"));
     }
     load_shader.push_str("  return nullptr;\n}\n");
     std::fs::write(std::env::var("OUT_DIR").unwrap() + "/load_shader.h", load_shader).unwrap();
