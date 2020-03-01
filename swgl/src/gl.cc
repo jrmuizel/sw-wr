@@ -13,7 +13,6 @@
 #endif
 
 #include <map>
-#include <string>
 
 #ifdef NDEBUG
 #define debugf(...)
@@ -310,30 +309,29 @@ struct VertexArray {
     void validate();
 };
 
-#define GL_VERTEX_SHADER                  0x8B31
-#define GL_FRAGMENT_SHADER                0x8B30
-struct Shader {
-    GLenum type = 0;
-    std::string name;
-};
-
 struct VertexShaderImpl;
 struct FragmentShaderImpl;
 
 struct ProgramImpl {
     virtual ~ProgramImpl() {}
-    virtual const char *get_name() const = 0;
-    virtual int get_uniform(const char *name) const = 0;
+    virtual int get_uniform(const char* name) const = 0;
     virtual bool set_sampler(int index, int value) = 0;
-    virtual void bind_attrib(const char *name, int index) = 0;
+    virtual void bind_attrib(const char* name, int index) = 0;
+    virtual int get_attrib(const char* name) const = 0;
     virtual VertexShaderImpl* get_vertex_shader() = 0;
     virtual FragmentShaderImpl* get_fragment_shader() = 0;
 };
 
+typedef ProgramImpl* (*ProgramLoader)();
+
+#define GL_VERTEX_SHADER                  0x8B31
+#define GL_FRAGMENT_SHADER                0x8B30
+struct Shader {
+    GLenum type = 0;
+    ProgramLoader loader = nullptr;
+};
+
 struct Program {
-    std::string vs_name;
-    std::string fs_name;
-    std::map<std::string, int> attribs;
     ProgramImpl* impl = nullptr;
     VertexShaderImpl* vert_impl = nullptr;
     FragmentShaderImpl* frag_impl = nullptr;
@@ -790,7 +788,7 @@ void setup_program(GLuint program) {
     fragment_shader = p.frag_impl;
 }
 
-extern ProgramImpl* load_shader(const char* name);
+extern ProgramLoader load_shader(const char* name);
 
 extern "C" {
 
@@ -1118,16 +1116,19 @@ GLuint CreateShader(GLenum type) {
 
 void ShaderSourceByName(GLuint shader, char* name) {
     Shader &s = ctx->shaders[shader];
-    s.name = name;
+    s.loader = load_shader(name);
+    if (!s.loader) {
+        debugf("unknown shader %s\n", name);
+    }
 }
 
 void AttachShader(GLuint program, GLuint shader) {
     Program &p = ctx->programs[program];
     Shader &s = ctx->shaders[shader];
     if (s.type == GL_VERTEX_SHADER) {
-        p.vs_name = s.name;
+        if (!p.impl && s.loader) p.impl = s.loader();
     } else if (s.type == GL_FRAGMENT_SHADER) {
-        p.fs_name = s.name;
+        if (!p.impl && s.loader) p.impl = s.loader();
     } else {
         assert(0);
     }
@@ -1167,31 +1168,21 @@ void DeleteProgram(GLuint program) {
 
 void LinkProgram(GLuint program) {
     Program &p = ctx->programs[program];
-    assert(p.vs_name == p.fs_name);
-
-    p.impl = load_shader(p.vs_name.c_str());
-    if (!p.impl) {
-        debugf("unknown program %s\n", p.vs_name.c_str());
-    }
-
     assert(p.impl);
-    for (auto i : p.attribs) {
-        p.impl->bind_attrib(i.first.c_str(), i.second);
-    }
-
-    p.vert_impl = p.impl->get_vertex_shader();
-    p.frag_impl = p.impl->get_fragment_shader();
+    if (!p.vert_impl) p.vert_impl = p.impl->get_vertex_shader();
+    if (!p.frag_impl) p.frag_impl = p.impl->get_fragment_shader();
 }
 
 void BindAttribLocation(GLuint program, GLuint index, char *name) {
     Program &p = ctx->programs[program];
-    p.attribs[name] = index;
+    assert(p.impl);
+    p.impl->bind_attrib(name, index);
 }
 
 GLint GetAttribLocation(GLuint program, char* name) {
     Program &p = ctx->programs[program];
-    auto i = p.attribs.find(name);
-    return i != p.attribs.end() ? i->second : -1;
+    assert(p.impl);
+    return p.impl->get_attrib(name);
 }
 
 GLint GetUniformLocation(GLuint program, char* name) {

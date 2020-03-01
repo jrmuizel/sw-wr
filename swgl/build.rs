@@ -9,9 +9,9 @@ fn write_load_shader(shaders: &[&str]) {
     for s in shaders {
         let _ = write!(load_shader, "#include \"{}.h\"\n", s);
     }
-    load_shader.push_str("ProgramImpl* load_shader(const char* name) {\n");
+    load_shader.push_str("ProgramLoader load_shader(const char* name) {\n");
     for s in shaders {
-        let _ = write!(load_shader, "  if (!strcmp(name, \"{}\")) {{ return new {}_program; }}\n", s, s.replace(".", "_"));
+        let _ = write!(load_shader, "  if (!strcmp(name, \"{}\")) {{ return {}_program::loader; }}\n", s, s);
     }
     load_shader.push_str("  return nullptr;\n}\n");
     std::fs::write(std::env::var("OUT_DIR").unwrap() + "/load_shader.h", load_shader).unwrap();
@@ -96,25 +96,25 @@ const WR_SHADERS: &'static [&'static str] = &[
     "brush_blend",
     "brush_imageALPHA_PASS",
     "brush_image",
-    "brush_imageREPETITION.ANTIALIASING.ALPHA_PASS",
-    "brush_imageREPETITION.ANTIALIASING",
+    "brush_imageREPETITION_ANTIALIASING_ALPHA_PASS",
+    "brush_imageREPETITION_ANTIALIASING",
     "brush_linear_gradientALPHA_PASS",
-    "brush_linear_gradientDITHERING.ALPHA_PASS",
+    "brush_linear_gradientDITHERING_ALPHA_PASS",
     "brush_linear_gradientDITHERING",
     "brush_linear_gradient",
     "brush_mix_blendALPHA_PASS",
     "brush_mix_blend",
     "brush_opacityALPHA_PASS",
     "brush_radial_gradientALPHA_PASS",
-    "brush_radial_gradientDITHERING.ALPHA_PASS",
+    "brush_radial_gradientDITHERING_ALPHA_PASS",
     "brush_radial_gradientDITHERING",
     "brush_radial_gradient",
     "brush_solidALPHA_PASS",
     "brush_solid",
     "brush_yuv_image",
-    "brush_yuv_imageTEXTURE_2D.YUV_NV12",
+    "brush_yuv_imageTEXTURE_2D_YUV_NV12",
     "brush_yuv_imageYUV_INTERLEAVED",
-    "brush_yuv_imageYUV_NV12.ALPHA_PASS",
+    "brush_yuv_imageYUV_NV12_ALPHA_PASS",
     "brush_yuv_imageYUV_NV12",
     "brush_yuv_imageYUV_PLANAR",
     "composite",
@@ -135,7 +135,7 @@ const WR_SHADERS: &'static [&'static str] = &[
     "ps_split_composite",
     "ps_text_runDUAL_SOURCE_BLENDING",
     "ps_text_runGLYPH_TRANSFORM",
-    "ps_text_runDUAL_SOURCE_BLENDING.GLYPH_TRANSFORM",
+    "ps_text_runDUAL_SOURCE_BLENDING_GLYPH_TRANSFORM",
     "ps_text_run",
 ];
 
