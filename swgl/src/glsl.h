@@ -138,6 +138,13 @@ SI Bool if_then_else(int32_t c, Bool t, Bool e) {
     return c ? t : e;
 }
 
+SI int32_t min(int32_t a, int32_t b) { return a < b ? a : b; }
+SI int32_t max(int32_t a, int32_t b) { return a > b ? a : b; }
+
+SI int32_t clamp(int32_t a, int32_t minVal, int32_t maxVal) {
+        return min(max(a, minVal), maxVal);
+}
+
 SI float min(float a, float b) { return a < b ? a : b; }
 SI float max(float a, float b) { return a > b ? a : b; }
 
@@ -2136,7 +2143,7 @@ SI I32 clampCoord(I32 coord, int limit) {
 #endif
 }
 SI int clampCoord(int coord, int limit) {
-    return std::min(std::max(coord, 0), limit-1);
+    return min(max(coord, 0), limit-1);
 }
 template<typename T, typename S> SI T clamp2D(T P, S sampler) {
     return T{clampCoord(P.x, sampler->width), clampCoord(P.y, sampler->height)};
@@ -2348,15 +2355,15 @@ ivec4_scalar texelFetch(isampler2D sampler, ivec2_scalar P, int lod) {
 }
 
 SI vec4_scalar* texelFetchPtr(sampler2D sampler, ivec2_scalar P, int min_x, int max_x, int min_y, int max_y) {
-        P.x = std::min(std::max(P.x, -min_x), int(sampler->width) - 1 - max_x);
-        P.y = std::min(std::max(P.y, -min_y), int(sampler->height) - 1 - max_y);
+        P.x = min(max(P.x, -min_x), int(sampler->width) - 1 - max_x);
+        P.y = min(max(P.y, -min_y), int(sampler->height) - 1 - max_y);
         assert(sampler->format == TextureFormat::RGBA32F);
         return (vec4_scalar*)&sampler->buf[P.x*4 + P.y*sampler->stride];
 }
 
 SI ivec4_scalar* texelFetchPtr(isampler2D sampler, ivec2_scalar P, int min_x, int max_x, int min_y, int max_y) {
-        P.x = std::min(std::max(P.x, -min_x), int(sampler->width) - 1 - max_x);
-        P.y = std::min(std::max(P.y, -min_y), int(sampler->height) - 1 - max_y);
+        P.x = min(max(P.x, -min_x), int(sampler->width) - 1 - max_x);
+        P.y = min(max(P.y, -min_y), int(sampler->height) - 1 - max_y);
         assert(sampler->format == TextureFormat::RGBA32I);
         return (ivec4_scalar*)&sampler->buf[P.x*4 + P.y*sampler->stride];
 }

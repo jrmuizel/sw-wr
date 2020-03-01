@@ -1,3 +1,5 @@
+#include <stdlib.h>
+#include <string.h>
 #include <assert.h>
 #ifdef __MACH__
 #include <mach/mach.h>
@@ -8,15 +10,15 @@
 
 #include <map>
 #include <string>
-#include <algorithm>
-
-#include "glsl.h"
 
 #ifdef NDEBUG
 #define debugf(...)
 #else
+#include <stdio.h>
 #define debugf(...) printf(__VA_ARGS__)
 #endif
+
+#include "glsl.h"
 
 using namespace glsl;
 
@@ -259,7 +261,7 @@ struct Texture {
 
     void allocate(bool force = false, int min_width = 0, int min_height = 0) {
         if ((!buf || force) && should_free()) {
-            size_t size = size_t(aligned_stride(bytes_for_internal_format(internal_format) * std::max(width, min_width))) * std::max(height, min_height) * std::max(depth, 1) * levels;
+            size_t size = size_t(aligned_stride(bytes_for_internal_format(internal_format) * max(width, min_width))) * max(height, min_height) * max(depth, 1) * levels;
             if (!buf || size > buf_size) {
                 buf = (char*)realloc(buf, size + sizeof(Float));
                 buf_size = size;
@@ -1698,7 +1700,7 @@ void EnableVertexAttribArray(GLuint index) {
             ctx->validate_vertex_array = true;
         }
         va.enabled = true;
-        v.max_attrib = std::max(v.max_attrib, (int)index);
+        v.max_attrib = max(v.max_attrib, (int)index);
 }
 
 void DisableVertexAttribArray(GLuint index) {
@@ -1866,23 +1868,25 @@ Framebuffer *get_framebuffer(GLenum target) {
     return nullptr;
 }
 
-static inline void memset32(void* dst, uint32_t val, size_t n) {
+template <typename T> static inline void fill_n(T* dst, size_t n, T val) {
+    for (T* end = &dst[n]; dst < end; dst++) *dst = val;
+}
+
 #if USE_SSE2
+template <> inline void fill_n<uint32_t>(uint32_t* dst, size_t n, uint32_t val) {
     __asm__ __volatile__ (
         "rep stosl\n"
         : "+D"(dst), "+c"(n)
         : "a"(val)
         : "memory", "cc"
     );
-#else
-    std::fill_n((uint32_t*)dst, n, val);
-#endif
 }
+#endif
 
 template<typename T>
 static void clear_buffer(Texture& t, T value, int x0, int x1, int y0, int y1, int layer = 0, int skip_start = 0, int skip_end = 0) {
-    skip_start = std::max(skip_start, x0);
-    skip_end = std::max(skip_end, skip_start);
+    skip_start = max(skip_start, x0);
+    skip_end = max(skip_end, skip_start);
     int stride = aligned_stride(sizeof(T) * t.width);
     if (x1 - x0 == t.width && y1 - y0 > 1 && skip_start >= skip_end) {
         x1 += (stride / sizeof(T)) * (y1 - y0 - 1);
@@ -1892,16 +1896,16 @@ static void clear_buffer(Texture& t, T value, int x0, int x1, int y0, int y1, in
     uint32_t chunk = sizeof(T) == 1 ? uint32_t(value) * 0x01010101U : (sizeof(T) == 2 ? uint32_t(value) | (uint32_t(value) << 16) : value);
     for (int y = y0; y < y1; y++) {
         if (x0 < skip_start) {
-            memset32(buf, chunk, (skip_start - x0) / (4 / sizeof(T)));
+            fill_n((uint32_t*)buf, (skip_start - x0) / (4 / sizeof(T)), chunk);
             if (sizeof (T) < 4) {
-                std::fill((T*)buf + ((skip_start - x0) & ~(4 / sizeof(T) - 1)), (T*)buf + (skip_start - x0), value);
+                fill_n((T*)buf + ((skip_start - x0) & ~(4 / sizeof(T) - 1)), (skip_start - x0) & (4 / sizeof(T) - 1), value);
             }
         }
         if (skip_end < x1) {
             T* skip_buf = (T*)buf + (skip_end - x0);
-            memset32(skip_buf, chunk, (x1 - skip_end) / (4 / sizeof(T)));
+            fill_n((uint32_t*)skip_buf, (x1 - skip_end) / (4 / sizeof(T)), chunk);
             if (sizeof (T) < 4) {
-                std::fill(skip_buf + ((x1 - skip_end) & ~(4 / sizeof(T) - 1)), skip_buf + (x1 - skip_end), value);
+                fill_n(skip_buf + ((x1 - skip_end) & ~(4 / sizeof(T) - 1)), (x1 - skip_end) & (4 / sizeof(T) - 1), value);
             }
         }
         buf += stride;
@@ -1912,10 +1916,10 @@ template<typename T>
 static inline void clear_buffer(Texture& t, T value, int layer = 0) {
     int x0 = 0, y0 = 0, x1 = t.width, y1 = t.height;
     if (ctx->scissortest) {
-        x0 = std::max(x0, ctx->scissor.x);
-        y0 = std::max(y0, ctx->scissor.y);
-        x1 = std::min(x1, ctx->scissor.x + ctx->scissor.width);
-        y1 = std::min(y1, ctx->scissor.y + ctx->scissor.height);
+        x0 = max(x0, ctx->scissor.x);
+        y0 = max(y0, ctx->scissor.y);
+        x1 = min(x1, ctx->scissor.x + ctx->scissor.width);
+        y1 = min(y1, ctx->scissor.y + ctx->scissor.height);
     }
     if (x1 - x0 > 0) {
         clear_buffer<T>(t, value, x0, x1, y0, y1, layer);
@@ -1932,10 +1936,10 @@ static void force_clear(Texture& t, const IntRect* skip = nullptr) {
     int skip_start = 0;
     int skip_end = 0;
     if (skip) {
-        y0 = std::min(std::max(skip->y, 0), t.height);
-        y1 = std::min(std::max(skip->y + skip->height, y0), t.height);
-        skip_start = std::min(std::max(skip->x, 0), t.width);
-        skip_end = std::min(std::max(skip->x + skip->width, y0), t.width);
+        y0 = min(max(skip->y, 0), t.height);
+        y1 = min(max(skip->y + skip->height, y0), t.height);
+        skip_start = min(max(skip->x, 0), t.width);
+        skip_end = min(max(skip->x + skip->width, y0), t.width);
         if (skip_start <= 0 && skip_end >= t.width && y0 <= 0 && y1 >= t.height) {
             t.disable_delayed_clear();
             return;
@@ -2159,15 +2163,15 @@ void CopyImageSubData(
     if (!srctex.buf) return;
     prepare_texture(srctex);
     Texture &dsttex = ctx->textures[dstName];
-    IntRect skip = { dstX, dstY, srcWidth, std::abs(srcHeight) };
+    IntRect skip = { dstX, dstY, srcWidth, abs(srcHeight) };
     prepare_texture(dsttex, &skip);
     assert(srctex.internal_format == dsttex.internal_format);
     assert(srcX + srcWidth <= srctex.width);
     assert(srcY + srcHeight <= srctex.height);
-    assert(srcZ + srcDepth <= std::max(srctex.depth, 1));
+    assert(srcZ + srcDepth <= max(srctex.depth, 1));
     assert(dstX + srcWidth <= dsttex.width);
-    assert(std::max(dstY, dstY + srcHeight) <= dsttex.height);
-    assert(dstZ + srcDepth <= std::max(dsttex.depth, 1));
+    assert(max(dstY, dstY + srcHeight) <= dsttex.height);
+    assert(dstZ + srcDepth <= max(dsttex.depth, 1));
     int bpp = bytes_for_internal_format(srctex.internal_format);
     int src_stride = aligned_stride(bpp * srctex.width);
     int dest_stride = aligned_stride(bpp * dsttex.width);
@@ -2534,7 +2538,7 @@ static inline void commit_solid_span(uint32_t* buf, PackedRGBA8 r, int len) {
             unaligned_store(buf, pack(blend_pixels_RGBA8(unaligned_load<PackedRGBA8>(buf), src)));
         }
     } else {
-        memset32(buf, bit_cast<U32>(r).x, len);
+        fill_n(buf, len, bit_cast<U32>(r).x);
     }
 }
 
@@ -2652,7 +2656,7 @@ static inline void commit_solid_span(uint8_t* buf, PackedR8 r, int len) {
             unaligned_store(buf, pack(blend_pixels_R8(unpack(unaligned_load<PackedR8>(buf)), src)));
         }
     } else {
-        memset32(buf, bit_cast<uint32_t>(r), len / 4);
+        fill_n((uint32_t*)buf, len / 4, bit_cast<uint32_t>(r));
     }
 }
 
@@ -2826,7 +2830,7 @@ static inline void draw_quad_spans(int nump, Point p[4], uint16_t z, Interpolant
         float rk = 1.0f / (r1.y - r0.y);
         float rm = (r1.x - r0.x) * rk;
         assert(l0.y == r0.y);
-        float y = floor(std::max(l0.y, fy0) + 0.5f) + 0.5f;
+        float y = floor(max(l0.y, fy0) + 0.5f) + 0.5f;
         lx += (y - l0.y) * lm;
         rx += (y - r0.y) * rm;
         Interpolants lo = interp_outs[l0i];
@@ -2864,8 +2868,8 @@ static inline void draw_quad_spans(int nump, Point p[4], uint16_t z, Interpolant
                 rom = (interp_outs[r1i] - ro) * rk;
                 ro += rom * (y - r0.y);
             }
-            int startx = int(std::max(std::min(lx, rx), fx0) + 0.5f);
-            int endx = int(std::min(std::max(lx, rx), fx1) + 0.5f);
+            int startx = int(max(min(lx, rx), fx0) + 0.5f);
+            int endx = int(min(max(lx, rx), fx1) + 0.5f);
             int span = endx - startx;
             if (span > 0) {
                 ctx->shaded_rows++;
@@ -3009,10 +3013,10 @@ static void draw_quad(int nump, Texture& colortex, int layer, Texture& depthtex)
         float fx1 = colortex.width;
         float fy1 = colortex.height;
         if (ctx->scissortest) {
-            fx0 = std::max(fx0, float(ctx->scissor.x));
-            fy0 = std::max(fy0, float(ctx->scissor.y));
-            fx1 = std::min(fx1, float(ctx->scissor.x + ctx->scissor.width));
-            fy1 = std::min(fy1, float(ctx->scissor.y + ctx->scissor.height));
+            fx0 = max(fx0, float(ctx->scissor.x));
+            fy0 = max(fy0, float(ctx->scissor.y));
+            fx1 = min(fx1, float(ctx->scissor.x + ctx->scissor.width));
+            fy1 = min(fy1, float(ctx->scissor.y + ctx->scissor.height));
         }
 
         if (top_left.x >= fx1 || top_left.y >= fy1 || bot_right.x <= fx0 || bot_right.y <= fy0) {
@@ -3138,7 +3142,7 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
 
 #ifndef NDEBUG
         uint64_t end = get_time_value();
-        debugf("draw(%d): %fms for %d pixels in %d rows (avg %f pixels/row, %f ns/pixel)\n", instancecount, double(end - start)/(1000.*1000.), ctx->shaded_pixels, ctx->shaded_rows, double(ctx->shaded_pixels)/ctx->shaded_rows, double(end - start)/std::max(ctx->shaded_pixels, 1));
+        debugf("draw(%d): %fms for %d pixels in %d rows (avg %f pixels/row, %f ns/pixel)\n", instancecount, double(end - start)/(1000.*1000.), ctx->shaded_pixels, ctx->shaded_rows, double(ctx->shaded_pixels)/ctx->shaded_rows, double(end - start)/max(ctx->shaded_pixels, 1));
 #endif
 }
 
