@@ -1667,7 +1667,7 @@ void VertexAttribPointer(GLuint index,
         va.normalized = normalized;
         va.stride = stride;
         va.offset = offset;
-        Buffer &vertex_buf = ctx->buffers[ctx->current_buffer[GL_ARRAY_BUFFER]];
+        //Buffer &vertex_buf = ctx->buffers[ctx->current_buffer[GL_ARRAY_BUFFER]];
         va.vertex_buffer = ctx->current_buffer[GL_ARRAY_BUFFER];
         va.vertex_array = ctx->current_vertex_array;
         ctx->validate_vertex_array = true;
@@ -1687,7 +1687,7 @@ void VertexAttribIPointer(GLuint index,
         va.normalized = false;
         va.stride = stride;
         va.offset = offset;
-        Buffer &vertex_buf = ctx->buffers[ctx->current_buffer[GL_ARRAY_BUFFER]];
+        //Buffer &vertex_buf = ctx->buffers[ctx->current_buffer[GL_ARRAY_BUFFER]];
         va.vertex_buffer = ctx->current_buffer[GL_ARRAY_BUFFER];
         va.vertex_array = ctx->current_vertex_array;
         ctx->validate_vertex_array = true;
@@ -2497,7 +2497,7 @@ static inline WideRGBA8 blend_pixels_RGBA8(PackedRGBA8 pdst, WideRGBA8 src) {
     }
     default:
         UNREACHABLE;
-        return src;
+        //return src;
     }
     #undef MULDIV255
     #undef ALPHAS
@@ -2616,7 +2616,7 @@ static inline WideR8 blend_pixels_R8(WideR8 dst, WideR8 src) {
         return src;
     default:
         UNREACHABLE;
-        return src;
+        //return src;
     }
     #undef MULDIV255
 }
@@ -2710,7 +2710,13 @@ static ALWAYS_INLINE void dispatch_draw_span(S* shader, P* buf, int len) {
 }
 
 #include "texture.h"
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wuninitialized"
+#pragma GCC diagnostic ignored "-Wunused-variable"
+#pragma GCC diagnostic ignored "-Wimplicit-fallthrough"
 #include "load_shader.h"
+#pragma GCC diagnostic pop
 
 template<int FUNC, bool MASK, typename P>
 static inline void draw_depth_span(uint16_t z, P* buf, uint16_t* depth, int span) {
@@ -3044,7 +3050,7 @@ void VertexArray::validate() {
     for (int i = 0; i <= max_attrib; i++) {
         if (attribs[i].enabled) {
             VertexAttrib &attr = attribs[i];
-            VertexArray &v = ctx->vertex_arrays[attr.vertex_array];
+            //VertexArray &v = ctx->vertex_arrays[attr.vertex_array];
             Buffer &vertex_buf = ctx->buffers[attr.vertex_buffer];
             attr.buf = vertex_buf.buf;
             attr.buf_size = vertex_buf.size;
@@ -3095,7 +3101,7 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
 
         unsigned short *indices = (unsigned short*)indices_buf.buf;
         if (type == GL_UNSIGNED_INT) {
-            assert(indices_buf.size == count * 4);
+            assert(indices_buf.size == size_t(count) * 4);
             indices = (unsigned short*)calloc(count, sizeof(unsigned short));
             for (int i = 0; i < count; i++) {
                 unsigned int val = ((unsigned int *)indices_buf.buf)[i];
@@ -3103,7 +3109,7 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
                 indices[i] = val;
             }
         } else if (type == GL_UNSIGNED_SHORT) {
-            assert(indices_buf.size == count * 2);
+            assert(indices_buf.size == size_t(count) * 2);
         } else {
             assert(0);
         }

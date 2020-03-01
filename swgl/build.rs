@@ -152,6 +152,8 @@ fn main() {
     write_load_shader(WR_SHADERS);
 
     println!("cargo:rerun-if-changed=src/glsl.h");
+    println!("cargo:rerun-if-changed=src/vector_type.h");
+    println!("cargo:rerun-if-changed=src/texture.h");
     println!("cargo:rerun-if-changed=src/gl.cc");
     cc::Build::new()
         .cpp(true)
