@@ -151,6 +151,8 @@ fn main() {
 
     write_load_shader(WR_SHADERS);
 
+    println!("cargo:rerun-if-changed=src/glsl.h");
+    println!("cargo:rerun-if-changed=src/gl.cc");
     cc::Build::new()
         .cpp(true)
         .file("src/gl.cc")
