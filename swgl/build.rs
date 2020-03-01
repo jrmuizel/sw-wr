@@ -21,6 +21,7 @@ fn process_imports(shader_dir: &str, shader: &str, included: &mut HashSet<String
     if !included.insert(shader.into()) {
         return;
     }
+    println!("cargo:rerun-if-changed={}/{}.glsl", shader_dir, shader);
     let source = std::fs::read_to_string(format!("{}/{}.glsl", shader_dir, shader)).unwrap();
     for line in source.lines() {
         if line.starts_with("#include ") {
@@ -83,6 +84,7 @@ fn translate_shader(shader: &str, shader_dir: &str) {
     ];
     let frag_include = format!("{}/{}.frag.h", shader_dir, shader);
     if std::path::Path::new(&frag_include).exists() {
+        println!("cargo:rerun-if-changed={}/{}.frag.h", shader_dir, shader);
         args.push(frag_include);
     }
     let result = glsl_to_cxx::translate(&mut args.into_iter());
