@@ -31,10 +31,10 @@ extern "C" {
     fn BeginQuery(target: GLenum, id: GLuint);
     fn EndQuery(target: GLenum);
     fn GetQueryObjectui64v(id: GLuint, pname: GLenum, params: *mut GLuint64);
-    fn GenBuffers(n: i32, result: *mut u32);
-    fn GenTextures(n: i32, result: *mut u32);
-    fn GenFramebuffers(n: i32, result: *mut u32);
-    fn GenRenderbuffers(n: i32, result: *mut u32);
+    fn GenBuffers(n: i32, result: *mut GLuint);
+    fn GenTextures(n: i32, result: *mut GLuint);
+    fn GenFramebuffers(n: i32, result: *mut GLuint);
+    fn GenRenderbuffers(n: i32, result: *mut GLuint);
     fn BufferData(target: GLenum,
         size: GLsizeiptr,
         data: *const GLvoid,
@@ -124,7 +124,7 @@ extern "C" {
     fn GetUniformLocation(program: GLuint, name: *const GLchar) -> GLint;
     fn BindAttribLocation(program: GLuint, index: GLuint, name: *const GLchar);
     fn GetAttribLocation(program: GLuint, name: *const GLchar) -> GLint;
-    fn GenVertexArrays(n: i32, result: *mut u32);
+    fn GenVertexArrays(n: i32, result: *mut GLuint);
     fn VertexAttribPointer(
         index: GLuint,
         size: GLint,

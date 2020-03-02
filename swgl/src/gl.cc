@@ -12,8 +12,6 @@
 #include <time.h>
 #endif
 
-#include <map>
-
 #ifdef NDEBUG
 #define debugf(...)
 #else
@@ -189,13 +187,13 @@ struct Buffer {
 #define GL_FRAMEBUFFER                    0x8D40
 
 struct Framebuffer {
-        GLint color_attachment = 0;
+        GLuint color_attachment = 0;
         GLint layer = 0;
-        GLint depth_attachment = 0;
+        GLuint depth_attachment = 0;
 };
 
 struct Renderbuffer {
-        GLint texture = 0;
+        GLuint texture = 0;
 
         ~Renderbuffer();
 };
@@ -555,31 +553,76 @@ static inline bool unlink(T& binding, T n) {
     return false;
 }
 
+template<typename O>
+struct ObjectStore {
+    O** objects = nullptr;
+    size_t size = 0;
+    // reserve object 0 as null
+    size_t first_free = 1;
+
+    ~ObjectStore() {
+        if (objects) {
+            for (size_t i = 0; i < size; i++) delete objects[i];
+            free(objects);
+        }
+    }
+
+    void grow(size_t i) {
+        size_t new_size = size ? size : 8;
+        while (new_size <= i) new_size += new_size / 2;
+        objects = (O**)realloc(objects, new_size * sizeof(O*));
+        assert(objects);
+        while (size < new_size) objects[size++] = nullptr;
+    }
+
+    void insert(size_t i, const O& o) {
+        if (i >= size) grow(i);
+        if (!objects[i]) objects[i] = new O(o);
+    }
+
+    size_t next_free() {
+        size_t i = first_free;
+        while (i < size && objects[i]) i++;
+        first_free = i;
+        return i;
+    }
+
+    size_t insert(const O& o = O()) {
+        size_t i = next_free();
+        insert(i, o);
+        return i;
+    }
+
+    O& operator[](size_t i) {
+        insert(i, O());
+        return *objects[i];
+    }
+
+    O* find(size_t i) const { return i < size ? objects[i] : nullptr; }
+
+    bool erase(size_t i) {
+        if (i < size && objects[i]) {
+            delete objects[i];
+            objects[i] = nullptr;
+            if (i < first_free) first_free = i;
+            return true;
+        }
+        return false;
+    }
+
+    O** begin() const { return objects; }
+    O** end() const { return &objects[size]; }
+};
+
 struct Context {
-    bool validate_vertex_array = true;
-
-    GLuint current_program = 0;
-
-    std::map<GLuint, Query> queries;
-    std::map<GLuint, Buffer> buffers;
-    std::map<GLuint, Texture> textures;
-    std::map<GLuint, VertexArray> vertex_arrays;
-    std::map<GLuint, Framebuffer> framebuffers;
-    std::map<GLuint, Renderbuffer> renderbuffers;
-    std::map<GLuint, Shader> shaders;
-    std::map<GLuint, Program> programs;
-
-    GLuint query_count = 1;
-    GLuint buffer_count = 1;
-    GLuint texture_count = 1;
-
-    GLuint vertex_array_count = 1;
-    GLuint current_vertex_array;
-    GLuint shader_count = 1;
-
-    GLuint renderbuffer_count = 1;
-    GLuint framebuffer_count = 1;
-    GLuint program_count = 1;
+    ObjectStore<Query> queries;
+    ObjectStore<Buffer> buffers;
+    ObjectStore<Texture> textures;
+    ObjectStore<VertexArray> vertex_arrays;
+    ObjectStore<Framebuffer> framebuffers;
+    ObjectStore<Renderbuffer> renderbuffers;
+    ObjectStore<Shader> shaders;
+    ObjectStore<Program> programs;
 
     IntRect viewport = { 0, 0, 0, 0 };
 
@@ -621,12 +664,17 @@ struct Context {
     TextureUnit texture_units[MAX_TEXTURE_UNITS];
     int active_texture_unit = 0;
 
+    GLuint current_program = 0;
+
+    GLuint current_vertex_array = 0;
+    bool validate_vertex_array = true;
+
     GLuint pixel_pack_buffer_binding = 0;
     GLuint pixel_unpack_buffer_binding = 0;
     GLuint array_buffer_binding = 0;
     GLuint element_array_buffer_binding = 0;
-    GLuint time_elapsed_binding = 0;
-    GLuint samples_passed_binding = 0;
+    GLuint time_elapsed_query = 0;
+    GLuint samples_passed_query = 0;
     GLuint renderbuffer_binding = 0;
     GLuint draw_framebuffer_binding = 0;
     GLuint read_framebuffer_binding = 0;
@@ -641,8 +689,8 @@ struct Context {
         case GL_TEXTURE_2D: return texture_units[active_texture_unit].texture_2d_binding;
         case GL_TEXTURE_2D_ARRAY: return texture_units[active_texture_unit].texture_2d_array_binding;
         case GL_TEXTURE_3D: return texture_units[active_texture_unit].texture_3d_binding;
-        case GL_TIME_ELAPSED: return time_elapsed_binding;
-        case GL_SAMPLES_PASSED: return samples_passed_binding;
+        case GL_TIME_ELAPSED: return time_elapsed_query;
+        case GL_SAMPLES_PASSED: return samples_passed_query;
         case GL_RENDERBUFFER: return renderbuffer_binding;
         case GL_DRAW_FRAMEBUFFER: return draw_framebuffer_binding;
         case GL_READ_FRAMEBUFFER: return read_framebuffer_binding;
@@ -839,9 +887,9 @@ extern "C" {
 
 void UseProgram(GLuint program) {
     if (ctx->current_program && program != ctx->current_program) {
-        auto i = ctx->programs.find(ctx->current_program);
-        if (i != ctx->programs.end() && i->second.deleted) {
-            ctx->programs.erase(i);
+        auto *p = ctx->programs.find(ctx->current_program);
+        if (p && p->deleted) {
+            ctx->programs.erase(ctx->current_program);
         }
     }
     ctx->current_program = program;
@@ -1075,72 +1123,50 @@ void ActiveTexture(GLenum texture) {
 void GenQueries(GLsizei n, GLuint *result) {
         for (int i = 0; i < n; i++) {
                 Query q;
-                ctx->queries.insert(std::pair<GLuint, Query>(ctx->query_count, q));
-                result[i] = ctx->query_count++;
+                result[i] = ctx->queries.insert(q);
         }
 }
 
 void DeleteQuery(GLuint n) {
-    if (!n) {
-        return;
+    if (ctx->queries.erase(n)) {
+        unlink(ctx->time_elapsed_query, n);
+        unlink(ctx->samples_passed_query, n);
     }
-    auto i = ctx->queries.find(n);
-    if (i == ctx->queries.end()) {
-        return;
-    }
-    ctx->queries.erase(i);
-    unlink(ctx->time_elapsed_binding, n);
-    unlink(ctx->samples_passed_binding, n);
 }
 
-void GenBuffers(int n, int *result) {
+void GenBuffers(int n, GLuint *result) {
         for (int i = 0; i < n; i++) {
                 Buffer b;
-                ctx->buffers.insert(std::pair<GLuint, Buffer>(ctx->buffer_count, b));
-                result[i] = ctx->buffer_count++;
+                result[i] = ctx->buffers.insert(b);
         }
 }
 
 void DeleteBuffer(GLuint n) {
-    if (!n) {
-        return;
+    if (ctx->buffers.erase(n)) {
+        unlink(ctx->pixel_pack_buffer_binding, n);
+        unlink(ctx->pixel_unpack_buffer_binding, n);
+        unlink(ctx->array_buffer_binding, n);
+        unlink(ctx->element_array_buffer_binding, n);
     }
-    auto i = ctx->buffers.find(n);
-    if (i == ctx->buffers.end()) {
-        return;
-    }
-    ctx->buffers.erase(i);
-    unlink(ctx->pixel_pack_buffer_binding, n);
-    unlink(ctx->pixel_unpack_buffer_binding, n);
-    unlink(ctx->array_buffer_binding, n);
-    unlink(ctx->element_array_buffer_binding, n);
 }
 
-void GenVertexArrays(int n, int *result) {
+void GenVertexArrays(int n, GLuint *result) {
         for (int i = 0; i < n; i++) {
                 VertexArray v;
-                ctx->vertex_arrays.insert(std::pair<GLuint, VertexArray>(ctx->vertex_array_count, v));
-                result[i] = ctx->vertex_array_count++;
+                result[i] = ctx->vertex_arrays.insert(v);
         }
 }
 
 void DeleteVertexArray(GLuint n) {
-    if (!n) {
-        return;
+    if (ctx->vertex_arrays.erase(n)) {
+        unlink(ctx->current_vertex_array, n);
     }
-    auto i = ctx->vertex_arrays.find(n);
-    if (i == ctx->vertex_arrays.end()) {
-        return;
-    }
-    ctx->vertex_arrays.erase(i);
-    unlink(ctx->current_vertex_array, n);
 }
 
 GLuint CreateShader(GLenum type) {
         Shader s;
         s.type = type;
-        ctx->shaders.insert(std::pair<GLuint, Shader>(ctx->shader_count, s));
-        return ctx->shader_count++;
+        return ctx->shaders.insert(s);
 }
 
 void ShaderSourceByName(GLuint shader, char* name) {
@@ -1163,35 +1189,22 @@ void AttachShader(GLuint program, GLuint shader) {
     }
 }
 
-void DeleteShader(GLuint shader) {
-    if (!shader) {
-        return;
-    }
-    auto i = ctx->shaders.find(shader);
-    if (i == ctx->shaders.end()) {
-        return;
-    }
-    ctx->shaders.erase(i);
+void DeleteShader(GLuint n) {
+    ctx->shaders.erase(n);
 }
 
 GLuint CreateProgram() {
         Program p;
-        ctx->programs.insert(std::pair<GLuint, Program>(ctx->program_count, p));
-        return ctx->program_count++;
+        return ctx->programs.insert(p);
 }
 
-void DeleteProgram(GLuint program) {
-    if (!program) {
-        return;
-    }
-    auto i = ctx->programs.find(program);
-    if (i == ctx->programs.end()) {
-        return;
-    }
-    if (ctx->current_program == program) {
-        i->second.deleted = true;
+void DeleteProgram(GLuint n) {
+    if (ctx->current_program == n) {
+        if (auto* p = ctx->programs.find(n)) {
+            p->deleted = true;
+        }
     } else {
-        ctx->programs.erase(i);
+        ctx->programs.erase(n);
     }
 }
 
@@ -1581,78 +1594,58 @@ void TexParameteri(GLenum target, GLenum pname, GLint param) {
         }
 }
 
-void GenTextures(int n, int *result) {
+void GenTextures(int n, GLuint *result) {
         for (int i = 0; i < n; i++) {
                 Texture t;
-                ctx->textures.insert(std::pair<GLuint, Texture>(ctx->texture_count, t));
-                result[i] = ctx->texture_count++;
+                result[i] = ctx->textures.insert(t);
         }
 }
 
 void DeleteTexture(GLuint n) {
-    if (!n) {
-        return;
-    }
-    auto i = ctx->textures.find(n);
-    if (i == ctx->textures.end()) {
-        return;
-    }
-    ctx->textures.erase(i);
-    for (size_t i = 0; i < MAX_TEXTURE_UNITS; i++) {
-        ctx->texture_units[i].unlink(n);
+    if (ctx->textures.erase(n)) {
+        for (size_t i = 0; i < MAX_TEXTURE_UNITS; i++) {
+            ctx->texture_units[i].unlink(n);
+        }
     }
 }
 
-void GenRenderbuffers(int n, int *result) {
+void GenRenderbuffers(int n, GLuint *result) {
         for (int i = 0; i < n; i++) {
                 Renderbuffer r;
-                ctx->renderbuffers.insert(std::pair<GLuint, Renderbuffer>(ctx->renderbuffer_count, r));
-                result[i] = ctx->renderbuffer_count++;
+                result[i] = ctx->renderbuffers.insert(r);
         }
 }
 
 Renderbuffer::~Renderbuffer() {
-    for (auto& i : ctx->framebuffers) {
-        auto& fb = i.second;
-        if (unlink(fb.color_attachment, texture)) {
-            fb.layer = 0;
+    for (auto* fb : ctx->framebuffers) {
+        if (fb) {
+            if (unlink(fb->color_attachment, texture)) {
+                fb->layer = 0;
+            }
+            unlink(fb->depth_attachment, texture);
         }
-        unlink(fb.depth_attachment, texture);
     }
     DeleteTexture(texture);
 }
 
 void DeleteRenderbuffer(GLuint n) {
-    if (!n) {
-        return;
+    if (ctx->renderbuffers.erase(n)) {
+        unlink(ctx->renderbuffer_binding, n);
     }
-    auto i = ctx->renderbuffers.find(n);
-    if (i == ctx->renderbuffers.end()) {
-        return;
-    }
-    ctx->renderbuffers.erase(i);
-    unlink(ctx->renderbuffer_binding, n);
 }
 
-void GenFramebuffers(int n, int *result) {
+void GenFramebuffers(int n, GLuint *result) {
         for (int i = 0; i < n; i++) {
                 Framebuffer f;
-                ctx->framebuffers.insert(std::pair<GLuint, Framebuffer>(ctx->framebuffer_count, f));
-                result[i] = ctx->framebuffer_count++;
+                result[i] = ctx->framebuffers.insert(f);
         }
 }
 
 void DeleteFramebuffer(GLuint n) {
-    if (!n) {
-        return;
+    if (ctx->framebuffers.erase(n)) {
+        unlink(ctx->read_framebuffer_binding, n);
+        unlink(ctx->draw_framebuffer_binding, n);
     }
-    auto i = ctx->framebuffers.find(n);
-    if (i == ctx->framebuffers.end()) {
-        return;
-    }
-    ctx->framebuffers.erase(i);
-    unlink(ctx->read_framebuffer_binding, n);
-    unlink(ctx->draw_framebuffer_binding, n);
 }
 
 void RenderbufferStorage(
@@ -1790,7 +1783,7 @@ GLboolean UnmapBuffer(GLenum target) {
 }
 
 void Uniform1i(GLint location, GLint V0) {
-    debugf("tex: %d\n", ctx->texture_count);
+    debugf("tex: %d\n", (int)ctx->textures.size);
     if (!program_impl->set_sampler(location, V0)) {
         vertex_shader->set_uniform_1i(location, V0);
         fragment_shader->set_uniform_1i(location, V0);
@@ -1875,13 +1868,8 @@ void FramebufferRenderbuffer(
 
 } // extern "C"
 
-Framebuffer *get_framebuffer(GLenum target) {
-    GLuint id = ctx->get_binding(target);
-    {
-        auto i = ctx->framebuffers.find(id);
-        if (i != ctx->framebuffers.end()) return &i->second;
-    }
-    return nullptr;
+static inline Framebuffer *get_framebuffer(GLenum target) {
+    return ctx->framebuffers.find(ctx->get_binding(target));
 }
 
 template <typename T> static inline void fill_n(T* dst, size_t n, T val) {
@@ -2033,15 +2021,14 @@ void InitDefaultFramebuffer(int width, int height) {
 }
 
 void* GetColorBuffer(GLuint fbo, int32_t* width, int32_t* height) {
-    auto i = ctx->framebuffers.find(fbo);
-    if (i == ctx->framebuffers.end()) {
+    Framebuffer* fb = ctx->framebuffers.find(fbo);
+    if (!fb) {
         return nullptr;
     }
-    Framebuffer& fb = i->second;
-    if (!fb.color_attachment) {
+    if (!fb->color_attachment) {
         return nullptr;
     }
-    Texture& colortex = ctx->textures[fb.color_attachment];
+    Texture& colortex = ctx->textures[fb->color_attachment];
     prepare_texture(colortex);
     *width = colortex.width;
     *height = colortex.height;
@@ -3154,8 +3141,8 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
             free(indices);
         }
 
-        if (ctx->samples_passed_binding) {
-            Query &q = ctx->queries[ctx->samples_passed_binding];
+        if (ctx->samples_passed_query) {
+            Query &q = ctx->queries[ctx->samples_passed_query];
             q.value += ctx->shaded_pixels;
         }
 
