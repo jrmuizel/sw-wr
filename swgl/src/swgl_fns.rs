@@ -1984,7 +1984,6 @@ impl Gl for Context {
         panic!();
     }
 
-    #[allow(unused_variables)]
     fn egl_image_target_texture2d_oes(&self, target: GLenum, image: GLeglImageOES) {
         panic!("not supported")
     }
