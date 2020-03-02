@@ -543,6 +543,18 @@ enum BlendKey : uint8_t
 #define GL_MAX_TEXTURE_UNITS              0x84E2
 #define GL_MAX_TEXTURE_IMAGE_UNITS        0x8872
 
+const size_t MAX_TEXTURE_UNITS = 16;
+
+#define GL_RENDERBUFFER                   0x8D41
+#define GL_PIXEL_PACK_BUFFER              0x88EB
+#define GL_PIXEL_UNPACK_BUFFER            0x88EC
+
+template<typename T>
+static inline bool unlink(T& binding, T n) {
+    if (binding == n) { binding = 0; return true; }
+    return false;
+}
+
 struct Context {
     bool validate_vertex_array = true;
 
@@ -558,15 +570,8 @@ struct Context {
     std::map<GLuint, Program> programs;
 
     GLuint query_count = 1;
-    std::map<GLenum, GLuint> current_query;
-
     GLuint buffer_count = 1;
-    std::map<GLenum, GLuint> current_buffer;
-
     GLuint texture_count = 1;
-    std::map<GLenum, GLuint> current_texture;
-    std::map<GLenum, GLuint> current_framebuffer;
-    std::map<GLenum, GLuint> current_renderbuffer;
 
     GLuint vertex_array_count = 1;
     GLuint current_vertex_array;
@@ -597,13 +602,53 @@ struct Context {
     uint32_t clearcolor = 0;
     GLdouble cleardepth = 1;
 
-    int active_texture_index = 0;
-    #define active_texture(target) ctx->current_texture[(target) + (ctx->active_texture_index << 16)]
-
     int unpack_row_length = 0;
 
     int shaded_rows = 0;
     int shaded_pixels = 0;
+
+    struct TextureUnit {
+        GLuint texture_2d_binding = 0;
+        GLuint texture_3d_binding = 0;
+        GLuint texture_2d_array_binding = 0;
+
+        void unlink(GLuint n) {
+            ::unlink(texture_2d_binding, n);
+            ::unlink(texture_3d_binding, n);
+            ::unlink(texture_2d_array_binding, n);
+        }
+    };
+    TextureUnit texture_units[MAX_TEXTURE_UNITS];
+    int active_texture_unit = 0;
+
+    GLuint pixel_pack_buffer_binding = 0;
+    GLuint pixel_unpack_buffer_binding = 0;
+    GLuint array_buffer_binding = 0;
+    GLuint element_array_buffer_binding = 0;
+    GLuint time_elapsed_binding = 0;
+    GLuint samples_passed_binding = 0;
+    GLuint renderbuffer_binding = 0;
+    GLuint draw_framebuffer_binding = 0;
+    GLuint read_framebuffer_binding = 0;
+    GLuint unknown_binding = 0;
+
+    GLuint& get_binding(GLenum name) {
+        switch (name) {
+        case GL_PIXEL_PACK_BUFFER: return pixel_pack_buffer_binding;
+        case GL_PIXEL_UNPACK_BUFFER: return pixel_unpack_buffer_binding;
+        case GL_ARRAY_BUFFER: return array_buffer_binding;
+        case GL_ELEMENT_ARRAY_BUFFER: return element_array_buffer_binding;
+        case GL_TEXTURE_2D: return texture_units[active_texture_unit].texture_2d_binding;
+        case GL_TEXTURE_2D_ARRAY: return texture_units[active_texture_unit].texture_2d_array_binding;
+        case GL_TEXTURE_3D: return texture_units[active_texture_unit].texture_3d_binding;
+        case GL_TIME_ELAPSED: return time_elapsed_binding;
+        case GL_SAMPLES_PASSED: return samples_passed_binding;
+        case GL_RENDERBUFFER: return renderbuffer_binding;
+        case GL_DRAW_FRAMEBUFFER: return draw_framebuffer_binding;
+        case GL_READ_FRAMEBUFFER: return read_framebuffer_binding;
+        default: debugf("unknown binding %x\n", name); assert(false); return unknown_binding;
+        }
+    }
 };
 static Context default_ctx;
 static Context *ctx = &default_ctx;
@@ -616,7 +661,7 @@ static void prepare_texture(Texture& t, const IntRect* skip = nullptr);
 
 template<typename S>
 S *lookup_sampler(S *s, int texture) {
-        int tid = ctx->current_texture[GL_TEXTURE_2D + (texture << 16)];
+        int tid = ctx->texture_units[texture].texture_2d_binding;
         if (!tid) {
             s->width = 0;
             s->height = 0;
@@ -641,7 +686,7 @@ S *lookup_sampler(S *s, int texture) {
 
 template<typename S>
 S *lookup_isampler(S *s, int texture) {
-        int tid = ctx->current_texture[GL_TEXTURE_2D + (texture << 16)];
+        int tid = ctx->texture_units[texture].texture_2d_binding;
         if (!tid) {
             s->width = 0;
             s->height = 0;
@@ -664,7 +709,7 @@ S *lookup_isampler(S *s, int texture) {
 
 template<typename S>
 S *lookup_sampler_array(S *s, int texture) {
-        int tid = ctx->current_texture[GL_TEXTURE_2D_ARRAY + (texture << 16)];
+        int tid = ctx->texture_units[texture].texture_2d_array_binding;
         if (!tid) {
             s->width = 0;
             s->height = 0;
@@ -842,8 +887,6 @@ GLenum GetError() {
 #define GL_DRAW_FRAMEBUFFER_BINDING 0x8CA6
 #define GL_READ_FRAMEBUFFER_BINDING 0x8CAA
 #define GL_DEPTH_WRITEMASK          0x0B72
-#define GL_PIXEL_PACK_BUFFER              0x88EB
-#define GL_PIXEL_UNPACK_BUFFER            0x88EC
 #define GL_PIXEL_PACK_BUFFER_BINDING      0x88ED
 #define GL_PIXEL_UNPACK_BUFFER_BINDING    0x88EF
 
@@ -862,7 +905,7 @@ void GetIntegerv(GLenum pname, GLint *params) {
     switch (pname) {
     case GL_MAX_TEXTURE_UNITS:
     case GL_MAX_TEXTURE_IMAGE_UNITS:
-        params[0] = 16;
+        params[0] = MAX_TEXTURE_UNITS;
         break;
     case GL_MAX_TEXTURE_SIZE:
         params[0] = 1 << 15;
@@ -870,26 +913,18 @@ void GetIntegerv(GLenum pname, GLint *params) {
     case GL_MAX_ARRAY_TEXTURE_LAYERS:
         params[0] = 1 << 15;
         break;
-    case GL_READ_FRAMEBUFFER_BINDING: {
-        auto i = ctx->current_framebuffer.find(GL_READ_FRAMEBUFFER);
-        params[0] = i != ctx->current_framebuffer.end() ? i->second : 0;
+    case GL_READ_FRAMEBUFFER_BINDING:
+        params[0] = ctx->read_framebuffer_binding;
         break;
-    }
-    case GL_DRAW_FRAMEBUFFER_BINDING: {
-        auto i = ctx->current_framebuffer.find(GL_DRAW_FRAMEBUFFER);
-        params[0] = i != ctx->current_framebuffer.end() ? i->second : 0;
+    case GL_DRAW_FRAMEBUFFER_BINDING:
+        params[0] = ctx->draw_framebuffer_binding;
         break;
-    }
-    case GL_PIXEL_PACK_BUFFER_BINDING: {
-        auto i = ctx->current_buffer.find(GL_PIXEL_PACK_BUFFER);
-        params[0] = i != ctx->current_buffer.end() ? i->second : 0;
+    case GL_PIXEL_PACK_BUFFER_BINDING:
+        params[0] = ctx->pixel_pack_buffer_binding;
         break;
-    }
-    case GL_PIXEL_UNPACK_BUFFER_BINDING: {
-        auto i = ctx->current_buffer.find(GL_PIXEL_UNPACK_BUFFER);
-        params[0] = i != ctx->current_buffer.end() ? i->second : 0;
+    case GL_PIXEL_UNPACK_BUFFER_BINDING:
+        params[0] = ctx->pixel_unpack_buffer_binding;
         break;
-    }
     case GL_NUM_EXTENSIONS:
         params[0] = sizeof(extensions) / sizeof(extensions[0]);
         break;
@@ -1033,8 +1068,8 @@ void ClearDepth(GLdouble depth) {
 
 void ActiveTexture(GLenum texture) {
         assert(texture >= GL_TEXTURE0);
-        assert(texture <= GL_TEXTURE15);
-        ctx->active_texture_index = texture - GL_TEXTURE0;
+        assert(texture < GL_TEXTURE0 + MAX_TEXTURE_UNITS);
+        ctx->active_texture_unit = clamp(int(texture - GL_TEXTURE0), 0, int(MAX_TEXTURE_UNITS-1));
 }
 
 void GenQueries(GLsizei n, GLuint *result) {
@@ -1054,11 +1089,8 @@ void DeleteQuery(GLuint n) {
         return;
     }
     ctx->queries.erase(i);
-    for (auto& b : ctx->current_query) {
-        if (b.second == n) {
-            b.second = 0;
-        }
-    }
+    unlink(ctx->time_elapsed_binding, n);
+    unlink(ctx->samples_passed_binding, n);
 }
 
 void GenBuffers(int n, int *result) {
@@ -1078,11 +1110,10 @@ void DeleteBuffer(GLuint n) {
         return;
     }
     ctx->buffers.erase(i);
-    for (auto& b : ctx->current_buffer) {
-        if (b.second == n) {
-            b.second = 0;
-        }
-    }
+    unlink(ctx->pixel_pack_buffer_binding, n);
+    unlink(ctx->pixel_unpack_buffer_binding, n);
+    unlink(ctx->array_buffer_binding, n);
+    unlink(ctx->element_array_buffer_binding, n);
 }
 
 void GenVertexArrays(int n, int *result) {
@@ -1102,9 +1133,7 @@ void DeleteVertexArray(GLuint n) {
         return;
     }
     ctx->vertex_arrays.erase(i);
-    if (ctx->current_vertex_array == n) {
-        ctx->current_vertex_array = 0;
-    }
+    unlink(ctx->current_vertex_array, n);
 }
 
 GLuint CreateShader(GLenum type) {
@@ -1204,7 +1233,7 @@ static uint64_t get_time_value() {
 }
 
 void BeginQuery(GLenum target, GLuint id) {
-    ctx->current_query[target] = id;
+    ctx->get_binding(target) = id;
     Query &q = ctx->queries[id];
     switch (target) {
     case GL_SAMPLES_PASSED:
@@ -1220,7 +1249,7 @@ void BeginQuery(GLenum target, GLuint id) {
 }
 
 void EndQuery(GLenum target) {
-    Query &q = ctx->queries[ctx->current_query[target]];
+    Query &q = ctx->queries[ctx->get_binding(target)];
     switch (target) {
     case GL_SAMPLES_PASSED:
         break;
@@ -1228,10 +1257,10 @@ void EndQuery(GLenum target) {
         q.value = get_time_value() - q.value;
         break;
     default:
-        debugf("unknown query target %x for query %d\n", target, ctx->current_query[target]);
+        debugf("unknown query target %x\n", target);
         assert(false);
     }
-    ctx->current_query[target] = 0;
+    ctx->get_binding(target) = 0;
 }
 
 void GetQueryObjectui64v(GLuint id, GLenum pname, GLuint64 *params)
@@ -1255,26 +1284,25 @@ void BindVertexArray(GLuint vertex_array) {
 }
 
 void BindTexture(GLenum target, GLuint texture) {
-    active_texture(target) = texture;
+    ctx->get_binding(target) = texture;
 }
 
 void BindBuffer(GLenum target, GLuint buffer) {
-    // XXX: I think we to set the element array buffer on the current vertex array for target == GL_ELEMENT_ARRAY_BUFFER
-    ctx->current_buffer[target] = buffer;
+    ctx->get_binding(target) = buffer;
 }
 
 void BindFramebuffer(GLenum target, GLuint fb) {
     if (target == GL_FRAMEBUFFER) {
-        ctx->current_framebuffer[GL_READ_FRAMEBUFFER] = fb;
-        ctx->current_framebuffer[GL_DRAW_FRAMEBUFFER] = fb;
+        ctx->read_framebuffer_binding = fb;
+        ctx->draw_framebuffer_binding = fb;
     } else {
         assert(target == GL_READ_FRAMEBUFFER || target == GL_DRAW_FRAMEBUFFER);
-        ctx->current_framebuffer[target] = fb;
+        ctx->get_binding(target) = fb;
     }
 }
 
 void BindRenderbuffer(GLenum target, GLuint rb) {
-    ctx->current_renderbuffer[target] = rb;
+    ctx->get_binding(target) = rb;
 }
 
 #define GL_UNPACK_ROW_LENGTH              0x0CF2
@@ -1309,7 +1337,7 @@ void TexStorage3D(
         GLsizei height,
         GLsizei depth
     ) {
-    Texture &t = ctx->textures[active_texture(target)];
+    Texture &t = ctx->textures[ctx->get_binding(target)];
     internal_format = remap_internal_format(internal_format);
     bool changed = false;
     if (t.width != width || t.height != height || t.depth != depth ||
@@ -1365,7 +1393,7 @@ void TexStorage2D(
         GLsizei width,
         GLsizei height
     ) {
-    Texture &t = ctx->textures[active_texture(target)];
+    Texture &t = ctx->textures[ctx->get_binding(target)];
     set_tex_storage(t, levels, internal_format, width, height);
 }
 
@@ -1399,9 +1427,7 @@ static inline void copy_bgra8_to_rgba8(uint32_t *dest, uint32_t *src, int width)
 }
 
 static Buffer* get_pixel_pack_buffer() {
-    auto i = ctx->current_buffer.find(GL_PIXEL_PACK_BUFFER);
-    GLuint id = i != ctx->current_buffer.end() ? i->second : 0;
-    return id ? &ctx->buffers[id] : nullptr;
+    return ctx->pixel_pack_buffer_binding ? &ctx->buffers[ctx->pixel_pack_buffer_binding] : nullptr;
 }
 
 static void* get_pixel_pack_buffer_data(void* data) {
@@ -1412,9 +1438,7 @@ static void* get_pixel_pack_buffer_data(void* data) {
 }
 
 static Buffer* get_pixel_unpack_buffer() {
-    auto i = ctx->current_buffer.find(GL_PIXEL_UNPACK_BUFFER);
-    GLuint id = i != ctx->current_buffer.end() ? i->second : 0;
-    return id ? &ctx->buffers[id] : nullptr;
+    return ctx->pixel_unpack_buffer_binding ? &ctx->buffers[ctx->pixel_unpack_buffer_binding] : nullptr;
 }
 
 static void* get_pixel_unpack_buffer_data(void* data) {
@@ -1436,7 +1460,7 @@ void TexSubImage2D(
         void *data) {
         data = get_pixel_unpack_buffer_data(data);
         if (!data) return;
-        Texture &t = ctx->textures[active_texture(target)];
+        Texture &t = ctx->textures[ctx->get_binding(target)];
         IntRect skip = { xoffset, yoffset, width, height };
         prepare_texture(t, &skip);
         assert(xoffset + width <= t.width);
@@ -1490,7 +1514,7 @@ void TexSubImage3D(
         void *data) {
         data = get_pixel_unpack_buffer_data(data);
         if (!data) return;
-        Texture &t = ctx->textures[active_texture(target)];
+        Texture &t = ctx->textures[ctx->get_binding(target)];
         prepare_texture(t);
         assert(ctx->unpack_row_length == 0 || ctx->unpack_row_length >= width);
         GLsizei row_length = ctx->unpack_row_length != 0 ? ctx->unpack_row_length : width;
@@ -1540,7 +1564,7 @@ void TexImage3D(
 }
 
 void TexParameteri(GLenum target, GLenum pname, GLint param) {
-        Texture &t = ctx->textures[active_texture(target)];
+        Texture &t = ctx->textures[ctx->get_binding(target)];
         switch (pname) {
         case GL_TEXTURE_WRAP_S: assert(param == GL_CLAMP_TO_EDGE); break;
         case GL_TEXTURE_WRAP_T: assert(param == GL_CLAMP_TO_EDGE); break;
@@ -1574,10 +1598,8 @@ void DeleteTexture(GLuint n) {
         return;
     }
     ctx->textures.erase(i);
-    for (auto& b : ctx->current_texture) {
-        if (b.second == n) {
-            b.second = 0;
-        }
+    for (size_t i = 0; i < MAX_TEXTURE_UNITS; i++) {
+        ctx->texture_units[i].unlink(n);
     }
 }
 
@@ -1592,13 +1614,10 @@ void GenRenderbuffers(int n, int *result) {
 Renderbuffer::~Renderbuffer() {
     for (auto& i : ctx->framebuffers) {
         auto& fb = i.second;
-        if (fb.color_attachment == texture) {
-            fb.color_attachment = 0;
+        if (unlink(fb.color_attachment, texture)) {
             fb.layer = 0;
         }
-        if (fb.depth_attachment == texture) {
-            fb.depth_attachment = 0;
-        }
+        unlink(fb.depth_attachment, texture);
     }
     DeleteTexture(texture);
 }
@@ -1612,11 +1631,7 @@ void DeleteRenderbuffer(GLuint n) {
         return;
     }
     ctx->renderbuffers.erase(i);
-    for (auto& b : ctx->current_renderbuffer) {
-        if (b.second == n) {
-            b.second = 0;
-        }
-    }
+    unlink(ctx->renderbuffer_binding, n);
 }
 
 void GenFramebuffers(int n, int *result) {
@@ -1636,31 +1651,27 @@ void DeleteFramebuffer(GLuint n) {
         return;
     }
     ctx->framebuffers.erase(i);
-    for (auto& b : ctx->current_framebuffer) {
-        if (b.second == n) {
-            b.second = 0;
-        }
-    }
+    unlink(ctx->read_framebuffer_binding, n);
+    unlink(ctx->draw_framebuffer_binding, n);
 }
 
 void RenderbufferStorage(
         GLenum target,
-        GLenum internalformat,
+        GLenum internal_format,
         GLsizei width,
         GLsizei height) {
     // Just refer a renderbuffer to a texture to simplify things for now...
-    Renderbuffer &r = ctx->renderbuffers[ctx->current_renderbuffer[target]];
+    Renderbuffer &r = ctx->renderbuffers[ctx->get_binding(target)];
     GenTextures(1, &r.texture);
-    active_texture(target) = r.texture;
-    switch (internalformat) {
+    switch (internal_format) {
         case GL_DEPTH_COMPONENT:
         case GL_DEPTH_COMPONENT24:
         case GL_DEPTH_COMPONENT32:
             // Force depth format to 16 bits...
-            internalformat = GL_DEPTH_COMPONENT16;
+            internal_format = GL_DEPTH_COMPONENT16;
             break;
     }
-    TexStorage2D(target, 1, internalformat, width, height);
+    set_tex_storage(ctx->textures[r.texture], 1, internal_format, width, height);
 }
 
 void VertexAttribPointer(GLuint index,
@@ -1678,8 +1689,8 @@ void VertexAttribPointer(GLuint index,
         va.normalized = normalized;
         va.stride = stride;
         va.offset = offset;
-        //Buffer &vertex_buf = ctx->buffers[ctx->current_buffer[GL_ARRAY_BUFFER]];
-        va.vertex_buffer = ctx->current_buffer[GL_ARRAY_BUFFER];
+        //Buffer &vertex_buf = ctx->buffers[ctx->array_buffer_binding];
+        va.vertex_buffer = ctx->array_buffer_binding;
         va.vertex_array = ctx->current_vertex_array;
         ctx->validate_vertex_array = true;
 }
@@ -1698,8 +1709,8 @@ void VertexAttribIPointer(GLuint index,
         va.normalized = false;
         va.stride = stride;
         va.offset = offset;
-        //Buffer &vertex_buf = ctx->buffers[ctx->current_buffer[GL_ARRAY_BUFFER]];
-        va.vertex_buffer = ctx->current_buffer[GL_ARRAY_BUFFER];
+        //Buffer &vertex_buf = ctx->buffers[ctx->array_buffer_binding];
+        va.vertex_buffer = ctx->array_buffer_binding;
         va.vertex_array = ctx->current_vertex_array;
         ctx->validate_vertex_array = true;
 }
@@ -1734,7 +1745,7 @@ void BufferData(GLenum target,
         void *data,
         GLenum usage)
 {
-    Buffer &b = ctx->buffers[ctx->current_buffer[target]];
+    Buffer &b = ctx->buffers[ctx->get_binding(target)];
     if (b.allocate(size)) {
         ctx->validate_vertex_array = true;
     }
@@ -1748,7 +1759,7 @@ void BufferSubData(GLenum target,
         GLsizeiptr size,
         void *data)
 {
-    Buffer &b = ctx->buffers[ctx->current_buffer[target]];
+    Buffer &b = ctx->buffers[ctx->get_binding(target)];
     assert(offset + size <= b.size);
     if (data) {
         memcpy(&b.buf[offset], data, size);
@@ -1756,7 +1767,7 @@ void BufferSubData(GLenum target,
 }
 
 void* MapBuffer(GLenum target, GLbitfield access) {
-    Buffer& b = ctx->buffers[ctx->current_buffer[target]];
+    Buffer& b = ctx->buffers[ctx->get_binding(target)];
     return b.buf;
 }
 
@@ -1766,7 +1777,7 @@ void* MapBufferRange(
         GLsizeiptr length,
         GLbitfield access
 ) {
-    Buffer& b = ctx->buffers[ctx->current_buffer[target]];
+    Buffer& b = ctx->buffers[ctx->get_binding(target)];
     if (b.buf && offset >= 0 && length > 0 && offset + length <= b.size) {
         return b.buf + offset;
     }
@@ -1774,7 +1785,7 @@ void* MapBufferRange(
 }
 
 GLboolean UnmapBuffer(GLenum target) {
-    Buffer& b = ctx->buffers[ctx->current_buffer[target]];
+    Buffer& b = ctx->buffers[ctx->get_binding(target)];
     return b.buf != nullptr;
 }
 
@@ -1810,7 +1821,7 @@ void FramebufferTexture2D(
         GLint level)
 {
         assert(target == GL_READ_FRAMEBUFFER || target == GL_DRAW_FRAMEBUFFER);
-        Framebuffer &fb = ctx->framebuffers[ctx->current_framebuffer[target]];
+        Framebuffer &fb = ctx->framebuffers[ctx->get_binding(target)];
         if (attachment == GL_COLOR_ATTACHMENT0) {
                 fb.color_attachment = texture;
                 fb.layer = 0;
@@ -1830,7 +1841,7 @@ void FramebufferTextureLayer(
 {
         assert(level == 0);
         assert(target == GL_READ_FRAMEBUFFER || target == GL_DRAW_FRAMEBUFFER);
-        Framebuffer &fb = ctx->framebuffers[ctx->current_framebuffer[target]];
+        Framebuffer &fb = ctx->framebuffers[ctx->get_binding(target)];
         if (attachment == GL_COLOR_ATTACHMENT0) {
                 fb.color_attachment = texture;
                 fb.layer = layer;
@@ -1842,8 +1853,6 @@ void FramebufferTextureLayer(
         }
 }
 
-#define GL_RENDERBUFFER                   0x8D41
-
 void FramebufferRenderbuffer(
     GLenum target,
     GLenum attachment,
@@ -1852,7 +1861,7 @@ void FramebufferRenderbuffer(
 {
     assert(target == GL_READ_FRAMEBUFFER || target == GL_DRAW_FRAMEBUFFER);
     assert(renderbuffertarget == GL_RENDERBUFFER);
-    Framebuffer &fb = ctx->framebuffers[ctx->current_framebuffer[target]];
+    Framebuffer &fb = ctx->framebuffers[ctx->get_binding(target)];
     Renderbuffer &rb = ctx->renderbuffers[renderbuffer];
     if (attachment == GL_COLOR_ATTACHMENT0) {
         fb.color_attachment = rb.texture;
@@ -1867,11 +1876,7 @@ void FramebufferRenderbuffer(
 } // extern "C"
 
 Framebuffer *get_framebuffer(GLenum target) {
-    GLuint id = 0;
-    {
-        auto i = ctx->current_framebuffer.find(target);
-        if (i != ctx->current_framebuffer.end()) id = i->second;
-    }
+    GLuint id = ctx->get_binding(target);
     {
         auto i = ctx->framebuffers.find(id);
         if (i != ctx->framebuffers.end()) return &i->second;
@@ -2123,7 +2128,7 @@ void ReadPixels(GLint x, GLint y, GLsizei width, GLsizei height, GLenum format, 
     Texture &t = ctx->textures[fb->color_attachment];
     if (!t.buf) return;
     prepare_texture(t);
-    debugf("read pixels %d, %d, %d, %d from fb %d with format %x\n", x, y, width, height, ctx->current_framebuffer[GL_READ_FRAMEBUFFER], t.internal_format);
+    debugf("read pixels %d, %d, %d, %d from fb %d with format %x\n", x, y, width, height, ctx->read_framebuffer_binding, t.internal_format);
     assert(x + width <= t.width);
     assert(y + height <= t.height);
     if (internal_format_for_data(format, type) != t.internal_format) {
@@ -2220,7 +2225,7 @@ void CopyTexSubImage3D(
     if (!fb) return;
     CopyImageSubData(
         fb->color_attachment, GL_TEXTURE_3D, 0, x, y, fb->layer,
-        active_texture(target), GL_TEXTURE_3D, 0, xoffset, yoffset, zoffset,
+        ctx->get_binding(target), GL_TEXTURE_3D, 0, xoffset, yoffset, zoffset,
         width, height, 1);
 }
 
@@ -2238,7 +2243,7 @@ void CopyTexSubImage2D(
     if (!fb) return;
     CopyImageSubData(
         fb->color_attachment, GL_TEXTURE_2D_ARRAY, 0, x, y, fb->layer,
-        active_texture(target), GL_TEXTURE_2D_ARRAY, 0, xoffset, yoffset, 0,
+        ctx->get_binding(target), GL_TEXTURE_2D_ARRAY, 0, xoffset, yoffset, 0,
         width, height, 1);
 }
 
@@ -3091,7 +3096,7 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
             assert(colortex.width == depthtex.width && colortex.height == depthtex.height);
         }
 
-        Buffer &indices_buf = ctx->buffers[ctx->current_buffer[GL_ELEMENT_ARRAY_BUFFER]];
+        Buffer &indices_buf = ctx->buffers[ctx->element_array_buffer_binding];
 
         //debugf("current_vertex_array %d\n", ctx->current_vertex_array);
         //debugf("indices size: %d\n", indices_buf.size);
@@ -3149,9 +3154,8 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
             free(indices);
         }
 
-        auto qid = ctx->current_query.find(GL_SAMPLES_PASSED);
-        if (qid != ctx->current_query.end() && qid->second) {
-            Query &q = ctx->queries[qid->second];
+        if (ctx->samples_passed_binding) {
+            Query &q = ctx->queries[ctx->samples_passed_binding];
             q.value += ctx->shaded_pixels;
         }
 
