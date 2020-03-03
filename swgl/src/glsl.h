@@ -892,6 +892,7 @@ struct ivec4_scalar {
                     case Y: return y;
                     case Z: return z;
                     case W: return w;
+                    default: UNREACHABLE;
                 }
         }
         int32_t& sel(XYZW c1) {
@@ -925,6 +926,7 @@ struct ivec4 {
                     case Y: return y;
                     case Z: return z;
                     case W: return w;
+                    default: UNREACHABLE;
                 }
         }
         I32 sel(XYZW c1) {
@@ -1365,6 +1367,7 @@ struct vec4_scalar {
                     case Y: return y;
                     case Z: return z;
                     case W: return w;
+                    default: UNREACHABLE;
                 }
         }
         float& sel(XYZW c1) {
@@ -1440,6 +1443,7 @@ struct vec4 {
                     case Y: return y;
                     case Z: return z;
                     case W: return w;
+                    default: UNREACHABLE;
                 }
         }
         Float& sel(XYZW c1) {
