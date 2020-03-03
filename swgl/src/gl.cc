@@ -1728,7 +1728,7 @@ void InitDefaultFramebuffer(int width, int height) {
     }
 }
 
-void* GetColorBuffer(GLuint fbo, int32_t* width, int32_t* height) {
+void* GetColorBuffer(GLuint fbo, GLboolean flush, int32_t* width, int32_t* height) {
     Framebuffer* fb = ctx->framebuffers.find(fbo);
     if (!fb) {
         return nullptr;
@@ -1737,7 +1737,9 @@ void* GetColorBuffer(GLuint fbo, int32_t* width, int32_t* height) {
         return nullptr;
     }
     Texture& colortex = ctx->textures[fb->color_attachment];
-    prepare_texture(colortex);
+    if (flush) {
+        prepare_texture(colortex);
+    }
     *width = colortex.width;
     *height = colortex.height;
     return colortex.buf;

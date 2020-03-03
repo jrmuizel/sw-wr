@@ -247,7 +247,7 @@ extern "C" {
     fn GetStringi(name: GLenum, index: GLuint) -> *const c_char;
     fn GetError() -> GLenum;
     fn InitDefaultFramebuffer(width: i32, height: i32);
-    fn GetColorBuffer(fbo: GLuint, width: *mut i32, height: *mut i32) -> *mut c_void;
+    fn GetColorBuffer(fbo: GLuint, flush: GLboolean, width: *mut i32, height: *mut i32) -> *mut c_void;
     fn SetTextureBuffer(tex: GLuint, internal_format: GLenum, width: GLsizei, height: GLsizei, buf: *mut c_void, min_width: GLsizei, min_height: GLsizei);
     fn DeleteTexture(n: GLuint);
     fn DeleteRenderbuffer(n: GLuint);
@@ -295,11 +295,11 @@ impl Context {
         }
     }
 
-    pub fn get_color_buffer(&self, fbo: GLuint) -> (*mut c_void, i32, i32) {
+    pub fn get_color_buffer(&self, fbo: GLuint, flush: bool) -> (*mut c_void, i32, i32) {
         unsafe {
             let mut width: i32 = 0;
             let mut height: i32 = 0;
-            let data_ptr = GetColorBuffer(fbo, &mut width, &mut height);
+            let data_ptr = GetColorBuffer(fbo, flush as GLboolean, &mut width, &mut height);
             (data_ptr, width, height)
         }
     }
