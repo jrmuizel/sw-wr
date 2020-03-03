@@ -59,7 +59,7 @@ struct VertexAttrib {
         size_t buf_size = 0; // this will let us bounds check
 };
 
-int bytes_for_internal_format(GLenum internal_format) {
+static int bytes_for_internal_format(GLenum internal_format) {
         switch (internal_format) {
                 case GL_RGBA32F:
                         return 4*4;
@@ -89,7 +89,7 @@ static inline int aligned_stride(int row_bytes) {
     return (row_bytes + 3) & ~3;
 }
 
-glsl::TextureFormat gl_format_to_texture_format(int type) {
+static glsl::TextureFormat gl_format_to_texture_format(int type) {
         switch (type) {
                 case GL_RGBA32F: return glsl::TextureFormat::RGBA32F;
                 case GL_RGBA32I: return glsl::TextureFormat::RGBA32I;
@@ -201,9 +201,19 @@ struct Texture {
         }
     }
 
+    int bpp() const { return bytes_for_internal_format(internal_format); }
+
+    size_t stride(int b = 0, int min_width = 0) const {
+        return aligned_stride((b ? b : bpp()) * max(width, min_width));
+    }
+
+    size_t layer_stride(int b = 0, int min_width = 0, int min_height = 0) const {
+        return stride(b ? b : bpp(), min_width) * max(height, min_height);
+    }
+
     void allocate(bool force = false, int min_width = 0, int min_height = 0) {
         if ((!buf || force) && should_free()) {
-            size_t size = size_t(aligned_stride(bytes_for_internal_format(internal_format) * max(width, min_width))) * max(height, min_height) * max(depth, 1) * levels;
+            size_t size = layer_stride(bpp(), min_width, min_height) * max(depth, 1) * levels;
             if (!buf || size > buf_size) {
                 buf = (char*)realloc(buf, size + sizeof(Float));
                 buf_size = size;
@@ -453,8 +463,8 @@ S *lookup_sampler(S *s, int texture) {
             prepare_texture(t);
             s->width = t.width;
             s->height = t.height;
-            int bpp = bytes_for_internal_format(t.internal_format);
-            s->stride = aligned_stride(bpp * t.width);
+            int bpp = t.bpp();
+            s->stride = t.stride(bpp);
             if(bpp >= 4) s->stride /= 4;
             s->buf = (uint32_t*)t.buf; //XXX: wrong
             s->format = gl_format_to_texture_format(t.internal_format);
@@ -477,8 +487,8 @@ S *lookup_isampler(S *s, int texture) {
             prepare_texture(t);
             s->width = t.width;
             s->height = t.height;
-            int bpp = bytes_for_internal_format(t.internal_format);
-            s->stride = aligned_stride(bpp * t.width);
+            int bpp = t.bpp();
+            s->stride = t.stride(bpp);
             if(bpp >= 4) s->stride /= 4;
             s->buf = (uint32_t*)t.buf; //XXX: wrong
             s->format = gl_format_to_texture_format(t.internal_format);
@@ -504,8 +514,8 @@ S *lookup_sampler_array(S *s, int texture) {
             s->width = t.width;
             s->height = t.height;
             s->depth = t.depth;
-            int bpp = bytes_for_internal_format(t.internal_format);
-            s->stride = aligned_stride(bpp * t.width);
+            int bpp = t.bpp();
+            s->stride = t.stride(bpp);
             if(bpp >= 4) s->stride /= 4;
             s->height_stride = s->stride * t.height;
             s->buf = (uint32_t*)t.buf; //XXX: wrong
@@ -1194,9 +1204,9 @@ void TexSubImage2D(
         assert(ctx->unpack_row_length == 0 || ctx->unpack_row_length >= width);
         GLsizei row_length = ctx->unpack_row_length != 0 ? ctx->unpack_row_length : width;
         assert(t.internal_format == internal_format_for_data(format, ty));
-        int bpp = bytes_for_internal_format(t.internal_format);
+        int bpp = t.bpp();
         if (!bpp) return;
-        int dest_stride = aligned_stride(bpp * t.width);
+        size_t dest_stride = t.stride(bpp);
         char *dest = t.buf + yoffset * dest_stride + xoffset * bpp;
         char *src = (char*)data;
         for (int y = 0; y < height; y++) {
@@ -1250,13 +1260,13 @@ void TexSubImage3D(
         } else {
             assert(t.internal_format == internal_format_for_data(format, ty));
         }
-        int bpp = bytes_for_internal_format(t.internal_format);
+        int bpp = t.bpp();
         if (!bpp) return;
         char *src = (char*)data;
         assert(xoffset + width <= t.width);
         assert(yoffset + height <= t.height);
         assert(zoffset + depth <= t.depth);
-        int dest_stride = aligned_stride(bpp * t.width);
+        size_t dest_stride = t.stride(bpp);
         for (int z = 0; z < depth; z++) {
                 char *dest = t.buf + ((zoffset + z) * t.height + yoffset) * dest_stride + xoffset * bpp;
                 for (int y = 0; y < height; y++) {
@@ -1599,7 +1609,7 @@ template<typename T>
 static void clear_buffer(Texture& t, T value, int x0, int x1, int y0, int y1, int layer = 0, int skip_start = 0, int skip_end = 0) {
     skip_start = max(skip_start, x0);
     skip_end = max(skip_end, skip_start);
-    int stride = aligned_stride(sizeof(T) * t.width);
+    size_t stride = t.stride(sizeof(T));
     if (x1 - x0 == t.width && y1 - y0 > 1 && skip_start >= skip_end) {
         x1 += (stride / sizeof(T)) * (y1 - y0 - 1);
         y1 = y0 + 1;
@@ -1730,10 +1740,7 @@ void InitDefaultFramebuffer(int width, int height) {
 
 void* GetColorBuffer(GLuint fbo, GLboolean flush, int32_t* width, int32_t* height) {
     Framebuffer* fb = ctx->framebuffers.find(fbo);
-    if (!fb) {
-        return nullptr;
-    }
-    if (!fb->color_attachment) {
+    if (!fb || !fb->color_attachment) {
         return nullptr;
     }
     Texture& colortex = ctx->textures[fb->color_attachment];
@@ -1742,7 +1749,7 @@ void* GetColorBuffer(GLuint fbo, GLboolean flush, int32_t* width, int32_t* heigh
     }
     *width = colortex.width;
     *height = colortex.height;
-    return colortex.buf;
+    return colortex.buf + (fb->layer ? fb->layer * colortex.layer_stride() : 0);
 }
 
 void SetTextureBuffer(GLuint texid, GLenum internal_format, GLsizei width, GLsizei height, void* buf, GLsizei min_width, GLsizei min_height) {
@@ -1821,9 +1828,9 @@ void ReadPixels(GLint x, GLint y, GLsizei width, GLsizei height, GLenum format, 
         debugf("mismatched format for read pixels: %x vs %x\n", t.internal_format, internal_format_for_data(format, type));
         assert(false);
     }
-    int bpp = bytes_for_internal_format(t.internal_format);
+    int bpp = t.bpp();
     char *dest = (char *)data;
-    int src_stride = aligned_stride(bpp * t.width);
+    size_t src_stride = t.stride(bpp);
     char *src = t.buf + (t.height * fb->layer + y) * src_stride + x * bpp;
     for (; height > 0; height--) {
         if (t.internal_format == GL_RGBA8 && format != GL_BGRA) {
@@ -1874,9 +1881,9 @@ void CopyImageSubData(
     assert(dstX + srcWidth <= dsttex.width);
     assert(max(dstY, dstY + srcHeight) <= dsttex.height);
     assert(dstZ + srcDepth <= max(dsttex.depth, 1));
-    int bpp = bytes_for_internal_format(srctex.internal_format);
-    int src_stride = aligned_stride(bpp * srctex.width);
-    int dest_stride = aligned_stride(bpp * dsttex.width);
+    int bpp = srctex.bpp();
+    int src_stride = srctex.stride(bpp);
+    int dest_stride = dsttex.stride(bpp);
     for (int z = 0; z < srcDepth; z++) {
         char *dest = dsttex.buf + (dsttex.height * (dstZ + z) + dstY) * dest_stride + dstX * bpp;
         char *src = srctex.buf + (srctex.height * (srcZ + z) + srcY) * src_stride + srcX * bpp;
@@ -2536,8 +2543,8 @@ static inline void draw_quad_spans(int nump, Point p[4], uint16_t z, Interpolant
         Interpolants ro = interp_outs[r0i];
         Interpolants rom = (interp_outs[r1i] - ro) * rk;
         ro = ro + rom * (y - r0.y);
-        P *fbuf = (P*)colortex.buf + (layer * colortex.height + int(y)) * aligned_stride(sizeof(P) * colortex.width) / sizeof(P);
-        uint16_t *fdepth = (uint16_t*)depthtex.buf + int(y) * aligned_stride(sizeof(uint16_t) * depthtex.width) / sizeof(uint16_t);
+        P *fbuf = (P*)colortex.buf + (layer * colortex.height + int(y)) * colortex.stride(sizeof(P)) / sizeof(P);
+        uint16_t *fdepth = (uint16_t*)depthtex.buf + int(y) * depthtex.stride(sizeof(uint16_t)) / sizeof(uint16_t);
         while (y < fy1) {
             if (y > l1.y) {
                 l0i = l1i;
@@ -2683,8 +2690,8 @@ static inline void draw_quad_spans(int nump, Point p[4], uint16_t z, Interpolant
             y++;
             lo += lom;
             ro += rom;
-            fbuf += aligned_stride(sizeof(P) * colortex.width) / sizeof(P);
-            fdepth += aligned_stride(sizeof(uint16_t) * depthtex.width) / sizeof(uint16_t);
+            fbuf += colortex.stride(sizeof(P)) / sizeof(P);
+            fdepth += depthtex.stride(sizeof(uint16_t)) / sizeof(uint16_t);
         }
 }
 
@@ -2887,10 +2894,10 @@ void Composite(
     if (!srctex.buf) return;
     prepare_texture(srctex);
     Texture &dsttex = ctx->textures[fb.color_attachment];
-    assert(bytes_for_internal_format(srctex.internal_format) == 4);
+    assert(srctex.bpp() == 4);
     const int bpp = 4;
-    int src_stride = aligned_stride(bpp * srctex.width);
-    int dest_stride = aligned_stride(bpp * dsttex.width);
+    size_t src_stride = srctex.stride(bpp);
+    size_t dest_stride = dsttex.stride(bpp);
     if (srcY < 0) {
         dstY -= srcY;
         srcHeight += srcY;
