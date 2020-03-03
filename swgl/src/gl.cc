@@ -89,14 +89,14 @@ static inline int aligned_stride(int row_bytes) {
     return (row_bytes + 3) & ~3;
 }
 
-static glsl::TextureFormat gl_format_to_texture_format(int type) {
-        switch (type) {
-                case GL_RGBA32F: return glsl::TextureFormat::RGBA32F;
-                case GL_RGBA32I: return glsl::TextureFormat::RGBA32I;
-                case GL_RGBA8: return glsl::TextureFormat::RGBA8;
-                case GL_R8: return glsl::TextureFormat::R8;
-                default: assert(0); return glsl::TextureFormat::RGBA8;
-        }
+static TextureFormat gl_format_to_texture_format(int type) {
+    switch (type) {
+        case GL_RGBA32F: return TextureFormat::RGBA32F;
+        case GL_RGBA32I: return TextureFormat::RGBA32I;
+        case GL_RGBA8: return TextureFormat::RGBA8;
+        case GL_R8: return TextureFormat::R8;
+        default: assert(0); return TextureFormat::RGBA8;
+    }
 }
 
 struct Query {
@@ -141,16 +141,16 @@ struct Renderbuffer {
         ~Renderbuffer();
 };
 
-glsl::TextureFilter gl_filter_to_texture_filter(int type) {
-        switch (type) {
-                case GL_NEAREST: return glsl::TextureFilter::NEAREST;
-                case GL_NEAREST_MIPMAP_LINEAR: return glsl::TextureFilter::NEAREST;
-                case GL_NEAREST_MIPMAP_NEAREST: return glsl::TextureFilter::NEAREST;
-                case GL_LINEAR: return glsl::TextureFilter::LINEAR;
-                case GL_LINEAR_MIPMAP_LINEAR: return glsl::TextureFilter::LINEAR;
-                case GL_LINEAR_MIPMAP_NEAREST: return glsl::TextureFilter::LINEAR;
-                default: assert(0);  return glsl::TextureFilter::NEAREST;
-        }
+TextureFilter gl_filter_to_texture_filter(int type) {
+    switch (type) {
+        case GL_NEAREST: return TextureFilter::NEAREST;
+        case GL_NEAREST_MIPMAP_LINEAR: return TextureFilter::NEAREST;
+        case GL_NEAREST_MIPMAP_NEAREST: return TextureFilter::NEAREST;
+        case GL_LINEAR: return TextureFilter::LINEAR;
+        case GL_LINEAR_MIPMAP_LINEAR: return TextureFilter::LINEAR;
+        case GL_LINEAR_MIPMAP_NEAREST: return TextureFilter::LINEAR;
+        default: assert(0);  return TextureFilter::NEAREST;
+    }
 }
 
 struct Texture {
@@ -449,80 +449,66 @@ static BlendKey blend_key = BLEND_KEY_NONE;
 static void prepare_texture(Texture& t, const IntRect* skip = nullptr);
 
 template<typename S>
+static inline void init_depth(S* s, Texture& t) {
+    s->depth = t.depth;
+    s->height_stride = s->stride * t.height;
+}
+
+template<typename S>
+static inline void init_filter(S* s, Texture& t) {
+    s->filter = gl_filter_to_texture_filter(t.mag_filter);
+}
+
+template<typename S>
+static inline void init_sampler(S* s, Texture& t) {
+    prepare_texture(t);
+    s->width = t.width;
+    s->height = t.height;
+    int bpp = t.bpp();
+    s->stride = t.stride(bpp);
+    if(bpp >= 4) s->stride /= 4;
+    // Use uint32_t* for easier sampling, but need to cast to uint8_t* for formats with bpp < 4.
+    s->buf = (uint32_t*)t.buf;
+    s->format = gl_format_to_texture_format(t.internal_format);
+}
+
+template<typename S>
 S *lookup_sampler(S *s, int texture) {
-        int tid = ctx->texture_units[texture].texture_2d_binding;
-        if (!tid) {
-            s->width = 0;
-            s->height = 0;
-            s->stride = 0;
-            s->buf = nullptr;
-            s->format = TextureFormat::RGBA8;
-            s->filter = TextureFilter::NEAREST;
-        } else {
-            Texture &t = ctx->textures[tid];
-            prepare_texture(t);
-            s->width = t.width;
-            s->height = t.height;
-            int bpp = t.bpp();
-            s->stride = t.stride(bpp);
-            if(bpp >= 4) s->stride /= 4;
-            s->buf = (uint32_t*)t.buf; //XXX: wrong
-            s->format = gl_format_to_texture_format(t.internal_format);
-            s->filter = gl_filter_to_texture_filter(t.mag_filter);
-        }
-        return s;
+    int tid = ctx->texture_units[texture].texture_2d_binding;
+    if (!tid) {
+        *s = S();
+    } else {
+        Texture &t = ctx->textures[tid];
+        init_sampler(s, t);
+        init_filter(s, t);
+    }
+    return s;
 }
 
 template<typename S>
 S *lookup_isampler(S *s, int texture) {
-        int tid = ctx->texture_units[texture].texture_2d_binding;
-        if (!tid) {
-            s->width = 0;
-            s->height = 0;
-            s->stride = 0;
-            s->buf = nullptr;
-            s->format = TextureFormat::RGBA32I;
-        } else {
-            Texture &t = ctx->textures[tid];
-            prepare_texture(t);
-            s->width = t.width;
-            s->height = t.height;
-            int bpp = t.bpp();
-            s->stride = t.stride(bpp);
-            if(bpp >= 4) s->stride /= 4;
-            s->buf = (uint32_t*)t.buf; //XXX: wrong
-            s->format = gl_format_to_texture_format(t.internal_format);
-        }
-        return s;
+    int tid = ctx->texture_units[texture].texture_2d_binding;
+    if (!tid) {
+        *s = S();
+    } else {
+        Texture &t = ctx->textures[tid];
+        init_sampler(s, t);
+    }
+    return s;
 }
 
 template<typename S>
 S *lookup_sampler_array(S *s, int texture) {
-        int tid = ctx->texture_units[texture].texture_2d_array_binding;
-        if (!tid) {
-            s->width = 0;
-            s->height = 0;
-            s->depth = 0;
-            s->stride = 0;
-            s->height_stride = 0;
-            s->buf = nullptr;
-            s->format = TextureFormat::RGBA8;
-            s->filter = TextureFilter::NEAREST;
-        } else {
-            Texture &t = ctx->textures[tid];
-            prepare_texture(t);
-            s->width = t.width;
-            s->height = t.height;
-            s->depth = t.depth;
-            int bpp = t.bpp();
-            s->stride = t.stride(bpp);
-            if(bpp >= 4) s->stride /= 4;
-            s->height_stride = s->stride * t.height;
-            s->buf = (uint32_t*)t.buf; //XXX: wrong
-            s->format = gl_format_to_texture_format(t.internal_format);
-            s->filter = gl_filter_to_texture_filter(t.mag_filter);
-        }
-        return s;
+    int tid = ctx->texture_units[texture].texture_2d_array_binding;
+    if (!tid) {
+        *s = S();
+    } else {
+        Texture &t = ctx->textures[tid];
+        init_sampler(s, t);
+        init_depth(s, t);
+        init_filter(s, t);
+    }
+    return s;
 }
 
 int bytes_per_type(GLenum type) {

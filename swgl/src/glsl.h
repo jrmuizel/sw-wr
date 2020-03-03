@@ -1728,47 +1728,38 @@ enum TextureFilter {
         LINEAR
 };
 
-struct sampler2DArray_impl {
-        uint32_t *buf;
-        uint32_t stride; // in dwords
-        uint32_t height_stride; // in dwords
-        uint32_t height;
-        uint32_t width;
-        uint32_t depth;
-        TextureFormat format;
-        TextureFilter filter;
+struct samplerCommon {
+        uint32_t *buf = nullptr;
+        uint32_t stride = 0; // in dwords
+        uint32_t height = 0;
+        uint32_t width = 0;
+        TextureFormat format = TextureFormat::RGBA8;
 };
 
+struct samplerDepth {
+        int depth = 0;
+        uint32_t height_stride = 0; // in dwords
+};
 
+struct samplerFilter {
+        TextureFilter filter = TextureFilter::NEAREST;
+};
+
+struct sampler2DArray_impl : samplerCommon, samplerDepth, samplerFilter {};
 typedef sampler2DArray_impl *sampler2DArray;
 
 typedef struct sampler2DArrayR8_impl : sampler2DArray_impl {} *sampler2DArrayR8;
 typedef struct sampler2DArrayRGBA8_impl : sampler2DArray_impl {} *sampler2DArrayRGBA8;
 typedef struct sampler2DArrayRGBA32F_impl : sampler2DArray_impl {} *sampler2DArrayRGBA32F;
 
-struct sampler2D_impl {
-        uint32_t *buf;
-        uint32_t stride; // in dwords
-        uint32_t height;
-        uint32_t width;
-        TextureFormat format;
-        TextureFilter filter;
-};
-
+struct sampler2D_impl : samplerCommon, samplerFilter {};
 typedef sampler2D_impl *sampler2D;
 
 typedef struct sampler2DR8_impl : sampler2D_impl {} *sampler2DR8;
 typedef struct sampler2DRGBA8_impl : sampler2D_impl {} *sampler2DRGBA8;
 typedef struct sampler2DRGBA32F_impl : sampler2D_impl {} *sampler2DRGBA32F;
 
-struct isampler2D_impl {
-        uint32_t *buf;
-        uint32_t stride; // in dwords
-        uint32_t height;
-        uint32_t width;
-        TextureFormat format;
-};
-
+struct isampler2D_impl : samplerCommon {};
 typedef isampler2D_impl *isampler2D;
 
 struct isampler2DRGBA32I_impl : isampler2D_impl {};
