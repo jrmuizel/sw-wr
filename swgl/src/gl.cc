@@ -111,6 +111,7 @@ struct Buffer {
             if (new_size != size) {
                 size = new_size;
                 buf = (char*)realloc(buf, size);
+                assert(buf);
                 return true;
             }
             return false;
@@ -183,11 +184,10 @@ struct Texture {
     void enable_delayed_clear(uint32_t val) {
         delay_clear = height;
         clear_val = val;
-        if (cleared_rows) {
-            memset(cleared_rows, 0, ((height + 31) / 32) * sizeof(uint32_t));
-        } else {
-            cleared_rows = (uint32_t*)calloc((height + 31) / 32, sizeof(uint32_t));
+        if (!cleared_rows) {
+            cleared_rows = new uint32_t[(height + 31) / 32];
         }
+        memset(cleared_rows, 0, ((height + 31) / 32) * sizeof(uint32_t));
         if (height & 31) {
             cleared_rows[height / 32] = ~0U << (height & 31);
         }
@@ -195,7 +195,7 @@ struct Texture {
 
     void disable_delayed_clear() {
         if (cleared_rows) {
-            free(cleared_rows);
+            delete[] cleared_rows;
             cleared_rows = nullptr;
             delay_clear = 0;
         }
@@ -217,6 +217,7 @@ struct Texture {
             if (!buf || size > buf_size) {
                 buf = (char*)realloc(buf, size + sizeof(Float));
                 buf_size = size;
+                assert(buf);
             }
         }
     }
@@ -300,6 +301,7 @@ struct ObjectStore {
     size_t size = 0;
     // reserve object 0 as null
     size_t first_free = 1;
+    O invalid;
 
     ~ObjectStore() {
         if (objects) {
@@ -308,16 +310,19 @@ struct ObjectStore {
         }
     }
 
-    void grow(size_t i) {
+    bool grow(size_t i) {
         size_t new_size = size ? size : 8;
         while (new_size <= i) new_size += new_size / 2;
-        objects = (O**)realloc(objects, new_size * sizeof(O*));
-        assert(objects);
-        while (size < new_size) objects[size++] = nullptr;
+        O** new_objects = (O**)realloc(objects, new_size * sizeof(O*));
+        assert(new_objects);
+        if (!new_objects) return false;
+        while (size < new_size) new_objects[size++] = nullptr;
+        objects = new_objects;
+        return true;
     }
 
     void insert(size_t i, const O& o) {
-        if (i >= size) grow(i);
+        if (i >= size && !grow(i)) return;
         if (!objects[i]) objects[i] = new O(o);
     }
 
@@ -336,7 +341,7 @@ struct ObjectStore {
 
     O& operator[](size_t i) {
         insert(i, O());
-        return *objects[i];
+        return i < size ? *objects[i] : invalid;
     }
 
     O* find(size_t i) const { return i < size ? objects[i] : nullptr; }
@@ -474,11 +479,10 @@ static inline void init_sampler(S* s, Texture& t) {
 
 template<typename S>
 S *lookup_sampler(S *s, int texture) {
-    int tid = ctx->texture_units[texture].texture_2d_binding;
-    if (!tid) {
+    Texture& t = ctx->textures[ctx->texture_units[texture].texture_2d_binding];
+    if (!t.buf) {
         *s = S();
     } else {
-        Texture &t = ctx->textures[tid];
         init_sampler(s, t);
         init_filter(s, t);
     }
@@ -487,11 +491,10 @@ S *lookup_sampler(S *s, int texture) {
 
 template<typename S>
 S *lookup_isampler(S *s, int texture) {
-    int tid = ctx->texture_units[texture].texture_2d_binding;
-    if (!tid) {
+    Texture& t = ctx->textures[ctx->texture_units[texture].texture_2d_binding];
+    if (!t.buf) {
         *s = S();
     } else {
-        Texture &t = ctx->textures[tid];
         init_sampler(s, t);
     }
     return s;
@@ -499,11 +502,10 @@ S *lookup_isampler(S *s, int texture) {
 
 template<typename S>
 S *lookup_sampler_array(S *s, int texture) {
-    int tid = ctx->texture_units[texture].texture_2d_array_binding;
-    if (!tid) {
+    Texture& t = ctx->textures[ctx->texture_units[texture].texture_2d_array_binding];
+    if (!t.buf) {
         *s = S();
     } else {
-        Texture &t = ctx->textures[tid];
         init_sampler(s, t);
         init_depth(s, t);
         init_filter(s, t);
@@ -547,7 +549,7 @@ static inline S load_attrib_scalar(const char *src, size_t size, GLenum type, bo
 }
 
 template<typename T>
-void load_attrib(T& attrib, VertexAttrib &va, unsigned short *indices, int start, int instance, int count) {
+void load_attrib(T& attrib, VertexAttrib& va, uint16_t* indices, int start, int instance, int count) {
     typedef decltype(force_scalar(attrib)) scalar_type;
     if (!va.enabled) {
         attrib = T(scalar_type{0});
@@ -570,7 +572,7 @@ void load_attrib(T& attrib, VertexAttrib &va, unsigned short *indices, int start
 }
 
 template<typename T>
-void load_flat_attrib(T& attrib, VertexAttrib &va, unsigned short *indices, int start, int instance, int count) {
+void load_flat_attrib(T& attrib, VertexAttrib& va, uint16_t* indices, int start, int instance, int count) {
     if (!va.enabled) {
         attrib = T{0};
         return;
@@ -1191,7 +1193,7 @@ void TexSubImage2D(
         GLsizei row_length = ctx->unpack_row_length != 0 ? ctx->unpack_row_length : width;
         assert(t.internal_format == internal_format_for_data(format, ty));
         int bpp = t.bpp();
-        if (!bpp) return;
+        if (!bpp || !t.buf) return;
         size_t dest_stride = t.stride(bpp);
         char *dest = t.buf + yoffset * dest_stride + xoffset * bpp;
         char *src = (char*)data;
@@ -1247,7 +1249,7 @@ void TexSubImage3D(
             assert(t.internal_format == internal_format_for_data(format, ty));
         }
         int bpp = t.bpp();
-        if (!bpp) return;
+        if (!bpp || !t.buf) return;
         char *src = (char*)data;
         assert(xoffset + width <= t.width);
         assert(yoffset + height <= t.height);
@@ -1451,7 +1453,7 @@ void BufferData(GLenum target,
     if (b.allocate(size)) {
         ctx->validate_vertex_array = true;
     }
-    if (data) {
+    if (data && b.buf && size <= b.size) {
         memcpy(b.buf, data, size);
     }
 }
@@ -1463,7 +1465,7 @@ void BufferSubData(GLenum target,
 {
     Buffer &b = ctx->buffers[ctx->get_binding(target)];
     assert(offset + size <= b.size);
-    if (data) {
+    if (data && b.buf && offset + size <= b.size) {
         memcpy(&b.buf[offset], data, size);
     }
 }
@@ -1593,6 +1595,7 @@ template <> inline void fill_n<uint32_t>(uint32_t* dst, size_t n, uint32_t val) 
 
 template<typename T>
 static void clear_buffer(Texture& t, T value, int x0, int x1, int y0, int y1, int layer = 0, int skip_start = 0, int skip_end = 0) {
+    if (!t.buf) return;
     skip_start = max(skip_start, x0);
     skip_end = max(skip_end, skip_start);
     size_t stride = t.stride(sizeof(T));
@@ -1636,7 +1639,7 @@ static inline void clear_buffer(Texture& t, T value, int layer = 0) {
 
 template<typename T>
 static void force_clear(Texture& t, const IntRect* skip = nullptr) {
-    if (!t.delay_clear) {
+    if (!t.delay_clear || !t.cleared_rows) {
         return;
     }
     int y0 = 0;
@@ -1735,7 +1738,7 @@ void* GetColorBuffer(GLuint fbo, GLboolean flush, int32_t* width, int32_t* heigh
     }
     *width = colortex.width;
     *height = colortex.height;
-    return colortex.buf + (fb->layer ? fb->layer * colortex.layer_stride() : 0);
+    return colortex.buf ? colortex.buf + (fb->layer ? fb->layer * colortex.layer_stride() : 0) : nullptr;
 }
 
 void SetTextureBuffer(GLuint texid, GLenum internal_format, GLsizei width, GLsizei height, void* buf, GLsizei min_width, GLsizei min_height) {
@@ -1858,6 +1861,7 @@ void CopyImageSubData(
     if (!srctex.buf) return;
     prepare_texture(srctex);
     Texture &dsttex = ctx->textures[dstName];
+    if (!dsttex.buf) return;
     IntRect skip = { dstX, dstY, srcWidth, abs(srcHeight) };
     prepare_texture(dsttex, &skip);
     assert(srctex.internal_format == dsttex.internal_format);
@@ -2758,6 +2762,9 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
 
         Framebuffer& fb = *get_framebuffer(GL_DRAW_FRAMEBUFFER);
         Texture& colortex = ctx->textures[fb.color_attachment];
+        if (!colortex.buf) {
+            return;
+        }
         assert(colortex.internal_format == GL_RGBA8 || colortex.internal_format == GL_R8);
         static Texture nodepthtex;
         Texture& depthtex = ctx->depthtest && fb.depth_attachment ? ctx->textures[fb.depth_attachment] : nodepthtex;
@@ -2767,6 +2774,9 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
         }
 
         Buffer &indices_buf = ctx->buffers[ctx->element_array_buffer_binding];
+        if (!indices_buf.buf) {
+            return;
+        }
 
         //debugf("current_vertex_array %d\n", ctx->current_vertex_array);
         //debugf("indices size: %d\n", indices_buf.size);
@@ -2783,12 +2793,12 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
         ctx->shaded_rows = 0;
         ctx->shaded_pixels = 0;
 
-        unsigned short *indices = (unsigned short*)indices_buf.buf;
+        uint16_t *indices = (uint16_t*)indices_buf.buf;
         if (type == GL_UNSIGNED_INT) {
             assert(indices_buf.size == size_t(count) * 4);
-            indices = (unsigned short*)calloc(count, sizeof(unsigned short));
-            for (int i = 0; i < count; i++) {
-                unsigned int val = ((unsigned int *)indices_buf.buf)[i];
+            indices = new uint16_t[count];
+            for (GLsizei i = 0; i < count; i++) {
+                uint32_t val = ((uint32_t *)indices_buf.buf)[i];
                 assert(val <= 0xFFFFU);
                 indices[i] = val;
             }
@@ -2800,14 +2810,14 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
 
         vertex_shader->init_batch(program_impl);
         fragment_shader->init_batch(program_impl);
-        for (int instance = 0; instance < instancecount; instance++) {
-            if (mode == GL_QUADS) for (int i = 0; i + 4 <= count; i += 4) {
+        for (GLsizei instance = 0; instance < instancecount; instance++) {
+            if (mode == GL_QUADS) for (GLsizei i = 0; i + 4 <= count; i += 4) {
                 vertex_shader->load_attribs(program_impl, v.attribs, indices, i, instance, 4);
                 //debugf("native quad %d %d %d %d\n", indices[i], indices[i+1], indices[i+2], indices[i+3]);
                 draw_quad(4, colortex, fb.layer, depthtex);
-            } else for (int i = 0; i + 3 <= count; i += 3) {
+            } else for (GLsizei i = 0; i + 3 <= count; i += 3) {
                 if (i + 6 <= count && indices[i+3] == indices[i+2] && indices[i+4] == indices[i+1]) {
-                    unsigned short quad_indices[4] = { indices[i], indices[i+1], indices[i+5], indices[i+2] };
+                    uint16_t quad_indices[4] = { indices[i], indices[i+1], indices[i+5], indices[i+2] };
                     vertex_shader->load_attribs(program_impl, v.attribs, quad_indices, 0, instance, 4);
                     //debugf("emulate quad %d %d %d %d\n", indices[i], indices[i+1], indices[i+5], indices[i+2]);
                     draw_quad(4, colortex, fb.layer, depthtex);
@@ -2820,8 +2830,8 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
             }
         }
 
-        if (indices != (unsigned short*)indices_buf.buf) {
-            free(indices);
+        if (indices != (uint16_t*)indices_buf.buf) {
+            delete[] indices;
         }
 
         if (ctx->samples_passed_query) {
@@ -2880,6 +2890,7 @@ void Composite(
     if (!srctex.buf) return;
     prepare_texture(srctex);
     Texture &dsttex = ctx->textures[fb.color_attachment];
+    if (!dsttex.buf) return;
     assert(srctex.bpp() == 4);
     const int bpp = 4;
     size_t src_stride = srctex.stride(bpp);
