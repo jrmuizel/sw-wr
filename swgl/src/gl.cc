@@ -2167,48 +2167,48 @@ static inline PackedRGBA8 pack_span(uint32_t*) {
     return pack(pack_pixels_RGBA8());
 }
 
+// (x*y + x) >> 8, cheap approximation of (x*y) / 255
+template<typename T> static inline T muldiv255(T x, T y) { return (x*y + x) >> 8; }
+static inline WideRGBA8 alphas(WideRGBA8 c) { return SHUFFLE(c, c, 3, 3, 3, 3, 7, 7, 7, 7, 11, 11, 11, 11, 15, 15, 15, 15); }
+
 static inline WideRGBA8 blend_pixels_RGBA8(PackedRGBA8 pdst, WideRGBA8 src) {
     WideRGBA8 dst = unpack(pdst);
-    // (x*y + x) >> 8, cheap approximation of (x*y) / 255
-    #define MULDIV255(x, y) ({ WideRGBA8 b = x; (b*y + b) >> 8; })
-    #define ALPHAS(c) SHUFFLE(c, c, 3, 3, 3, 3, 7, 7, 7, 7, 11, 11, 11, 11, 15, 15, 15, 15)
     const WideRGBA8 RGB_MASK = {0xFFFF, 0xFFFF, 0xFFFF, 0, 0xFFFF, 0xFFFF, 0xFFFF, 0, 0xFFFF, 0xFFFF, 0xFFFF, 0, 0xFFFF, 0xFFFF, 0xFFFF, 0};
     const WideRGBA8 ALPHA_MASK = {0, 0, 0, 0xFFFF, 0, 0, 0, 0xFFFF, 0, 0, 0, 0xFFFF, 0, 0, 0, 0xFFFF};
     switch (blend_key) {
     case BLEND_KEY_NONE:
         return src;
     case BLEND_KEY(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE):
-        return dst + MULDIV255((src - dst) | ALPHA_MASK, ALPHAS(src));
+        return dst + muldiv255((src - dst) | ALPHA_MASK, alphas(src));
     case BLEND_KEY(GL_ONE, GL_ONE_MINUS_SRC_ALPHA):
-        return src + dst - MULDIV255(dst, ALPHAS(src));
+        return src + dst - muldiv255(dst, alphas(src));
     case BLEND_KEY(GL_ZERO, GL_ONE_MINUS_SRC_COLOR):
-        return dst - MULDIV255(dst, src);
+        return dst - muldiv255(dst, src);
     case BLEND_KEY(GL_ZERO, GL_ONE_MINUS_SRC_COLOR, GL_ZERO, GL_ONE):
-        return dst - (MULDIV255(dst, src) & RGB_MASK);
+        return dst - (muldiv255(dst, src) & RGB_MASK);
     case BLEND_KEY(GL_ZERO, GL_ONE_MINUS_SRC_ALPHA):
-        return dst - MULDIV255(dst, ALPHAS(src));
+        return dst - muldiv255(dst, alphas(src));
     case BLEND_KEY(GL_ZERO, GL_SRC_COLOR):
-        return MULDIV255(src, dst);
+        return muldiv255(src, dst);
     case BLEND_KEY(GL_ONE, GL_ONE):
         return src + dst;
     case BLEND_KEY(GL_ONE, GL_ONE, GL_ONE, GL_ONE_MINUS_SRC_ALPHA):
-        return src + dst - (MULDIV255(dst, src) & ALPHA_MASK);
+        return src + dst - (muldiv255(dst, src) & ALPHA_MASK);
     case BLEND_KEY(GL_ONE, GL_ZERO):
         return src;
     case BLEND_KEY(GL_ONE_MINUS_DST_ALPHA, GL_ONE, GL_ZERO, GL_ONE):
-        return dst + ((src - MULDIV255(src, ALPHAS(src))) & RGB_MASK);
+        return dst + ((src - muldiv255(src, alphas(src))) & RGB_MASK);
     case BLEND_KEY(GL_CONSTANT_COLOR, GL_ONE_MINUS_SRC_COLOR):
-        return dst + MULDIV255(combine(ctx->blendcolor, ctx->blendcolor) - dst, src);
+        return dst + muldiv255(combine(ctx->blendcolor, ctx->blendcolor) - dst, src);
     case BLEND_KEY(GL_ONE, GL_ONE_MINUS_SRC1_COLOR): {
         WideRGBA8 secondary = pack_pixels_RGBA8(fragment_shader->gl_SecondaryFragColor);
-        return src + dst - MULDIV255(dst, secondary);
+        return src + dst - muldiv255(dst, secondary);
     }
     default:
         UNREACHABLE;
         //return src;
     }
-    #undef MULDIV255
-    #undef ALPHAS
+    #undef alphas
 }
 
 template<bool DISCARD>
@@ -2312,12 +2312,11 @@ static inline PackedR8 pack_span(uint8_t*) {
 }
 
 static inline WideR8 blend_pixels_R8(WideR8 dst, WideR8 src) {
-    #define MULDIV255(x, y) ({ WideR8 b = x; (b*y + b) >> 8; })
     switch (blend_key) {
     case BLEND_KEY_NONE:
         return src;
     case BLEND_KEY(GL_ZERO, GL_SRC_COLOR):
-        return MULDIV255(src, dst);
+        return muldiv255(src, dst);
     case BLEND_KEY(GL_ONE, GL_ONE):
         return src + dst;
     case BLEND_KEY(GL_ONE, GL_ZERO):
@@ -2326,7 +2325,6 @@ static inline WideR8 blend_pixels_R8(WideR8 dst, WideR8 src) {
         UNREACHABLE;
         //return src;
     }
-    #undef MULDIV255
 }
 
 template<bool DISCARD>
@@ -2947,14 +2945,12 @@ void Composite(
             src += src_stride;
         }
     } else {
-        #define MULDIV255(x, y) ({ WideRGBA8 b = x; (b*y + b) >> 8; })
-        #define ALPHAS(c) SHUFFLE(c, c, 3, 3, 3, 3, 7, 7, 7, 7, 11, 11, 11, 11, 15, 15, 15, 15)
         for (int y = 0; y < srcHeight; y++) {
             char *end = src + srcWidth * bpp;
             while (src + 4 * bpp <= end) {
                 WideRGBA8 srcpx = unpack(unaligned_load<PackedRGBA8>(src));
                 WideRGBA8 dstpx = unpack(unaligned_load<PackedRGBA8>(dest));
-                PackedRGBA8 r = pack(srcpx + dstpx - MULDIV255(dstpx, ALPHAS(srcpx)));
+                PackedRGBA8 r = pack(srcpx + dstpx - muldiv255(dstpx, alphas(srcpx)));
                 unaligned_store(dest, r);
                 src += 4 * bpp;
                 dest += 4 * bpp;
@@ -2962,7 +2958,7 @@ void Composite(
             if (src < end) {
                 WideRGBA8 srcpx = unpack(unaligned_load<PackedRGBA8>(src));
                 WideRGBA8 dstpx = unpack(unaligned_load<PackedRGBA8>(dest));
-                U32 r = bit_cast<U32>(pack(srcpx + dstpx - MULDIV255(dstpx, ALPHAS(srcpx))));
+                U32 r = bit_cast<U32>(pack(srcpx + dstpx - muldiv255(dstpx, alphas(srcpx))));
                 unaligned_store(dest, r.x);
                 if (src + bpp < end) {
                     unaligned_store(dest + bpp, r.y);
@@ -2976,8 +2972,6 @@ void Composite(
             dest += dest_stride - srcWidth * bpp;
             src += src_stride - srcWidth * bpp;
         }
-        #undef MULDIV255
-        #undef ALPHAS
     }
 }
 
