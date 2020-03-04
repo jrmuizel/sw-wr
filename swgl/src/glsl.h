@@ -269,7 +269,7 @@ struct vec2_scalar {
         float x;
         float y;
 
-        vec2_scalar() : vec2_scalar(0.0f) {}
+        constexpr vec2_scalar() : vec2_scalar(0.0f) {}
         constexpr vec2_scalar(float a): x(a), y(a) {}
         constexpr vec2_scalar(int a): x(a), y(a) {}
         constexpr vec2_scalar(float x, float y): x(x), y(y) {}
@@ -550,9 +550,14 @@ vec2 max(vec2 a, Float b) {
 }
 
 SI vec2_scalar max(vec2_scalar a, vec2_scalar b) { return vec2_scalar{max(a.x, b.x), max(a.y, b.y)}; }
+SI vec2_scalar max(vec2_scalar a, float b) { return vec2_scalar{max(a.x, b), max(a.y, b)}; }
 
 Float length(vec2 a) {
        return sqrt(a.x*a.x+a.y*a.y);
+}
+
+float length(vec2_scalar a) {
+       return hypotf(a.x, a.y);
 }
 
 SI Float distance(vec2 a, vec2 b) {
@@ -680,6 +685,11 @@ struct ivec2_scalar {
                 return ivec2_scalar{select(c1), select(c2)};
         }
 
+        ivec2_scalar& operator+=(ivec2_scalar a) {
+                x += a.x;
+                y += a.y;
+                return *this;
+        }
         ivec2_scalar& operator+=(int n) {
                 x += n;
                 y += n;
@@ -1148,7 +1158,7 @@ struct vec3_scalar {
         float y;
         float z;
 
-        vec3_scalar() : vec3_scalar(0.0f) {}
+        constexpr vec3_scalar() : vec3_scalar(0.0f) {}
         constexpr vec3_scalar(float a) : x(a), y(a), z(a) {}
         constexpr vec3_scalar(float x, float y, float z) : x(x), y(y), z(z) {}
 
@@ -1166,6 +1176,9 @@ struct vec3_scalar {
         vec2_scalar sel(XYZW c1, XYZW c2) {
                 return vec2_scalar(select(c1), select(c2));
         }
+        vec3_scalar sel(XYZW c1, XYZW c2, XYZW c3) {
+                return vec3_scalar(select(c1), select(c2), select(c3));
+        }
         vec2_scalar_ref lsel(XYZW c1, XYZW c2) {
                 return vec2_scalar_ref(select(c1), select(c2));
         }
@@ -1179,6 +1192,15 @@ struct vec3_scalar {
         }
         friend vec3_scalar operator+(vec3_scalar a, vec3_scalar b) {
                 return vec3_scalar{a.x+b.x, a.y+b.y, a.z+b.z};
+        }
+
+        friend vec3_scalar operator/(vec3_scalar a, float b) {
+                return vec3_scalar{a.x/b, a.y/b, a.z/b};
+        }
+
+        friend bool operator==(const vec3_scalar& l, const vec3_scalar& r)
+        {
+                return l.x == r.x && l.y == r.y && l.z == r.z;
         }
 };
 
@@ -1323,6 +1345,8 @@ vec3 step(vec3 edge, vec3 x) {
 SI vec3 min(vec3 a, vec3 b)       { return vec3(min(a.x, b.x), min(a.y, b.y), min(a.z, b.z));    }
 SI vec3 max(vec3 a, vec3 b)       { return vec3(max(a.x, b.x), max(a.y, b.y), max(a.z, b.z));    }
 
+SI vec3_scalar max(vec3_scalar a, vec3_scalar b) { return vec3_scalar{max(a.x, b.x), max(a.y, b.y), max(a.z, b.z)}; }
+
 vec3 pow(vec3 x, vec3 y) {
     return vec3(pow(x.x, y.x), pow(x.y, y.y), pow(x.z, y.z));
 }
@@ -1369,7 +1393,7 @@ struct vec4_scalar {
         float z;
         float w;
 
-        vec4_scalar() : vec4_scalar(0.0f) {}
+        constexpr vec4_scalar() : vec4_scalar(0.0f) {}
         constexpr vec4_scalar(float a) : x(a), y(a), z(a), w(a) {}
         constexpr vec4_scalar(float x, float y, float z, float w) : x(x), y(y), z(z), w(w) {}
 
@@ -1601,6 +1625,10 @@ vec4_scalar make_vec4(float x, float y, float z, float w) {
     return vec4_scalar{ x, y, z, w };
 }
 
+vec4_scalar make_vec4(float x, float y, const vec2_scalar& v) {
+    return vec4_scalar{ x, y, v.x, v.y };
+}
+
 template<typename N> vec4 make_vec4(const N& n) {
     return vec4(n);
 }
@@ -1781,8 +1809,21 @@ typedef isampler2D_impl *isampler2D;
 struct isampler2DRGBA32I_impl : isampler2D_impl {};
 typedef isampler2DRGBA32I_impl *isampler2DRGBA32I;
 
+struct mat4_scalar;
+
 struct mat2_scalar {
         vec2_scalar data[2];
+
+        mat2_scalar() = default;
+        constexpr mat2_scalar(float a) {
+                data[0] = vec2_scalar(a);
+                data[1] = vec2_scalar(a);
+        }
+        constexpr mat2_scalar(vec2_scalar a, vec2_scalar b) {
+                data[0] = a;
+                data[1] = b;
+        }
+        mat2_scalar(const mat4_scalar &mat);
 
         vec2_scalar& operator[](int index) {
                 return data[index];
@@ -1861,7 +1902,7 @@ struct mat2 {
 };
 
 mat2_scalar make_mat2(float n) {
-    return mat2_scalar{{{n, n}, {n, n}}};
+    return mat2_scalar{{n, n}, {n, n}};
 }
 
 mat2_scalar make_mat2(const mat2_scalar& m) {
@@ -1869,7 +1910,7 @@ mat2_scalar make_mat2(const mat2_scalar& m) {
 }
 
 mat2_scalar make_mat2(const vec2_scalar& x, const vec2_scalar& y) {
-    return mat2_scalar{{x, y}};
+    return mat2_scalar{x, y};
 }
 
 template<typename N> mat2 make_mat2(const N& n) {
@@ -1892,11 +1933,27 @@ SI mat2 if_then_else(int32_t c, mat2 t, mat2 e) {
 struct mat3_scalar {
         vec3_scalar data[3];
 
+        mat3_scalar() = default;
+        constexpr mat3_scalar(vec3_scalar a, vec3_scalar b, vec3_scalar c) {
+                data[0] = a;
+                data[1] = b;
+                data[2] = c;
+        }
+        mat3_scalar(const mat4_scalar &mat);
+
         vec3_scalar& operator[](int index) {
                 return data[index];
         }
         const vec3_scalar& operator[](int index) const {
                 return data[index];
+        }
+
+        friend vec3_scalar operator*(mat3_scalar m, vec3_scalar v) {
+                vec3_scalar u;
+                u.x = m[0].x * v.x + m[1].x * v.y + m[2].x * v.z;
+                u.y = m[0].y * v.x + m[1].y * v.y + m[2].y * v.z;
+                u.z = m[0].z * v.x + m[1].z * v.y + m[2].z * v.z;
+                return u;
         }
 
         friend vec3 operator*(mat3_scalar m, vec3 v) {
@@ -1954,7 +2011,7 @@ struct mat3 {
 };
 
 mat3_scalar force_scalar(const mat3& v) {
-    return mat3_scalar{{ force_scalar(v[0]), force_scalar(v[1]), force_scalar(v[2]) }};
+    return mat3_scalar{ force_scalar(v[0]), force_scalar(v[1]), force_scalar(v[2]) };
 }
 
 mat3_scalar make_mat3(const mat3_scalar& m) {
@@ -1962,11 +2019,11 @@ mat3_scalar make_mat3(const mat3_scalar& m) {
 }
 
 mat3_scalar make_mat3(const vec3_scalar& x, const vec3_scalar& y, const vec3_scalar& z) {
-    return mat3_scalar{{x, y, z}};
+    return mat3_scalar{x, y, z};
 }
 
 constexpr mat3_scalar make_mat3(float m0, float m1, float m2, float m3, float m4, float m5, float m6, float m7, float m8) {
-    return mat3_scalar{{{m0, m1, m2}, {m3, m4, m5},  {m6, m7, m8}}};
+    return mat3_scalar{{m0, m1, m2}, {m3, m4, m5},  {m6, m7, m8}};
 }
 
 template<typename N> mat3 make_mat3(const N& n) {
@@ -1979,6 +2036,14 @@ template<typename X, typename Y, typename Z> mat3 make_mat3(const X& x, const Y&
 
 struct mat4_scalar {
         vec4_scalar data[4];
+
+        mat4_scalar() = default;
+        constexpr mat4_scalar(vec4_scalar a, vec4_scalar b, vec4_scalar c, vec4_scalar d) {
+                data[0] = a;
+                data[1] = b;
+                data[2] = c;
+                data[3] = d;
+        }
 
         vec4_scalar& operator[](int index) {
                 return data[index];
@@ -1995,6 +2060,15 @@ struct mat4_scalar {
                 m.data[2] = vec4_scalar{f[8], f[9], f[10], f[11]};
                 m.data[3] = vec4_scalar{f[12], f[13], f[14], f[15]};
                 return m;
+        }
+
+        friend vec4_scalar operator*(mat4_scalar m, vec4_scalar v) {
+                vec4_scalar u;
+                u.x = m[0].x * v.x + m[1].x * v.y + m[2].x * v.z + m[3].x * v.w;
+                u.y = m[0].y * v.x + m[1].y * v.y + m[2].y * v.z + m[3].y * v.w;
+                u.z = m[0].z * v.x + m[1].z * v.y + m[2].z * v.z + m[3].z * v.w;
+                u.w = m[0].w * v.x + m[1].w * v.y + m[2].w * v.z + m[3].w * v.w;
+                return u;
         }
 
         friend vec4 operator*(mat4_scalar m, vec4 v) {
@@ -2049,16 +2123,29 @@ mat3::mat3(const mat4 &mat) : mat3(vec3(mat[0].x, mat[0].y, mat[0].z),
                     vec3(mat[2].x, mat[2].y, mat[2].z)) {
 }
 
+mat3_scalar::mat3_scalar(const mat4_scalar &mat) : mat3_scalar(vec3_scalar(mat[0].x, mat[0].y, mat[0].z),
+                    vec3_scalar(mat[1].x, mat[1].y, mat[1].z),
+                    vec3_scalar(mat[2].x, mat[2].y, mat[2].z)) {
+}
+
 mat2::mat2(const mat4 &mat) : mat2(vec2(mat[0].x, mat[0].y),
                     vec2(mat[1].x, mat[1].y)) {
 }
 
+mat2_scalar::mat2_scalar(const mat4_scalar &mat) : mat2_scalar(vec2_scalar(mat[0].x, mat[0].y),
+                    vec2_scalar(mat[1].x, mat[1].y)) {
+}
+
 mat2_scalar make_mat2(const mat4_scalar &m) {
-    return mat2_scalar{{{m[0].x, m[0].y}, {m[1].x, m[1].y}}};
+    return mat2_scalar(m);
+}
+
+mat3_scalar make_mat3(const mat4_scalar &m) {
+    return mat3_scalar(m);
 }
 
 mat4_scalar force_scalar(const mat4& v) {
-    return mat4_scalar{{ force_scalar(v[0]), force_scalar(v[1]), force_scalar(v[2]), force_scalar(v[3]) }};
+    return mat4_scalar(force_scalar(v[0]), force_scalar(v[1]), force_scalar(v[2]), force_scalar(v[3]));
 }
 
 mat4_scalar make_mat4(const mat4_scalar& m) {
@@ -2066,12 +2153,12 @@ mat4_scalar make_mat4(const mat4_scalar& m) {
 }
 
 mat4_scalar make_mat4(const vec4_scalar& x, const vec4_scalar& y, const vec4_scalar& z, const vec4_scalar& w) {
-    return mat4_scalar{{x, y, z, w}};
+    return mat4_scalar{x, y, z, w};
 }
 
 constexpr mat4_scalar make_mat4(float m0, float m1, float m2, float m3, float m4, float m5, float m6, float m7, float m8,
                                 float m9, float m10, float m11, float m12, float m13, float m14, float m15) {
-    return mat4_scalar{{{m0, m1, m2, m3}, {m4, m5, m6, m7},  {m8, m9, m10, m11}, {m12, m13, m14, m15}}};
+    return mat4_scalar{{m0, m1, m2, m3}, {m4, m5, m6, m7},  {m8, m9, m10, m11}, {m12, m13, m14, m15}};
 }
 
 template<typename N> mat4 make_mat4(const N& n) {
@@ -2792,6 +2879,12 @@ mat3 transpose(mat3 m) {
                     vec3(m[0].z, m[1].z, m[2].z));
 }
 
+mat3_scalar transpose(mat3_scalar m) {
+        return mat3_scalar{vec3_scalar(m[0].x, m[1].x, m[2].x),
+                           vec3_scalar(m[0].y, m[1].y, m[2].y),
+                           vec3_scalar(m[0].z, m[1].z, m[2].z)};
+}
+
 vec2 abs(vec2 v) {
         return vec2(abs(v.x), abs(v.y));
 }
@@ -2819,7 +2912,7 @@ mat2 inverse(mat2 v) {
 
 mat2_scalar inverse(mat2_scalar v) {
         float det = v[0].x*v[1].y - v[0].y * v[1].x;
-        return mat2_scalar{{{v[1].y, -v[0].y}, {-v[1].x, v[0].x}}}* (1./det);
+        return mat2_scalar{{v[1].y, -v[0].y}, {-v[1].x, v[0].x}}* (1./det);
 }
 
 int32_t get_nth(I32 a, int n) {
