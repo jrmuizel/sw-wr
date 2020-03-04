@@ -2129,7 +2129,7 @@ static inline WideRGBA8 pack_pixels_RGBA8(const vec4& v) {
 }
 
 static inline WideRGBA8 pack_pixels_RGBA8(const vec4_scalar& v) {
-    I32 i = roundto(bit_cast<Float>(v).zyxw, 255.49f);
+    I32 i = roundto((Float){v.z, v.y, v.x, v.w}, 255.49f);
     HalfRGBA8 c = packRGBA8(i, i);
     return combine(c, c);
 }
@@ -2401,7 +2401,7 @@ static ALWAYS_INLINE void dispatch_draw_span(S* shader, P* buf, int len) {
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wuninitialized"
-#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
+#pragma GCC diagnostic ignored "-Wunused-function"
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 #pragma GCC diagnostic ignored "-Wunused-variable"
 #pragma GCC diagnostic ignored "-Wimplicit-fallthrough"

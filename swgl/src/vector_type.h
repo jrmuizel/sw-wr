@@ -53,6 +53,8 @@ template <> struct VectorMask<uint8_t> { typedef int8_t type; };
 template <> struct VectorMask<float> { typedef int type; };
 
 template <typename T, int N> struct VectorType {
+    enum { SIZE = N };
+
     typedef T data_type __attribute__((vector_size(sizeof(T)*N)));
     typedef typename VectorMask<T>::type mask_index;
     typedef mask_index mask_type __attribute__((vector_size(sizeof(mask_index)*N)));
@@ -103,8 +105,11 @@ template <typename T, int N> struct VectorType {
     VectorType operator~() const { return wrap(~data); }
 
     VectorType operator&(VectorType x) const { return wrap(data & x.data); }
+    VectorType operator&(T x) const { return wrap(data & x); }
     VectorType operator|(VectorType x) const { return wrap(data | x.data); }
+    VectorType operator|(T x) const { return wrap(data | x); }
     VectorType operator^(VectorType x) const { return wrap(data ^ x.data); }
+    VectorType operator^(T x) const { return wrap(data ^ x); }
     VectorType operator<<(int x) const { return wrap(data << x); }
     VectorType operator>>(int x) const { return wrap(data >> x); }
     VectorType operator+(VectorType x) const { return wrap(data + x.data); }
@@ -245,6 +250,52 @@ template <typename T> SI VectorType<T, 8> zip2Low(VectorType<T, 8> a, VectorType
 
 template <typename T> SI VectorType<T, 8> zip2High(VectorType<T, 8> a, VectorType<T, 8> b) {
     return SHUFFLE(a, b, 4, 5, 12, 13, 6, 7, 14, 15);
+}
+
+template <typename T> struct Unaligned {
+    template <typename P>
+    SI T load(const P* p) {
+        T v;
+        memcpy(&v, p, sizeof(v));
+        return v;
+    }
+
+    template <typename P>
+    SI void store(P* p, T v) {
+        memcpy(p, &v, sizeof(v));
+    }
+};
+
+#ifndef __clang__
+template <typename T, int N> struct Unaligned<VectorType<T, N>> {
+    template <typename P>
+    SI VectorType<T, N> load(const P* p) {
+        VectorType<T, N> v;
+        memcpy(v.elements, p, sizeof(v));
+        return v;
+    }
+
+    template <typename P>
+    SI void store(P* p, VectorType<T, N> v) {
+        memcpy(p, v.elements, sizeof(v));
+    }
+};
+#endif
+
+template <typename T, typename P>
+SI T unaligned_load(const P* p) {
+    return Unaligned<T>::load(p);
+}
+
+template <typename T, typename P>
+SI void unaligned_store(P* p, T v) {
+    Unaligned<T>::store(p, v);
+}
+
+template <typename Dst, typename Src>
+SI Dst bit_cast(const Src& src) {
+    static_assert(sizeof(Dst) <= sizeof(Src), "");
+    return unaligned_load<Dst>(&src);
 }
 
 template <typename T> using V2 = VectorType<T, 2>;

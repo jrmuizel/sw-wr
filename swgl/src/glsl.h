@@ -214,6 +214,10 @@ enum XYZW {
 struct bvec2_scalar {
     bool x;
     bool y;
+
+    bvec2_scalar() : bvec2_scalar(false) {}
+    constexpr bvec2_scalar(bool a) : x(a), y(a) {}
+    constexpr bvec2_scalar(bool x, bool y) : x(x), y(y) {}
 };
 
 struct bvec2 {
@@ -266,8 +270,8 @@ struct vec2_scalar {
         float y;
 
         vec2_scalar() : vec2_scalar(0.0f) {}
-        vec2_scalar(float a): x(a), y(a) {}
-        vec2_scalar(int a): x(a), y(a) {}
+        constexpr vec2_scalar(float a): x(a), y(a) {}
+        constexpr vec2_scalar(int a): x(a), y(a) {}
         constexpr vec2_scalar(float x, float y): x(x), y(y) {}
 
         float& select(XYZW c) {
@@ -568,24 +572,6 @@ Float abs(Float v) {
 #endif
 }
 
-template <typename T, typename P>
-SI T unaligned_load(const P* p) {  // const void* would work too, but const P* helps ARMv7 codegen.
-    T v;
-    memcpy(&v, p, sizeof(v));
-    return v;
-}
-
-template <typename T, typename P>
-SI void unaligned_store(P* p, T v) {
-    memcpy(p, &v, sizeof(v));
-}
-
-template <typename Dst, typename Src>
-SI Dst bit_cast(const Src& src) {
-    static_assert(sizeof(Dst) <= sizeof(Src), "");
-    return unaligned_load<Dst>(&src);
-}
-
 Float cast(U32 v) { return CONVERT((I32)v, Float); }
 Float cast(I32 v) { return CONVERT((I32)v, Float); }
 I32 cast(Float v) { return CONVERT(v, I32); }
@@ -676,6 +662,10 @@ struct ivec2_scalar {
         int32_t x;
         int32_t y;
 
+        ivec2_scalar() : ivec2_scalar(0) {}
+        constexpr ivec2_scalar(int32_t a) : x(a), y(a) {}
+        constexpr ivec2_scalar(int32_t x, int32_t y) : x(x), y(y) {}
+
         int32_t& select(XYZW c) {
                 switch (c) {
                     case X: return x;
@@ -714,9 +704,8 @@ struct ivec2_scalar {
 struct ivec2 {
         typedef int32_t element_type;
 
-        ivec2() : ivec2(0) {}
+        ivec2() : ivec2(I32(0)) {}
         ivec2(I32 a): x(a), y(a) {}
-        ivec2(int32_t x, int32_t y): x(x), y(y) {}
         ivec2(I32 x, I32 y): x(x), y(y) {}
         ivec2(vec2 a): x(cast(a.x)), y(cast(a.y)) {}
         ivec2(U32 x, U32 y): x(CONVERT(x, I32)), y(CONVERT(y, I32)) {}
@@ -818,6 +807,10 @@ struct ivec3_scalar {
         int32_t y;
         int32_t z;
 
+        ivec3_scalar() : ivec3_scalar(0) {}
+        constexpr ivec3_scalar(int32_t a) : x(a), y(a), z(a) {}
+        constexpr ivec3_scalar(int32_t x, int32_t y, int32_t z) : x(x), y(y), z(z) {}
+
         int32_t& select(XYZW c) {
                 switch (c) {
                     case X: return x;
@@ -886,6 +879,10 @@ struct ivec4_scalar {
         int32_t z;
         int32_t w;
 
+        ivec4_scalar() : ivec4_scalar(0) {}
+        constexpr ivec4_scalar(int32_t a) : x(a), y(a), z(a), w(a) {}
+        constexpr ivec4_scalar(int32_t x, int32_t y, int32_t z, int32_t w) : x(x), y(y), z(z), w(w) {}
+
         int32_t& select(XYZW c) {
                 switch (c) {
                     case X: return x;
@@ -910,7 +907,7 @@ struct ivec4_scalar {
 struct ivec4 {
         typedef int32_t element_type;
 
-        ivec4() : ivec4(0) {}
+        ivec4() : ivec4(I32(0)) {}
         ivec4(I32 a): x(a), y(a), z(a), w(a) {}
         ivec4(I32 x, I32 y, I32 z, I32 w): x(x), y(y), z(z), w(w) {}
         ivec4(ivec2 a, I32 b, I32 c): x(a.x), y(a.y), z(b), w(c) {}
@@ -1007,7 +1004,10 @@ struct bvec3_scalar {
     bool x;
     bool y;
     bool z;
-    bool w;
+
+    bvec3_scalar() : bvec3_scalar(false) {}
+    constexpr bvec3_scalar(bool a) : x(a), y(a), z(a) {}
+    constexpr bvec3_scalar(bool x, bool y, bool z) : x(x), y(y), z(z) {}
 };
 
 struct bvec3 {
@@ -1037,6 +1037,10 @@ struct bvec4_scalar {
     bool y;
     bool z;
     bool w;
+
+    bvec4_scalar() : bvec4_scalar(false) {}
+    constexpr bvec4_scalar(bool a) : x(a), y(a), z(a), w(a) {}
+    constexpr bvec4_scalar(bool x, bool y, bool z, bool w) : x(x), y(y), z(z), w(w) {}
 };
 
 struct bvec4 {
@@ -1143,6 +1147,10 @@ struct vec3_scalar {
         float x;
         float y;
         float z;
+
+        vec3_scalar() : vec3_scalar(0.0f) {}
+        constexpr vec3_scalar(float a) : x(a), y(a), z(a) {}
+        constexpr vec3_scalar(float x, float y, float z) : x(x), y(y), z(z) {}
 
         float& select(XYZW c) {
                 switch (c) {
@@ -1360,6 +1368,10 @@ struct vec4_scalar {
         float y;
         float z;
         float w;
+
+        vec4_scalar() : vec4_scalar(0.0f) {}
+        constexpr vec4_scalar(float a) : x(a), y(a), z(a), w(a) {}
+        constexpr vec4_scalar(float x, float y, float z, float w) : x(x), y(y), z(z), w(w) {}
 
         float& select(XYZW c) {
                 switch (c) {
@@ -2138,7 +2150,8 @@ ivec4 pixel_int_to_ivec4(I32 a, I32 b, I32 c, I32 d) {
 
 vec4_scalar pixel_to_vec4(uint32_t p) {
     U32 i = { (p >> 16) & 0xFF, (p >> 8) & 0xFF, p & 0xFF, p >> 24 };
-    return bit_cast<vec4_scalar>(cast(i) * (1.0f / 255.0f));
+    Float f = cast(i) * (1.0f / 255.0f);
+    return vec4_scalar(f.x, f.y, f.z, f.w);
 }
 
 template<typename S>
