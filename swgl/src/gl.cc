@@ -109,10 +109,14 @@ struct Buffer {
 
         bool allocate(size_t new_size) {
             if (new_size != size) {
-                size = new_size;
-                buf = (char*)realloc(buf, size);
-                assert(buf);
-                return true;
+                char* new_buf = (char*)realloc(buf, new_size);
+                assert(new_buf);
+                if (new_buf) {
+                    buf = new_buf;
+                    size = new_size;
+                    return true;
+                }
+                cleanup();
             }
             return false;
         }
@@ -211,15 +215,21 @@ struct Texture {
         return stride(b ? b : bpp(), min_width) * max(height, min_height);
     }
 
-    void allocate(bool force = false, int min_width = 0, int min_height = 0) {
+    bool allocate(bool force = false, int min_width = 0, int min_height = 0) {
         if ((!buf || force) && should_free()) {
             size_t size = layer_stride(bpp(), min_width, min_height) * max(depth, 1) * levels;
             if (!buf || size > buf_size) {
-                buf = (char*)realloc(buf, size + sizeof(Float));
-                buf_size = size;
-                assert(buf);
+                char* new_buf = (char*)realloc(buf, size + sizeof(Float));
+                assert(new_buf);
+                if (new_buf) {
+                    buf = new_buf;
+                    buf_size = size;
+                    return true;
+                }
+                cleanup();
             }
         }
+        return false;
     }
 
     void cleanup() {
