@@ -842,7 +842,7 @@ void GenQueries(GLsizei n, GLuint *result) {
 }
 
 void DeleteQuery(GLuint n) {
-    if (ctx->queries.erase(n)) {
+    if (n && ctx->queries.erase(n)) {
         unlink(ctx->time_elapsed_query, n);
         unlink(ctx->samples_passed_query, n);
     }
@@ -856,7 +856,7 @@ void GenBuffers(int n, GLuint *result) {
 }
 
 void DeleteBuffer(GLuint n) {
-    if (ctx->buffers.erase(n)) {
+    if (n && ctx->buffers.erase(n)) {
         unlink(ctx->pixel_pack_buffer_binding, n);
         unlink(ctx->pixel_unpack_buffer_binding, n);
         unlink(ctx->array_buffer_binding, n);
@@ -872,7 +872,7 @@ void GenVertexArrays(int n, GLuint *result) {
 }
 
 void DeleteVertexArray(GLuint n) {
-    if (ctx->vertex_arrays.erase(n)) {
+    if (n && ctx->vertex_arrays.erase(n)) {
         unlink(ctx->current_vertex_array, n);
     }
 }
@@ -904,7 +904,7 @@ void AttachShader(GLuint program, GLuint shader) {
 }
 
 void DeleteShader(GLuint n) {
-    ctx->shaders.erase(n);
+    if (n) ctx->shaders.erase(n);
 }
 
 GLuint CreateProgram() {
@@ -913,6 +913,7 @@ GLuint CreateProgram() {
 }
 
 void DeleteProgram(GLuint n) {
+    if (!n) return;
     if (ctx->current_program == n) {
         if (auto* p = ctx->programs.find(n)) {
             p->deleted = true;
@@ -1313,7 +1314,7 @@ void GenTextures(int n, GLuint *result) {
 }
 
 void DeleteTexture(GLuint n) {
-    if (ctx->textures.erase(n)) {
+    if (n && ctx->textures.erase(n)) {
         for (size_t i = 0; i < MAX_TEXTURE_UNITS; i++) {
             ctx->texture_units[i].unlink(n);
         }
@@ -1340,7 +1341,7 @@ Renderbuffer::~Renderbuffer() {
 }
 
 void DeleteRenderbuffer(GLuint n) {
-    if (ctx->renderbuffers.erase(n)) {
+    if (n && ctx->renderbuffers.erase(n)) {
         unlink(ctx->renderbuffer_binding, n);
     }
 }
@@ -1353,7 +1354,7 @@ void GenFramebuffers(int n, GLuint *result) {
 }
 
 void DeleteFramebuffer(GLuint n) {
-    if (ctx->framebuffers.erase(n)) {
+    if (n && ctx->framebuffers.erase(n)) {
         unlink(ctx->read_framebuffer_binding, n);
         unlink(ctx->draw_framebuffer_binding, n);
     }
@@ -1366,7 +1367,9 @@ void RenderbufferStorage(
         GLsizei height) {
     // Just refer a renderbuffer to a texture to simplify things for now...
     Renderbuffer &r = ctx->renderbuffers[ctx->get_binding(target)];
-    GenTextures(1, &r.texture);
+    if (!r.texture) {
+        GenTextures(1, &r.texture);
+    }
     switch (internal_format) {
         case GL_DEPTH_COMPONENT:
         case GL_DEPTH_COMPONENT24:
@@ -1387,6 +1390,7 @@ void VertexAttribPointer(GLuint index,
 {
         debugf("cva: %d\n", ctx->current_vertex_array);
         VertexArray &v = ctx->vertex_arrays[ctx->current_vertex_array];
+        if (index >= NULL_ATTRIB) { assert(0); return; }
         VertexAttrib &va = v.attribs[index];
         va.size = size * bytes_per_type(type);
         va.type = type;
@@ -1407,6 +1411,7 @@ void VertexAttribIPointer(GLuint index,
 {
         debugf("cva: %d\n", ctx->current_vertex_array);
         VertexArray &v = ctx->vertex_arrays[ctx->current_vertex_array];
+        if (index >= NULL_ATTRIB) { assert(0); return; }
         VertexAttrib &va = v.attribs[index];
         va.size = size * bytes_per_type(type);
         va.type = type;
@@ -1421,6 +1426,7 @@ void VertexAttribIPointer(GLuint index,
 
 void EnableVertexAttribArray(GLuint index) {
         VertexArray &v = ctx->vertex_arrays[ctx->current_vertex_array];
+        if (index >= NULL_ATTRIB) { assert(0); return; }
         VertexAttrib &va = v.attribs[index];
         if (!va.enabled) {
             ctx->validate_vertex_array = true;
@@ -1431,6 +1437,7 @@ void EnableVertexAttribArray(GLuint index) {
 
 void DisableVertexAttribArray(GLuint index) {
         VertexArray &v = ctx->vertex_arrays[ctx->current_vertex_array];
+        if (index >= NULL_ATTRIB) { assert(0); return; }
         VertexAttrib &va = v.attribs[index];
         if (va.enabled) {
             ctx->validate_vertex_array = true;
@@ -1440,6 +1447,7 @@ void DisableVertexAttribArray(GLuint index) {
 
 void VertexAttribDivisor(GLuint index, GLuint divisor) {
         VertexArray &v = ctx->vertex_arrays[ctx->current_vertex_array];
+        if (index >= NULL_ATTRIB) { assert(0); return; }
         VertexAttrib &va = v.attribs[index];
         va.divisor = divisor;
 }
