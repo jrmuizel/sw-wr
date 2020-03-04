@@ -2013,8 +2013,7 @@ static inline WideR8 unpack(PackedR8 p) {
 
 static inline WideR8 packR8(I32 a) {
 #if USE_SSE2
-    auto r = bit_cast<V8<uint16_t>>(_mm_packs_epi32(a, a));
-    return SHUFFLE(r, r, 0, 1, 2, 3);
+    return lowHalf(bit_cast<V8<uint16_t>>(_mm_packs_epi32(a, a)));
 #elif USE_NEON
     return vqmovun_s32(a);
 #else
@@ -2121,7 +2120,7 @@ static ALWAYS_INLINE bool check_depth4(uint16_t z, uint16_t* zbuf, ZMask4& outma
 
 static inline ZMask4 packZMask4(Bool a) {
 #if USE_SSE2
-    return bit_cast<ZMask4>(_mm_packs_epi32(a, a));
+    return lowHalf(bit_cast<ZMask8>(_mm_packs_epi32(a, a)));
 #elif USE_NEON
     return vqmovun_s32(a);
 #else
