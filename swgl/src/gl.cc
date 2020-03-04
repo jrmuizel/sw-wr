@@ -568,6 +568,7 @@ void load_attrib(T& attrib, VertexAttrib& va, uint16_t* indices, int start, int 
         assert(src + va.size <= va.buf + va.buf_size);
         attrib = T(load_attrib_scalar<scalar_type>(src, va.size, va.type, va.normalized));
     } else if (va.divisor == 0) {
+        if (!indices) return;
         assert(sizeof(typename ElementType<T>::ty) == bytes_per_type(va.type));
         assert(count == 3 || count == 4);
         attrib = (T){
@@ -591,6 +592,7 @@ void load_flat_attrib(T& attrib, VertexAttrib& va, uint16_t* indices, int start,
     if (va.divisor == 1) {
         src = (char*)va.buf + va.stride * instance + va.offset;
     } else if (va.divisor == 0) {
+        if (!indices) return;
         src = (char*)va.buf + va.stride * indices[start] + va.offset;
     } else {
         assert(false);
@@ -2832,9 +2834,11 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
         fragment_shader->init_batch(program_impl);
         if (count == 6 && indices[3] == indices[2] && indices[4] == indices[1]) {
             uint16_t quad_indices[4] = { indices[0], indices[1], indices[5], indices[2] };
-            for (GLsizei instance = 0; instance < instancecount; instance++) {
-                vertex_shader->load_attribs(program_impl, v.attribs, quad_indices, 0, instance, 4);
-                //debugf("emulate quad %d %d %d %d\n", indices[0], indices[1], indices[5], indices[2]);
+            vertex_shader->load_attribs(program_impl, v.attribs, quad_indices, 0, 0, 4);
+            //debugf("emulate quad %d %d %d %d\n", indices[0], indices[1], indices[5], indices[2]);
+            draw_quad(4, colortex, fb.layer, depthtex);
+            for (GLsizei instance = 1; instance < instancecount; instance++) {
+                vertex_shader->load_attribs(program_impl, v.attribs, nullptr, 0, instance, 4);
                 draw_quad(4, colortex, fb.layer, depthtex);
             }
         } else {
