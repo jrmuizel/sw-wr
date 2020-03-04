@@ -292,10 +292,10 @@ SI void unaligned_store(P* p, T v) {
     Unaligned<T>::store(p, v);
 }
 
-template <typename Dst, typename Src>
-SI Dst bit_cast(const Src& src) {
-    static_assert(sizeof(Dst) <= sizeof(Src), "");
-    return unaligned_load<Dst>(&src);
+template <typename D, typename S>
+SI D bit_cast(const S& src) {
+    static_assert(sizeof(D) == sizeof(S), "");
+    return unaligned_load<D>(&src);
 }
 
 template <typename T> using V2 = VectorType<T, 2>;

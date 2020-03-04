@@ -2013,7 +2013,8 @@ static inline WideR8 unpack(PackedR8 p) {
 
 static inline WideR8 packR8(I32 a) {
 #if USE_SSE2
-    return bit_cast<WideR8>(_mm_packs_epi32(a, a));
+    auto r = bit_cast<V8<uint16_t>>(_mm_packs_epi32(a, a));
+    return SHUFFLE(r, r, 0, 1, 2, 3);
 #elif USE_NEON
     return vqmovun_s32(a);
 #else
@@ -2023,11 +2024,13 @@ static inline WideR8 packR8(I32 a) {
 
 static inline PackedR8 pack(WideR8 p) {
 #if USE_SSE2
-    __m128i m = SHUFFLE(p, p, 0, 1, 2, 3, -1, -1, -1, -1);
-    return bit_cast<PackedR8>(_mm_packus_epi16(m, m));
+    auto m = SHUFFLE(p, p, 0, 1, 2, 3, -1, -1, -1, -1);
+    auto r = bit_cast<V16<uint8_t>>(_mm_packus_epi16(m, m));
+    return SHUFFLE(r, r, 0, 1, 2, 3);
 #elif USE_NEON
     auto m = SHUFFLE(p, p, 0, 1, 2, 3, -1, -1, -1, -1);
-    return bit_cast<PackedR8>(vqmovn_u16(m));
+    auto r = bit_cast<V16<uint8_t>>(vqmovn_u16(m));
+    return SHUFFLE(r, r, 0, 1, 2, 3);
 #else
     return CONVERT(p, PackedR8);
 #endif
