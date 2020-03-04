@@ -535,7 +535,7 @@ int bytes_per_type(GLenum type) {
 
 template<typename S>
 static inline S load_attrib_scalar(const char *src, size_t size, GLenum type, bool normalized) {
-    if (sizeof(S) >= size) {
+    if (sizeof(S) <= size) {
         return *reinterpret_cast<const S*>(src);
     }
     S scalar = {0};
