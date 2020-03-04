@@ -535,7 +535,7 @@ int bytes_per_type(GLenum type) {
 
 template<typename S>
 static inline S load_attrib_scalar(const char *src, size_t size, GLenum type, bool normalized) {
-    if (sizeof(S) == size) {
+    if (sizeof(S) >= size) {
         return *reinterpret_cast<const S*>(src);
     }
     S scalar = {0};
@@ -2830,22 +2830,31 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
 
         vertex_shader->init_batch(program_impl);
         fragment_shader->init_batch(program_impl);
-        for (GLsizei instance = 0; instance < instancecount; instance++) {
-            if (mode == GL_QUADS) for (GLsizei i = 0; i + 4 <= count; i += 4) {
-                vertex_shader->load_attribs(program_impl, v.attribs, indices, i, instance, 4);
-                //debugf("native quad %d %d %d %d\n", indices[i], indices[i+1], indices[i+2], indices[i+3]);
+        if (count == 6 && indices[3] == indices[2] && indices[4] == indices[1]) {
+            uint16_t quad_indices[4] = { indices[0], indices[1], indices[5], indices[2] };
+            for (GLsizei instance = 0; instance < instancecount; instance++) {
+                vertex_shader->load_attribs(program_impl, v.attribs, quad_indices, 0, instance, 4);
+                //debugf("emulate quad %d %d %d %d\n", indices[0], indices[1], indices[5], indices[2]);
                 draw_quad(4, colortex, fb.layer, depthtex);
-            } else for (GLsizei i = 0; i + 3 <= count; i += 3) {
-                if (i + 6 <= count && indices[i+3] == indices[i+2] && indices[i+4] == indices[i+1]) {
-                    uint16_t quad_indices[4] = { indices[i], indices[i+1], indices[i+5], indices[i+2] };
-                    vertex_shader->load_attribs(program_impl, v.attribs, quad_indices, 0, instance, 4);
-                    //debugf("emulate quad %d %d %d %d\n", indices[i], indices[i+1], indices[i+5], indices[i+2]);
+            }
+        } else {
+            for (GLsizei instance = 0; instance < instancecount; instance++) {
+                if (mode == GL_QUADS) for (GLsizei i = 0; i + 4 <= count; i += 4) {
+                    vertex_shader->load_attribs(program_impl, v.attribs, indices, i, instance, 4);
+                    //debugf("native quad %d %d %d %d\n", indices[i], indices[i+1], indices[i+2], indices[i+3]);
                     draw_quad(4, colortex, fb.layer, depthtex);
-                    i += 3;
-                } else {
-                    vertex_shader->load_attribs(program_impl, v.attribs, indices, i, instance, 3);
-                    //debugf("triangle %d %d %d %d\n", indices[i], indices[i+1], indices[i+2]);
-                    draw_quad(3, colortex, fb.layer, depthtex);
+                } else for (GLsizei i = 0; i + 3 <= count; i += 3) {
+                    if (i + 6 <= count && indices[i+3] == indices[i+2] && indices[i+4] == indices[i+1]) {
+                        uint16_t quad_indices[4] = { indices[i], indices[i+1], indices[i+5], indices[i+2] };
+                        vertex_shader->load_attribs(program_impl, v.attribs, quad_indices, 0, instance, 4);
+                        //debugf("emulate quad %d %d %d %d\n", indices[i], indices[i+1], indices[i+5], indices[i+2]);
+                        draw_quad(4, colortex, fb.layer, depthtex);
+                        i += 3;
+                    } else {
+                        vertex_shader->load_attribs(program_impl, v.attribs, indices, i, instance, 3);
+                        //debugf("triangle %d %d %d %d\n", indices[i], indices[i+1], indices[i+2]);
+                        draw_quad(3, colortex, fb.layer, depthtex);
+                    }
                 }
             }
         }
