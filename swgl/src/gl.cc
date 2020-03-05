@@ -584,6 +584,7 @@ void load_attrib(T& attrib, VertexAttrib& va, uint16_t* indices, int start, int 
 
 template<typename T>
 void load_flat_attrib(T& attrib, VertexAttrib& va, uint16_t* indices, int start, int instance, int count) {
+    typedef decltype(force_scalar(attrib)) scalar_type;
     if (!va.enabled) {
         attrib = T{0};
         return;
@@ -598,12 +599,7 @@ void load_flat_attrib(T& attrib, VertexAttrib& va, uint16_t* indices, int start,
         assert(false);
     }
     assert(src + va.size <= va.buf + va.buf_size);
-    if (sizeof(T) > va.size) {
-        attrib = T{0};
-        memcpy(&attrib, src, va.size);
-    } else {
-        attrib = *reinterpret_cast<T*>(src);
-    }
+    attrib = T(load_attrib_scalar<scalar_type>(src, va.size, va.type, va.normalized));
 }
 
 void setup_program(GLuint program) {
@@ -2210,7 +2206,6 @@ static inline WideRGBA8 blend_pixels_RGBA8(PackedRGBA8 pdst, WideRGBA8 src) {
         UNREACHABLE;
         //return src;
     }
-    #undef alphas
 }
 
 template<bool DISCARD>
