@@ -1400,7 +1400,7 @@ void VertexAttribPointer(GLuint index,
         GLsizei stride,
         GLuint offset)
 {
-        debugf("cva: %d\n", ctx->current_vertex_array);
+        //debugf("cva: %d\n", ctx->current_vertex_array);
         VertexArray &v = ctx->vertex_arrays[ctx->current_vertex_array];
         if (index >= NULL_ATTRIB) { assert(0); return; }
         VertexAttrib &va = v.attribs[index];
@@ -1421,7 +1421,7 @@ void VertexAttribIPointer(GLuint index,
         GLsizei stride,
         GLuint offset)
 {
-        debugf("cva: %d\n", ctx->current_vertex_array);
+        //debugf("cva: %d\n", ctx->current_vertex_array);
         VertexArray &v = ctx->vertex_arrays[ctx->current_vertex_array];
         if (index >= NULL_ATTRIB) { assert(0); return; }
         VertexAttrib &va = v.attribs[index];
@@ -1514,7 +1514,7 @@ GLboolean UnmapBuffer(GLenum target) {
 }
 
 void Uniform1i(GLint location, GLint V0) {
-    debugf("tex: %d\n", (int)ctx->textures.size);
+    //debugf("tex: %d\n", (int)ctx->textures.size);
     if (!program_impl->set_sampler(location, V0)) {
         vertex_shader->set_uniform_1i(location, V0);
         fragment_shader->set_uniform_1i(location, V0);
@@ -1830,7 +1830,7 @@ void ReadPixels(GLint x, GLint y, GLsizei width, GLsizei height, GLenum format, 
     Texture &t = ctx->textures[fb->color_attachment];
     if (!t.buf) return;
     prepare_texture(t);
-    debugf("read pixels %d, %d, %d, %d from fb %d with format %x\n", x, y, width, height, ctx->read_framebuffer_binding, t.internal_format);
+    //debugf("read pixels %d, %d, %d, %d from fb %d with format %x\n", x, y, width, height, ctx->read_framebuffer_binding, t.internal_format);
     assert(x + width <= t.width);
     assert(y + height <= t.height);
     if (internal_format_for_data(format, type) != t.internal_format) {
@@ -2809,7 +2809,7 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
         }
 
 #ifndef NDEBUG
-        uint64_t start = get_time_value();
+        //uint64_t start = get_time_value();
 #endif
 
         ctx->shaded_rows = 0;
@@ -2873,8 +2873,8 @@ void DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, void *indice
         }
 
 #ifndef NDEBUG
-        uint64_t end = get_time_value();
-        debugf("draw(%d): %fms for %d pixels in %d rows (avg %f pixels/row, %f ns/pixel)\n", instancecount, double(end - start)/(1000.*1000.), ctx->shaded_pixels, ctx->shaded_rows, double(ctx->shaded_pixels)/ctx->shaded_rows, double(end - start)/max(ctx->shaded_pixels, 1));
+        //uint64_t end = get_time_value();
+        //debugf("draw(%d): %fms for %d pixels in %d rows (avg %f pixels/row, %f ns/pixel)\n", instancecount, double(end - start)/(1000.*1000.), ctx->shaded_pixels, ctx->shaded_rows, double(ctx->shaded_pixels)/ctx->shaded_rows, double(end - start)/max(ctx->shaded_pixels, 1));
 #endif
 }
 
