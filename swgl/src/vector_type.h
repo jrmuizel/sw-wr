@@ -45,6 +45,9 @@ template <typename T> SI VectorType<T, 8> highHalf(VectorType<T, 16> a) {
     return __builtin_shufflevector(a, a, 8, 9, 10, 11, 12, 13, 14, 15);
 }
 
+template <typename T> SI VectorType<T, 4> expand(VectorType<T, 4> a) {
+    return __builtin_shufflevector(a, a, 0, 1, 2, 3, -1, -1, -1, -1);
+}
 #else
 template <typename T> struct VectorMask { typedef T type; };
 template <> struct VectorMask<uint32_t> { typedef int32_t type; };
@@ -217,6 +220,10 @@ template <typename T, int N> SI VectorType<T, N/2> lowHalf(VectorType<T, N> a) {
 
 template <typename T, int N> SI VectorType<T, N/2> highHalf(VectorType<T, N> a) {
     return VectorType<T, N/2>::wrap(a.high_half);
+}
+
+template <typename T, int N> SI VectorType<T, N> expand(VectorType<T, N> a) {
+    return combine(a, a);
 }
 #endif
 

@@ -568,6 +568,9 @@ SI vec2 normalize(vec2 a) {
         return a / length(a);
 }
 
+#define abs __glsl_abs
+
+float abs(float a) { return fabsf(a); }
 
 Float abs(Float v) {
 #if USE_NEON
@@ -581,6 +584,10 @@ Float cast(U32 v) { return CONVERT((I32)v, Float); }
 Float cast(I32 v) { return CONVERT((I32)v, Float); }
 I32 cast(Float v) { return CONVERT(v, I32); }
 
+#define floor __glsl_floor
+
+float floor(float a) { return floorf(a); }
+
 Float floor(Float v) {
     Float roundtrip = cast(cast(v));
     return roundtrip - if_then_else(roundtrip > v, Float(1), Float(0));
@@ -593,6 +600,10 @@ vec2 floor(vec2 v) {
 vec2_scalar floor(vec2_scalar v) {
         return vec2_scalar{floorf(v.x), floorf(v.y)};
 }
+
+#define ceil __glsl_ceil
+
+float ceil(float a) { return ceilf(a); }
 
 Float ceil(Float v) {
     Float roundtrip = cast(cast(v));

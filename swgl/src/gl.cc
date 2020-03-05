@@ -2021,15 +2021,13 @@ static inline WideR8 packR8(I32 a) {
 
 static inline PackedR8 pack(WideR8 p) {
 #if USE_SSE2
-    auto m = SHUFFLE(p, p, 0, 1, 2, 3, -1, -1, -1, -1);
-    auto r = bit_cast<V16<uint8_t>>(_mm_packus_epi16(m, m));
-    return SHUFFLE(r, r, 0, 1, 2, 3);
+  auto m = expand(p);
+  auto r = bit_cast<V16<uint8_t>>(_mm_packus_epi16(m, m));
+  return SHUFFLE(r, r, 0, 1, 2, 3);
 #elif USE_NEON
-    auto m = SHUFFLE(p, p, 0, 1, 2, 3, -1, -1, -1, -1);
-    auto r = bit_cast<V16<uint8_t>>(vqmovn_u16(m));
-    return SHUFFLE(r, r, 0, 1, 2, 3);
+  return lowHalf(bit_cast<V8<uint8_t>>(vqmovn_u16(expand(p))));
 #else
-    return CONVERT(p, PackedR8);
+  return CONVERT(p, PackedR8);
 #endif
 }
 
