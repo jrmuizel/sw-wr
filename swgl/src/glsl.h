@@ -570,6 +570,8 @@ SI vec2 normalize(vec2 a) {
 
 #define abs __glsl_abs
 
+int32_t abs(int32_t a) { return a < 0 ? -a : a; }
+
 float abs(float a) { return fabsf(a); }
 
 Float abs(Float v) {
@@ -622,6 +624,12 @@ SI I32 roundto(Float v, Float scale) {
     return cast(v * scale + 0.5f);
 #endif
 }
+
+#define round __glsl_round
+
+float round(float a) { return roundf(a); }
+
+float fract(float a) { return a - floor(a); }
 
 Float round(Float v) { return floor(v + 0.5f); }
 
