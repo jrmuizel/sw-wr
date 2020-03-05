@@ -954,7 +954,7 @@ GLint GetUniformLocation(GLuint program, char* name) {
     Program &p = ctx->programs[program];
     assert(p.impl);
     GLint loc = p.impl->get_uniform(name);
-    debugf("location: %d\n", loc);
+    //debugf("location: %d\n", loc);
     return loc;
 }
 

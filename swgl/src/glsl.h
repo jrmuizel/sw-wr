@@ -333,8 +333,8 @@ struct vec2_scalar {
         }
 
         vec2_scalar operator-=(vec2_scalar a) {
-                x += a.x;
-                y += a.y;
+                x -= a.x;
+                y -= a.y;
                 return *this;
         }
 };
@@ -1204,6 +1204,37 @@ struct vec3_scalar {
         }
 };
 
+struct vec3_scalar_ref {
+        vec3_scalar_ref(float &x, float &y, float &z) : x(x), y(y), z(z) {
+        }
+        float &x;
+        float &y;
+        float &z;
+
+        float& select(XYZW c) {
+                switch (c) {
+                    case X: return x;
+                    case Y: return y;
+                    case Z: return z;
+                    default: UNREACHABLE;
+                }
+        }
+        float& sel(XYZW c1) {
+                return select(c1);
+        }
+
+        vec3_scalar_ref& operator=(const vec3_scalar &a) {
+                x = a.x;
+                y = a.y;
+                z = a.z;
+                return *this;
+        }
+
+        operator vec3_scalar() const {
+            return vec3_scalar{x, y, z};
+        }
+};
+
 struct vec3 {
         typedef struct vec3 vector_type;
         typedef float element_type;
@@ -1417,6 +1448,9 @@ struct vec4_scalar {
         }
         vec2_scalar_ref lsel(XYZW c1, XYZW c2) {
                 return vec2_scalar_ref(select(c1), select(c2));
+        }
+        vec3_scalar_ref lsel(XYZW c1, XYZW c2, XYZW c3) {
+                return vec3_scalar_ref(select(c1), select(c2), select(c3));
         }
 
         friend vec4_scalar operator*(vec4_scalar a, vec4_scalar b) {
